@@ -12,6 +12,7 @@ import {
   Menu,
   PanelRight,
 } from "lucide-react"
+import { validateGitHubPrUrl } from "@/lib/github-pr-url"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import type { PullRequest } from "@reviewly/shared"
@@ -49,6 +50,7 @@ export function Header({
 }: HeaderProps) {
   const [inputUrl, setInputUrl] = useState(prData.url ?? "")
   const [focused, setFocused] = useState(false)
+  const [localUrlError, setLocalUrlError] = useState<string | null>(null)
 
   useEffect(() => {
     setInputUrl(prData.url ?? "")
@@ -57,6 +59,12 @@ export function Header({
   const submitUrl = useCallback(async () => {
     const trimmed = inputUrl.trim()
     if (!trimmed || importing) return
+    const validationError = validateGitHubPrUrl(trimmed)
+    if (validationError) {
+      setLocalUrlError(validationError)
+      return
+    }
+    setLocalUrlError(null)
     await onImportUrl(trimmed)
   }, [inputUrl, importing, onImportUrl])
 
@@ -80,14 +88,17 @@ export function Header({
               focused
                 ? "border-ai-blue shadow-[0_0_0_2px_rgba(56,189,248,0.15)]"
                 : "border-border hover:border-border-strong",
-              importError && "border-risk-high/50",
+              (importError || localUrlError) && "border-risk-high/50",
             )}
           >
             <Github className="w-4 h-4 text-muted-foreground shrink-0" />
             <input
               type="text"
               value={inputUrl}
-              onChange={(e) => setInputUrl(e.target.value)}
+              onChange={(e) => {
+                setInputUrl(e.target.value)
+                if (localUrlError) setLocalUrlError(null)
+              }}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               onKeyDown={(e) => {
@@ -114,8 +125,10 @@ export function Header({
               )}
             </button>
           </div>
-          {importError && (
-            <p className="text-[11px] text-risk-high leading-snug px-0.5">{importError}</p>
+          {(localUrlError || importError) && (
+            <p className="text-[11px] text-risk-high leading-snug px-0.5">
+              {localUrlError ?? importError}
+            </p>
           )}
         </div>
 
