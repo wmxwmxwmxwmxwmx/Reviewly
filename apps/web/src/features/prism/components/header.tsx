@@ -20,6 +20,7 @@ import type { PullRequest } from "@reviewly/shared"
 interface HeaderProps {
   prData: PullRequest
   analyzing: boolean
+  hasAnalysis?: boolean
   onAnalyze: () => void
   onImportUrl: (url: string) => Promise<void>
   importing?: boolean
@@ -39,6 +40,7 @@ const reviewers = [
 export function Header({
   prData,
   analyzing,
+  hasAnalysis = false,
   onAnalyze,
   onImportUrl,
   importing = false,
@@ -168,6 +170,16 @@ export function Header({
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span className="hidden sm:inline">AI 分析中...</span>
               </motion.div>
+            ) : hasAnalysis ? (
+              <motion.div
+                key="done"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground"
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-risk-low" />
+                <span>分析完成</span>
+              </motion.div>
             ) : (
               <motion.div
                 key="idle"
@@ -175,8 +187,8 @@ export function Header({
                 animate={{ opacity: 1 }}
                 className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground"
               >
-                <div className="w-1.5 h-1.5 rounded-full bg-risk-low" />
-                <span>分析就绪</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
+                <span>尚未分析</span>
               </motion.div>
             )}
           </AnimatePresence>

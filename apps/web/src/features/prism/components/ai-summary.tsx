@@ -28,7 +28,9 @@ interface AISummaryProps {
   generatedSummary?: string
   jobSummary?: string
   hasAnalysis?: boolean
+  restoring?: boolean
   error?: string | null
+  onGoToSettings?: () => void
 }
 
 export function AISummary({
@@ -37,8 +39,13 @@ export function AISummary({
   generatedSummary,
   jobSummary,
   hasAnalysis = false,
+  restoring = false,
   error,
+  onGoToSettings,
 }: AISummaryProps) {
+  const showSettingsAction =
+    Boolean(onGoToSettings) &&
+    Boolean(error?.includes("系统设置") || error?.includes("API 密钥"))
   const [fullOpen, setFullOpen] = useState(Boolean(generatedSummary || jobSummary || error || hasAnalysis))
   const summaryText = generatedSummary ?? jobSummary
 
@@ -89,15 +96,30 @@ export function AISummary({
           >
             <div className="px-5 pb-4 pt-1 border-t border-border">
               {error && (
-                <div className="flex items-start gap-2 px-3 py-2 mb-3 rounded bg-risk-critical/10 border border-risk-critical/25 text-[11px] text-risk-critical">
-                  <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-                  <span>{error}</span>
+                <div className="flex flex-col gap-2 px-3 py-2 mb-3 rounded bg-risk-critical/10 border border-risk-critical/25 text-[11px] text-risk-critical">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                  {showSettingsAction && (
+                    <button
+                      type="button"
+                      onClick={onGoToSettings}
+                      className="self-start ml-5 text-[11px] font-medium text-ai-blue hover:underline"
+                    >
+                      前往系统设置
+                    </button>
+                  )}
                 </div>
               )}
               {summaryText ? (
                 <StreamingText text={summaryText} streaming={streaming} />
               ) : streaming ? (
                 <p className="text-[11px] text-muted-foreground">正在执行规则扫描并生成 AI 摘要…</p>
+              ) : restoring ? (
+                <p className="text-[11px] text-muted-foreground">正在恢复分析结果…</p>
+              ) : hasAnalysis ? (
+                <p className="text-[11px] text-muted-foreground">正在加载摘要…</p>
               ) : (
                 <p className="text-[11px] text-muted-foreground">
                   点击右上角「开始分析」，将基于当前 PR 的 Diff 与规则扫描结果生成评审摘要。

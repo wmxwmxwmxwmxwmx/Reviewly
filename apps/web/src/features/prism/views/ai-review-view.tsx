@@ -5,6 +5,10 @@ import type { AnalysisFinding } from "@reviewly/shared"
 import { Loader2 } from "lucide-react"
 import { Header } from "@/features/prism/components/header"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import {
+  useAIReviewSession,
+  type AIReviewPanelTab,
+} from "@/features/prism/contexts/ai-review-session-context"
 import { PROverview } from "@/features/prism/components/pr-overview"
 import { AISummary } from "@/features/prism/components/ai-summary"
 import { DiffViewer } from "@/features/prism/components/diff-viewer"
@@ -60,27 +64,93 @@ export function AIReviewView({
 }: AIReviewViewProps) {
   const { navigate } = useNavigation()
   const { settings, hasApiKey, recordUsage } = useAISettings()
+  const {
+    getSession,
+    patchSession,
+    hasCachedSession,
+    setLastReviewedPrId,
+  } = useAIReviewSession()
+
+  const cached = getSession(prId)
   const { data: pr, loading: prLoading, error: prError } = usePullRequest(prId)
   const { files: diffFiles, loading: diffLoading, error: diffError } = usePullRequestDiff(prId)
-  const { findings, latest, job, loadPersisted, runAnalysis, reset } = usePrAnalysis(prId)
+  const {
+    findings,
+    latest,
+    job,
+    loadingPersisted,
+    persistError,
+    loadPersisted,
+    runAnalysis,
+    setJob,
+  } = usePrAnalysis(prId, {
+    findings: cached.findings,
+    latest: cached.latest,
+    job: cached.job,
+  })
 
   const [analyzing, setAnalyzing] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
-  const [syncLabel, setSyncLabel] = useState("同步完成")
+  const [syncLabel, setSyncLabel] = useState(cached.syncLabel ?? "同步完成")
   const [chunkProgress, setChunkProgress] = useState({ current: 0, total: 1 })
-  const [generatedSummary, setGeneratedSummary] = useState<string | undefined>()
-  const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [generatedSummary, setGeneratedSummary] = useState<string | undefined>(
+    cached.generatedSummary,
+  )
+  const [analysisError, setAnalysisError] = useState<string | null>(
+    cached.analysisError ?? null,
+  )
+  const [activePanelTab, setActivePanelTab] = useState<AIReviewPanelTab>(
+    cached.activePanelTab ?? "risks",
+  )
 
   useEffect(() => {
-    reset()
-    setGeneratedSummary(undefined)
-    setAnalysisError(null)
+    setLastReviewedPrId(prId)
+  }, [prId, setLastReviewedPrId])
 
+  useEffect(() => {
     const controller = new AbortController()
-    void loadPersisted(controller.signal)
+    void loadPersisted(controller.signal).catch(() => {
+      /* persistError 已由 hook 记录 */
+    })
     return () => controller.abort()
-  }, [prId, reset, loadPersisted])
+  }, [prId, loadPersisted])
+
+  const sessionHasData = hasCachedSession(prId)
+
+  useEffect(() => {
+    const isEmptySnapshot =
+      findings.length === 0 &&
+      latest === null &&
+      job === null &&
+      !generatedSummary
+
+    if (loadingPersisted && !sessionHasData && isEmptySnapshot) {
+      return
+    }
+
+    patchSession(prId, {
+      findings,
+      latest,
+      job,
+      generatedSummary,
+      analysisError,
+      syncLabel,
+      activePanelTab,
+    })
+  }, [
+    prId,
+    findings,
+    latest,
+    job,
+    generatedSummary,
+    analysisError,
+    syncLabel,
+    activePanelTab,
+    loadingPersisted,
+    sessionHasData,
+    patchSession,
+  ])
 
   const handleImportUrl = useCallback(
     async (url: string) => {
@@ -114,7 +184,17 @@ export function AIReviewView({
   )
 
   const diffTotal = useMemo(() => Math.max(diffFiles.length, 1), [diffFiles.length])
-  const hasAnalysis = findings.length > 0 || Boolean(generatedSummary) || Boolean(latest?.summary)
+  const hasAnalysis =
+    findings.length > 0 ||
+    Boolean(generatedSummary) ||
+    Boolean(latest?.summary) ||
+    sessionHasData
+  const restoring =
+    loadingPersisted &&
+    !sessionHasData &&
+    !generatedSummary &&
+    !latest?.summary &&
+    findings.length === 0
 
   const handleAnalyze = async () => {
     if (analyzing || !pr) return
@@ -135,6 +215,7 @@ export function AIReviewView({
     try {
       const result = await runAnalysis({
         onProgress: (activeJob) => {
+          setJob(activeJob)
           setChunkProgress({
             current: Math.max(activeJob.chunkIndex, 0),
             total: Math.max(activeJob.chunkTotal, diffTotal),
@@ -143,6 +224,7 @@ export function AIReviewView({
       })
       jobFindings = result.findings
       jobSummary = result.latest.summary
+      setJob(result.job)
       setChunkProgress({
         current: result.job.chunkTotal || diffTotal,
         total: Math.max(result.job.chunkTotal, diffTotal),
@@ -150,6 +232,8 @@ export function AIReviewView({
     } catch (error) {
       errors.push(error instanceof Error ? error.message : "规则扫描任务失败")
     }
+
+    let nextGeneratedSummary = generatedSummary
 
     try {
       const diffContext = buildDiffContext(diffFiles)
@@ -198,7 +282,8 @@ ${diffContext || "（无 diff 内容）"}`,
       }
 
       const totalTokens = Number(data?.usage?.totalTokens) || 0
-      setGeneratedSummary(data?.content || jobSummary || "模型未返回内容。")
+      nextGeneratedSummary = data?.content || jobSummary || "模型未返回内容。"
+      setGeneratedSummary(nextGeneratedSummary)
 
       recordUsage({
         provider: settings.provider,
@@ -212,17 +297,13 @@ ${diffContext || "（无 diff 内容）"}`,
     } catch (error) {
       errors.push(error instanceof Error ? error.message : "AI 摘要生成失败")
       if (jobSummary) {
+        nextGeneratedSummary = jobSummary
         setGeneratedSummary(jobSummary)
       }
     }
 
     if (errors.length > 0) {
-      const partial = jobFindings.length > 0 || Boolean(jobSummary) || Boolean(generatedSummary)
-      if (!partial) {
-        setAnalysisError(errors.join("；"))
-      } else {
-        setAnalysisError(errors.join("；"))
-      }
+      setAnalysisError(errors.join("；"))
     }
 
     setAnalyzing(false)
@@ -237,7 +318,10 @@ ${diffContext || "（无 diff 内容）"}`,
       }
     : undefined
 
-  if (prLoading) {
+  const summaryError = analysisError ?? persistError
+  const showFullPagePrLoading = prLoading && !sessionHasData
+
+  if (showFullPagePrLoading) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
         <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -246,7 +330,7 @@ ${diffContext || "（无 diff 内容）"}`,
     )
   }
 
-  if (prError || !pr) {
+  if ((prError || !pr) && !sessionHasData) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-risk-high px-4 text-center">
         {prError ?? "合并请求不存在"}
@@ -258,28 +342,43 @@ ${diffContext || "（无 diff 内容）"}`,
     <div className="flex flex-1 min-w-0 overflow-hidden">
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <main className="flex-1 overflow-y-auto">
-          <Header
-            prData={pr}
-            analyzing={analyzing}
-            onAnalyze={handleAnalyze}
-            onImportUrl={handleImportUrl}
-            importing={importing}
-            importError={importError}
-            syncLabel={syncLabel}
-            onMenuClick={onMenuClick}
-            aiPanelOpen={aiPanelOpen}
-            onToggleAIPanel={onToggleAIPanel}
-          />
+          {pr ? (
+            <Header
+              prData={pr}
+              analyzing={analyzing}
+              hasAnalysis={hasAnalysis}
+              onAnalyze={handleAnalyze}
+              onImportUrl={handleImportUrl}
+              importing={importing}
+              importError={importError}
+              syncLabel={syncLabel}
+              onMenuClick={onMenuClick}
+              aiPanelOpen={aiPanelOpen}
+              onToggleAIPanel={onToggleAIPanel}
+            />
+          ) : (
+            <div className="flex items-center gap-2 h-[68px] px-5 border-b border-border text-sm text-muted-foreground shrink-0">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              正在加载 PR 信息…
+            </div>
+          )}
 
           <div className="p-5 space-y-4">
-            <PROverview prData={pr} analysisScores={analysisScores} />
+            {pr ? (
+              <PROverview prData={pr} analysisScores={analysisScores} />
+            ) : prError ? (
+              <p className="text-xs text-risk-high">{prError}</p>
+            ) : null}
+
             <AISummary
               streaming={analyzing}
               model={settings.model}
               generatedSummary={generatedSummary}
               jobSummary={latest?.summary}
               hasAnalysis={hasAnalysis}
-              error={analysisError}
+              restoring={restoring}
+              error={summaryError}
+              onGoToSettings={() => navigate("settings")}
             />
 
             {diffError && (
@@ -288,11 +387,13 @@ ${diffContext || "（无 diff 内容）"}`,
 
             <div className="flex items-center justify-between pt-1">
               <h3 className="text-sm font-semibold text-foreground">文件变更</h3>
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                <span>{pr.filesChanged} 文件</span>
-                <span className="text-[oklch(0.62_0.17_148)]">+{pr.additions.toLocaleString()}</span>
-                <span className="text-[oklch(0.55_0.22_27)]">-{pr.deletions.toLocaleString()}</span>
-              </div>
+              {pr && (
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                  <span>{pr.filesChanged} 文件</span>
+                  <span className="text-[oklch(0.62_0.17_148)]">+{pr.additions.toLocaleString()}</span>
+                  <span className="text-[oklch(0.55_0.22_27)]">-{pr.deletions.toLocaleString()}</span>
+                </div>
+              )}
             </div>
 
             <DiffViewer
@@ -319,7 +420,9 @@ ${diffContext || "（无 diff 内容）"}`,
             findings={findings}
             job={job ?? undefined}
             mergeRecommendation={latest?.mergeRecommendation}
-            filesChanged={pr.filesChanged}
+            filesChanged={pr?.filesChanged ?? 0}
+            activeTab={activePanelTab}
+            onActiveTabChange={setActivePanelTab}
           />
         )}
       </div>

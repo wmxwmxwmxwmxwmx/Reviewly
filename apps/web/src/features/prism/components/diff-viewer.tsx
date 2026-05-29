@@ -234,7 +234,7 @@ function DiffFileCard({ file, index }: DiffFileCardProps) {
             {file.chunks.length === 0 ? (
               <div className="py-6 text-center text-[11px] text-muted-foreground">
                 <FileCode className="w-5 h-5 mx-auto mb-2 opacity-40" />
-                点击展开查看完整 Diff
+                该文件暂无 diff 内容
               </div>
             ) : (
               file.chunks.map((chunk, ci) => (

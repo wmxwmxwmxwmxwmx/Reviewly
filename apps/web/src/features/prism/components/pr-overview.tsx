@@ -17,6 +17,7 @@ import {
   RotateCcw,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { formatRelativeTime } from "@/lib/format-relative-time"
 import type { AnalysisSummary, PullRequest } from "@reviewly/shared"
 
 interface PROverviewProps {
@@ -162,7 +163,7 @@ export function PROverview({ prData, analysisScores }: PROverviewProps) {
             </div>
             <div className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              <span>2 小时前</span>
+              <span>{formatRelativeTime(prData.updatedAt ?? prData.createdAt)}</span>
             </div>
             <div className="flex items-center gap-1">
               <GitCommit className="w-3 h-3" />

@@ -18,7 +18,7 @@ import { usePullRequests } from "@/hooks/use-pull-requests"
 type FilterTab = "all" | "open" | "closed"
 
 export function PRListView() {
-  const { items: apiPrs } = usePullRequests()
+  const { items: apiPrs, loading, error } = usePullRequests()
   const { navigate } = useNavigation()
   const [search, setSearch] = useState("")
   const [filterTab, setFilterTab] = useState<FilterTab>("open")
@@ -79,23 +79,8 @@ export function PRListView() {
         </div>
       </div>
 
-      {apiPrs.length > 0 && (
-        <div className="rounded-lg border border-ai-blue/30 bg-surface-2 p-3 space-y-2">
-          <p className="text-xs font-medium text-ai-blue">API 同步的合并请求</p>
-          {apiPrs.map((pr) => (
-            <button
-              key={pr.id}
-              type="button"
-              onClick={() => navigate("ai-review", { prId: pr.id })}
-              className="w-full flex items-center justify-between text-left text-sm px-2 py-1.5 rounded hover:bg-surface-3"
-            >
-              <span className="truncate">
-                #{pr.number} {pr.title}
-              </span>
-              <ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground" />
-            </button>
-          ))}
-        </div>
+      {error && (
+        <p className="text-sm text-risk-high px-1">{error}</p>
       )}
 
       {/* Stats */}
@@ -141,7 +126,19 @@ export function PRListView() {
         </div>
 
         <div className="divide-y divide-border">
-          {filteredPRs.map((pr, idx) => {
+          {loading && (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+              加载合并请求…
+            </div>
+          )}
+          {!loading && filteredPRs.length === 0 && (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+              {apiPrs.length === 0
+                ? "暂无合并请求，请检查后端服务或仓库同步。"
+                : "没有符合筛选条件的合并请求。"}
+            </div>
+          )}
+          {!loading && filteredPRs.map((pr, idx) => {
             return (
               <motion.div
                 key={pr.id}
