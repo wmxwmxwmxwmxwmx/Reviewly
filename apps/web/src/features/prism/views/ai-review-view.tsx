@@ -93,7 +93,7 @@ export function AIReviewView({
   const [analyzing, setAnalyzing] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
-  const [syncLabel, setSyncLabel] = useState(cached.syncLabel ?? "同步完成")
+  const [syncLabel, setSyncLabel] = useState(cached.syncLabel ?? zh.common.analyzeReady)
   const [chunkProgress, setChunkProgress] = useState({ current: 0, total: 1 })
   const [generatedSummary, setGeneratedSummary] = useState<string | undefined>(
     cached.generatedSummary,
@@ -199,7 +199,7 @@ export function AIReviewView({
     findings.length === 0
 
   const handleAnalyze = async () => {
-    if (analyzing || !pr) return
+    if (analyzing || prLoading || diffLoading || !pr) return
 
     setAnalyzing(true)
     setAnalysisError(null)
@@ -365,6 +365,8 @@ ${diffContext || "（无 diff 内容）"}`,
               importing={importing}
               importError={importError}
               syncLabel={syncLabel}
+              diffLoading={diffLoading}
+              prLoading={prLoading}
               onMenuClick={onMenuClick}
               aiPanelOpen={aiPanelOpen}
               onToggleAIPanel={onToggleAIPanel}

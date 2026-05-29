@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.ai.anthropic import stream_anthropic
 from app.ai.openai_compatible import stream_openai_compatible
-from app.ai.providers import VALID_PROVIDERS, get_endpoint
+from app.ai.providers import get_endpoint
 from app.core.errors import api_error
 from app.repositories import performance as performance_repo
-from app.repositories import settings as settings_repo
+from app.services.ai_config import resolve_ai_config
 
 SYSTEM_PROMPT = """你是资深性能工程师。根据 PR Diff 中的性能 finding 与代码上下文，用 Markdown 输出四节（二级标题）：
 ## 性能瓶颈原因
@@ -39,25 +39,6 @@ def _build_user_message(ctx: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def _resolve_ai_config(session: Session) -> tuple[str, str, str]:
-    cfg = settings_repo.get_settings(session)
-    ai = cfg.get("ai", {})
-    provider = str(ai.get("provider", "")).strip()
-    model = str(ai.get("model", "")).strip()
-    if not provider or provider == "none":
-        raise api_error("请先在系统设置中配置 AI 供应商", 400)
-    if provider not in VALID_PROVIDERS:
-        raise api_error("无效的 AI 供应商", 400)
-    if not model:
-        raise api_error("请配置模型名称", 400)
-
-    secrets = settings_repo.get_decrypted_secrets(session)
-    api_key = secrets.get(provider, "").strip()
-    if not api_key:
-        raise api_error("请先在系统设置中填写 API Key（PATCH /api/settings）", 400)
-    return provider, model, api_key
-
-
 async def stream_finding_optimization(
     session: Session,
     finding_id: str,
@@ -66,7 +47,7 @@ async def stream_finding_optimization(
     if not ctx:
         raise api_error("性能发现不存在", 404)
 
-    provider, model, api_key = _resolve_ai_config(session)
+    provider, model, api_key, _ = resolve_ai_config(session)
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": _build_user_message(ctx)},

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.errors import api_error
 from app.db.models import Setting
 from app.repositories.ai_persisted import extract_ai_persisted
 from app.services import settings_crypto
@@ -58,6 +59,9 @@ def patch_settings(session: Session, patch: dict) -> dict:
             data[key] = value
 
     row.data = data
+
+    if secrets_patch and not settings_crypto.is_configured():
+        raise api_error("请先配置 SETTINGS_ENCRYPTION_KEY 以保存 API 密钥", 501)
 
     if secrets_patch and settings_crypto.is_configured():
         existing = _decrypt_secrets(row.encrypted_secrets) if row.encrypted_secrets else {}

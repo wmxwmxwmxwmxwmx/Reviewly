@@ -156,6 +156,12 @@ export function useSecurityCenter() {
     setExplainingId(null)
   }, [])
 
+  const reload = useCallback(() => {
+    const ac = new AbortController()
+    void load(ac.signal)
+    return () => ac.abort()
+  }, [load])
+
   return {
     items,
     total,
@@ -166,6 +172,7 @@ export function useSecurityCenter() {
     stats,
     loading,
     error,
+    reload,
     severityFilter,
     setSeverityFilter,
     repoFilter,

@@ -1,15 +1,15 @@
 ﻿"use client"
 
-import { useState, useMemo } from "react"
+import { useMemo } from "react"
 import { motion } from "framer-motion"
 import {
   GitPullRequest,
   GitBranch,
   Clock,
-  Filter,
   Search,
   ChevronRight,
 } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
@@ -19,7 +19,7 @@ import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
 type FilterTab = "all" | "open" | "closed"
 
 export function PRListView() {
-  const { items: apiPrs, loading, error } = usePullRequests()
+  const { items: apiPrs, loading, error, reload } = usePullRequests()
   const { navigate } = useNavigation()
   const [listState, setListState] = usePersistedViewState<{ search: string; filterTab: FilterTab }>(
     "pull-requests",
@@ -79,30 +79,38 @@ export function PRListView() {
               className="w-48 h-8 pl-8 pr-3 text-xs bg-surface-2 border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ai-blue"
             />
           </div>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground bg-surface-2 rounded-md hover:bg-surface-3 transition-colors">
-            <Filter className="w-3.5 h-3.5" />
-            筛选
-          </button>
         </div>
       </div>
 
       {error && (
-        <p className="text-sm text-risk-high px-1">{error}</p>
+        <div className="rounded-lg border border-risk-high/30 bg-risk-high/10 px-4 py-3 text-sm text-risk-high flex items-center justify-between">
+          <span>{error}</span>
+          <button type="button" onClick={() => reload()} className="text-xs underline shrink-0 ml-3">
+            重试
+          </button>
+        </div>
       )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {stats.map((stat) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-4 rounded-lg bg-surface-2 border border-border"
-          >
-            <div className="text-xs text-muted-foreground">{stat.label}</div>
-            <div className={cn("text-2xl font-semibold mt-1", stat.color)}>{stat.value}</div>
-          </motion.div>
-        ))}
+        {loading
+          ? Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="p-4 rounded-lg bg-surface-2 border border-border space-y-2">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-8 w-12" />
+              </div>
+            ))
+          : stats.map((stat) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 rounded-lg bg-surface-2 border border-border"
+              >
+                <div className="text-xs text-muted-foreground">{stat.label}</div>
+                <div className={cn("text-2xl font-semibold mt-1", stat.color)}>{stat.value}</div>
+              </motion.div>
+            ))}
       </div>
 
       {/* PR List */}

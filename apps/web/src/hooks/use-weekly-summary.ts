@@ -5,10 +5,14 @@ import { useCallback, useEffect, useState } from "react"
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { fetchWeeklySummary } from "@/lib/api/dashboard"
 import { PrismApiError } from "@/lib/api/client"
-import { useDashboard } from "@/hooks/use-dashboard"
+import type { DashboardStats } from "@reviewly/shared"
 
-export function useWeeklySummary() {
-  const { data: dashboard, refetch: refetchDashboard } = useDashboard()
+type DashboardRefetch = () => void | Promise<unknown>
+
+export function useWeeklySummary(
+  dashboard: DashboardStats | null | undefined,
+  refetchDashboard: DashboardRefetch,
+) {
   const { settings, hasApiKey } = useAISettings()
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)

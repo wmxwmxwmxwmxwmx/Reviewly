@@ -38,6 +38,7 @@ export function SecurityView() {
     stats,
     loading,
     error,
+    reload,
     severityFilter,
     setSeverityFilter,
     repoFilter,
@@ -152,7 +153,14 @@ export function SecurityView() {
         </div>
       )}
 
-      {error && <p className="text-sm text-risk-high">{error}</p>}
+      {error && (
+        <div className="rounded-lg border border-risk-high/30 bg-risk-high/10 px-4 py-3 text-sm text-risk-high flex items-center justify-between">
+          <span>{error}</span>
+          <button type="button" onClick={() => reload()} className="text-xs underline shrink-0 ml-3">
+            重试
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-4 gap-3">
         {securityMetrics.map((metric) => (

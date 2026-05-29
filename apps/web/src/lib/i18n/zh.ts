@@ -226,6 +226,7 @@ export const zh = {
     noModelSelected: "未选择模型",
     monthlyUsage: "本月用量",
     noTeamMember: "暂无团队成员",
+    teamEmptyHint: "同步 GitHub 仓库后，团队成员将在此展示",
     demoDataHint: "使用种子数据或同步团队",
     notLoggedIn: "未登录",
     signInHint: "请登录以同步仓库",

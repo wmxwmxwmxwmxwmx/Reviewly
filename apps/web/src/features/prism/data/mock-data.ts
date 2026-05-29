@@ -1,3 +1,7 @@
-import type { DiffChunk, DiffFile, DiffLine, PRData, RiskItem } from "@reviewly/shared"
-
-export type { DiffChunk, DiffFile, DiffLine, PRData, RiskItem }
+export type {
+  DiffChunk,
+  DiffFile,
+  DiffLine,
+  PRData,
+  RiskItem,
+} from "@/features/prism/types/analysis"

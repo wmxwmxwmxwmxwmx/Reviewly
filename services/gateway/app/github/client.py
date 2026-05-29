@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from app.github.app_auth import get_installation_token
+from app.github.github_errors import raise_for_github_response
 
 
 class GitHubClient:
@@ -29,7 +30,7 @@ class GitHubClient:
                 headers=await self._headers(),
                 params={"per_page": 100},
             )
-            resp.raise_for_status()
+            raise_for_github_response(resp, resource="installation repositories")
             return resp.json().get("repositories", [])
 
     async def list_pull_requests(self, owner: str, repo: str) -> list[dict[str, Any]]:
@@ -40,14 +41,14 @@ class GitHubClient:
                 headers=await self._headers(),
                 params={"state": "open", "per_page": 100},
             )
-            resp.raise_for_status()
+            raise_for_github_response(resp, resource=f"{owner}/{repo} pulls")
             return resp.json()
 
     async def get_pull_request(self, owner: str, repo: str, number: int) -> dict[str, Any]:
         url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.get(url, headers=await self._headers())
-            resp.raise_for_status()
+            raise_for_github_response(resp, resource=f"{owner}/{repo}#{number}")
             return resp.json()
 
     async def get_pull_diff_patch(self, owner: str, repo: str, number: int) -> str:
@@ -57,5 +58,5 @@ class GitHubClient:
                 url,
                 headers={**(await self._headers()), "Accept": "application/vnd.github.v3.diff"},
             )
-            resp.raise_for_status()
+            raise_for_github_response(resp, resource=f"{owner}/{repo}#{number} diff")
             return resp.text

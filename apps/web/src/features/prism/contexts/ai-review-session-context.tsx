@@ -39,6 +39,31 @@ export type AIReviewSessionPatch = Partial<
 }
 
 const SUMMARY_STORAGE_PREFIX = "prism:ai-summary:"
+const LAST_REVIEWED_PR_STORAGE_KEY = "prism:last-reviewed-pr-id"
+
+function readLastReviewedPrId(): string | null {
+  if (typeof window === "undefined") return null
+  try {
+    const value = sessionStorage.getItem(LAST_REVIEWED_PR_STORAGE_KEY)
+    if (!value || value === LEGACY_DEMO_PR_ID) return null
+    return value
+  } catch {
+    return null
+  }
+}
+
+function writeLastReviewedPrId(prId: string | null) {
+  if (typeof window === "undefined") return
+  try {
+    if (!prId || prId === LEGACY_DEMO_PR_ID) {
+      sessionStorage.removeItem(LAST_REVIEWED_PR_STORAGE_KEY)
+    } else {
+      sessionStorage.setItem(LAST_REVIEWED_PR_STORAGE_KEY, prId)
+    }
+  } catch {
+    /* sessionStorage unavailable */
+  }
+}
 
 function emptySession(): AIReviewSession {
   return {
@@ -109,7 +134,9 @@ const AIReviewSessionContext = createContext<AIReviewSessionContextValue | null>
 
 export function AIReviewSessionProvider({ children }: { children: ReactNode }) {
   const sessionsRef = useRef<Map<string, AIReviewSession>>(new Map())
-  const [lastReviewedPrId, setLastReviewedPrIdState] = useState<string | null>(null)
+  const [lastReviewedPrId, setLastReviewedPrIdState] = useState<string | null>(() =>
+    readLastReviewedPrId(),
+  )
 
   const getSession = useCallback((prId: string): AIReviewSession => {
     const mem = sessionsRef.current.get(prId) ?? emptySession()
@@ -127,6 +154,7 @@ export function AIReviewSessionProvider({ children }: { children: ReactNode }) {
       hydratedAt: patch.hydratedAt ?? Date.now(),
     })
     setLastReviewedPrIdState(prId)
+    writeLastReviewedPrId(prId)
   }, [])
 
   const clearSession = useCallback((prId: string) => {
@@ -147,12 +175,17 @@ export function AIReviewSessionProvider({ children }: { children: ReactNode }) {
       return
     }
     setLastReviewedPrIdState(prId)
+    writeLastReviewedPrId(prId)
   }, [])
 
   const clearLastReviewedPrIdIfLegacy = useCallback(() => {
-    setLastReviewedPrIdState((current) =>
-      current === LEGACY_DEMO_PR_ID ? null : current,
-    )
+    setLastReviewedPrIdState((current) => {
+      if (current === LEGACY_DEMO_PR_ID) {
+        writeLastReviewedPrId(null)
+        return null
+      }
+      return current
+    })
   }, [])
 
   useEffect(() => {

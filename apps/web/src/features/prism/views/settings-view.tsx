@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { Bot, User, Bell, Shield, Save, Check, KeyRound } from "lucide-react"
+import { Bot, User, Shield, Save, Check, KeyRound } from "lucide-react"
 import type { SessionTimeoutMinutes } from "@reviewly/shared"
 
 import {
@@ -10,6 +10,7 @@ import {
   type AIProvider,
   useAISettings,
 } from "@/features/prism/contexts/ai-settings-context"
+import { useAuth } from "@/features/prism/contexts/auth-context"
 import { useSecuritySettings } from "@/features/prism/contexts/security-settings-context"
 import { TwoFactorPinDialog } from "@/features/prism/components/two-factor-pin-dialog"
 import { SESSION_TIMEOUT_OPTIONS } from "@/features/prism/lib/security-settings"
@@ -18,31 +19,8 @@ import { PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
-type SettingItem =
-  | { label: string; value: string; type: "text" }
-  | { label: string; value: boolean; type: "toggle"; key: string }
-
-const staticSections: { icon: typeof User; title: string; items: SettingItem[] }[] = [
-  {
-    icon: User,
-    title: "账户设置",
-    items: [
-      { label: "用户名", value: "zhang.wei", type: "text" },
-      { label: "邮箱", value: "zhang.wei@company.com", type: "text" },
-    ],
-  },
-  {
-    icon: Bell,
-    title: "通知设置",
-    items: [
-      { label: "PR 评审通知", value: true, type: "toggle", key: "pr-notify" },
-      { label: "安全告警通知", value: true, type: "toggle", key: "security-notify" },
-      { label: "每日摘要邮件", value: false, type: "toggle", key: "daily-digest" },
-    ],
-  },
-]
-
 export function SettingsView() {
+  const { user, isAuthenticated, loading: authLoading } = useAuth()
   const { settings, providerLabel, hasApiKey, maskedApiKey, monthlyUsage, clearUsage, updateSettings } =
     useAISettings()
   const {
@@ -58,11 +36,6 @@ export function SettingsView() {
     verifyPin,
   } = useSecuritySettings()
 
-  const [toggles, setToggles] = useState<Record<string, boolean>>({
-    "pr-notify": true,
-    "security-notify": true,
-    "daily-digest": false,
-  })
   const [aiForm, setAiForm] = useState(settings)
   const [saved, setSaved] = useState(false)
   const [aiSaveError, setAiSaveError] = useState<string | null>(null)
@@ -72,11 +45,6 @@ export function SettingsView() {
   useEffect(() => {
     setAiForm(settings)
   }, [settings])
-
-  const handleToggle = (key: string) => {
-    setToggles((prev) => ({ ...prev, [key]: !prev[key] }))
-    setSaved(false)
-  }
 
   const handleTwoFactorToggle = () => {
     if (!security.twoFactorEnabled) {
@@ -154,6 +122,8 @@ export function SettingsView() {
   }
 
   const isSaving = securitySaving
+  const accountUsername = user?.username ?? (authLoading ? "…" : zh.sidebar.notLoggedIn)
+  const accountEmail = user?.email ?? (isAuthenticated ? "—" : zh.sidebar.signInHint)
 
   return (
     <div className="p-5 space-y-5">
@@ -248,53 +218,32 @@ export function SettingsView() {
         </div>
       </motion.div>
 
-      {staticSections.map((section, idx) => (
-        <motion.div
-          key={section.title}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: (idx + 1) * 0.05 }}
-          className="rounded-lg border border-border overflow-hidden"
-        >
-          <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
-            <section.icon className="w-4 h-4 text-ai-blue" />
-            <span className="text-sm font-medium text-foreground">{section.title}</span>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+        className="rounded-lg border border-border overflow-hidden"
+      >
+        <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
+          <User className="w-4 h-4 text-ai-blue" />
+          <span className="text-sm font-medium text-foreground">账户</span>
+        </div>
+        <div className="divide-y divide-border">
+          <div className="px-4 py-3 flex items-center justify-between gap-4">
+            <span className="text-sm text-muted-foreground">GitHub 用户名</span>
+            <span className="text-sm text-foreground font-mono">{accountUsername}</span>
           </div>
-          <div className="divide-y divide-border">
-            {section.items.map((item) => (
-              <div key={item.label} className="px-4 py-3 flex items-center justify-between">
-                <span className="text-sm text-foreground">{item.label}</span>
-                {item.type === "text" && (
-                  <span className="text-sm text-muted-foreground">{item.value as string}</span>
-                )}
-                {item.type === "toggle" && (
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={toggles[item.key]}
-                    onClick={() => handleToggle(item.key)}
-                    className={cn(
-                      "w-10 h-5 rounded-full transition-colors relative",
-                      toggles[item.key] ? "bg-ai-blue" : "bg-surface-4",
-                    )}
-                  >
-                    <motion.div
-                      className="w-4 h-4 rounded-full bg-white absolute top-0.5"
-                      animate={{ left: toggles[item.key] ? "calc(100% - 18px)" : "2px" }}
-                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                    />
-                  </button>
-                )}
-              </div>
-            ))}
+          <div className="px-4 py-3 flex items-center justify-between gap-4">
+            <span className="text-sm text-muted-foreground">邮箱</span>
+            <span className="text-sm text-foreground truncate max-w-[60%] text-right">{accountEmail}</span>
           </div>
-        </motion.div>
-      ))}
+        </div>
+      </motion.div>
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15 }}
+        transition={{ delay: 0.1 }}
         className="rounded-lg border border-border overflow-hidden"
       >
         <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">

@@ -34,7 +34,7 @@ export function DashboardView() {
   const metrics = useDashboardMetrics(dashboard, loading)
   const { segments: riskSegments, total: riskTotal } = useRiskDistribution(dashboard)
   const { content: weeklyContent, loading: weeklyLoading, error: weeklyError, generate } =
-    useWeeklySummary()
+    useWeeklySummary(dashboard, refetch)
 
   const activities = dashboard?.activities?.length
     ? dashboard.activities
@@ -59,9 +59,23 @@ export function DashboardView() {
         message: `${activity.user} ${activity.action}（${activity.repo}）`,
         action: "查看详情",
         target,
+        pullRequestId: activity.pullRequestId,
       }
     })
   }, [activities])
+
+  const navigateFromInsight = (
+    target: NavView,
+    pullRequestId?: string,
+  ) => {
+    if (pullRequestId && (target === "ai-review" || target === "security")) {
+      navigate(target, { prId: pullRequestId })
+      return
+    }
+    navigate(target)
+  }
+
+  const recentReviews = dashboard?.recentReviews ?? []
 
   const topRepos = dashboard?.topRepos ?? []
 
@@ -363,7 +377,7 @@ export function DashboardView() {
                 <span className="flex-1 text-sm text-muted-foreground">{insight.message}</span>
                 <button
                   type="button"
-                  onClick={() => navigate(insight.target)}
+                  onClick={() => navigateFromInsight(insight.target, insight.pullRequestId)}
                   className="text-xs text-ai-blue hover:underline"
                 >
                   {insight.action}
@@ -373,6 +387,33 @@ export function DashboardView() {
           )}
         </div>
       </div>
+
+      {recentReviews.length > 0 && (
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-ai-blue" />
+            <span className="text-sm font-medium text-foreground">最近评审</span>
+          </div>
+          <div className="divide-y divide-border">
+            {recentReviews.slice(0, 3).map((review) => (
+              <button
+                key={review.jobId}
+                type="button"
+                onClick={() => navigate("ai-review", { prId: review.pullRequestId })}
+                className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-surface-2/80 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-foreground truncate">{review.title}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    风险分 {review.riskScore} · {review.mergeRecommendation}
+                  </div>
+                </div>
+                <span className="text-xs text-ai-blue shrink-0">查看</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

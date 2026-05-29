@@ -264,8 +264,6 @@ interface DiffViewerProps {
 }
 
 export function DiffViewer({ files, analyzing, chunkProgress, loading }: DiffViewerProps) {
-  const [moreFilesHint, setMoreFilesHint] = useState<string | null>(null)
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
@@ -315,22 +313,6 @@ export function DiffViewer({ files, analyzing, chunkProgress, loading }: DiffVie
       {files.map((file, i) => (
         <DiffFileCard key={file.path} file={file} index={i} />
       ))}
-
-      {files.length >= 3 && (
-        <>
-          <button
-            type="button"
-            onClick={() => setMoreFilesHint("更多文件将在 GitHub 同步后按需加载")}
-            className="flex items-center justify-center gap-2 w-full py-4 text-[11px] text-muted-foreground border border-dashed border-border rounded-lg hover:bg-surface-2 hover:border-ai-blue/30 transition-colors"
-          >
-            <Loader2 className="w-3.5 h-3.5" />
-            <span>查看更多文件</span>
-          </button>
-          {moreFilesHint && (
-            <p className="text-center text-[11px] text-ai-blue">{moreFilesHint}</p>
-          )}
-        </>
-      )}
     </div>
   )
 }
