@@ -14,6 +14,7 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
@@ -143,7 +144,7 @@ export function DashboardView() {
 
       {riskTotal > 0 && (
         <div className="rounded-lg border border-border p-4 bg-surface-2">
-          <p className="text-sm font-medium text-foreground mb-3">风险分布（Open PR）</p>
+          <p className="text-sm font-medium text-foreground mb-3">{zh.dashboard.riskDistributionOpenPr}</p>
           <div className="flex h-2 rounded-full overflow-hidden bg-surface-3">
             {riskSegments.map((seg) => (
               <div
@@ -267,7 +268,7 @@ export function DashboardView() {
                   <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <GitPullRequest className="w-3 h-3" />
-                      {repo.prs} PRs
+                      {zh.dashboard.repoPrCount(repo.prs)}
                     </span>
                     <span className="flex items-center gap-1">
                       <AlertTriangle className="w-3 h-3" />
@@ -309,7 +310,7 @@ export function DashboardView() {
             className="text-xs px-2.5 py-1 rounded-md bg-ai-blue/15 text-ai-blue hover:bg-ai-blue/25 disabled:opacity-50 flex items-center gap-1"
           >
             {weeklyLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-            Generate Weekly Summary
+            {zh.actions.generateWeeklySummary}
           </button>
         </div>
         {weeklyError && (
@@ -322,7 +323,7 @@ export function DashboardView() {
         )}
         <div className="divide-y divide-border">
           {resolvedAiInsights.length === 0 && !weeklyContent && !loading ? (
-            <p className="px-4 py-4 text-sm text-muted-foreground">完成 PR 分析后将显示活动洞察</p>
+            <p className="px-4 py-4 text-sm text-muted-foreground">{zh.dashboard.aiInsightsEmpty}</p>
           ) : (
             resolvedAiInsights.map((insight, idx) => (
               <motion.div

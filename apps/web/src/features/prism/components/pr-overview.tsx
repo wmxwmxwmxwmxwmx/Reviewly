@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatRelativeTime } from "@/lib/format-relative-time"
+import { zh } from "@/lib/i18n/zh"
 import type { AnalysisSummary, PullRequest } from "@reviewly/shared"
 
 interface PROverviewProps {
@@ -167,7 +168,9 @@ export function PROverview({ prData, analysisScores }: PROverviewProps) {
             </div>
             <div className="flex items-center gap-1">
               <GitCommit className="w-3 h-3" />
-              <span>{prData.commits} commits</span>
+              <span>
+                {prData.commits} {zh.pr.commits}
+              </span>
             </div>
             <div className="flex items-center gap-1">
               <FileCode className="w-3 h-3" />

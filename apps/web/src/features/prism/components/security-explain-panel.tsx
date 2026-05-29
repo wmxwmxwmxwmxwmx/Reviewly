@@ -12,6 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
 interface SecurityExplainPanelProps {
@@ -39,7 +40,7 @@ export function SecurityExplainPanel({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-lg bg-panel border-border overflow-y-auto">
         <SheetHeader>
-          <SheetTitle className="text-foreground">AI Explain</SheetTitle>
+          <SheetTitle className="text-foreground">{zh.security.explainTitle}</SheetTitle>
           <SheetDescription className="text-muted-foreground">
             {finding ? `${finding.rule} · ${finding.repo}#${finding.prNumber}` : ""}
           </SheetDescription>
@@ -64,7 +65,7 @@ export function SecurityExplainPanel({
                 className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-white bg-ai-blue rounded-md hover:opacity-90"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                生成 AI 解读
+                {zh.actions.generateAiExplain}
               </button>
             )}
 
@@ -73,7 +74,7 @@ export function SecurityExplainPanel({
                 <Loader2 className="w-4 h-4 animate-spin text-ai-blue" />
                 正在流式生成…
                 <button type="button" onClick={onCancel} className="ml-auto text-risk-high hover:underline">
-                  取消
+                  {zh.common.cancel}
                 </button>
               </div>
             )}
@@ -94,7 +95,7 @@ export function SecurityExplainPanel({
                 onClick={onExplain}
                 className="text-xs text-ai-blue hover:underline"
               >
-                重新生成
+                {zh.actions.regenerate}
               </button>
             )}
           </div>

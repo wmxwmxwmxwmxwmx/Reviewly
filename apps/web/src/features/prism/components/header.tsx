@@ -178,7 +178,7 @@ export function Header({
                 className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground"
               >
                 <div className="w-1.5 h-1.5 rounded-full bg-risk-low" />
-                <span>分析完成</span>
+                <span>{zh.common.analyzeDone}</span>
               </motion.div>
             ) : (
               <motion.div
@@ -188,7 +188,7 @@ export function Header({
                 className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground"
               >
                 <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
-                <span>尚未分析</span>
+                <span>{zh.common.analyzeReady}</span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -252,7 +252,7 @@ export function Header({
             ) : (
               <>
                 <Zap className="w-3.5 h-3.5" />
-                <span>开始分析</span>
+                <span>{zh.common.startAnalyze}</span>
               </>
             )}
           </motion.button>

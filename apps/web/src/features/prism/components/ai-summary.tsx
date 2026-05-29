@@ -9,6 +9,7 @@ import {
   AlertTriangle,
 } from "lucide-react"
 import { SummaryMarkdown } from "@/features/prism/components/summary-markdown"
+import { zh } from "@/lib/i18n/zh"
 
 interface StreamingTextProps {
   text: string
@@ -117,13 +118,11 @@ export function AISummary({
               ) : streaming ? (
                 <p className="text-[11px] text-muted-foreground">正在执行规则扫描并生成 AI 摘要…</p>
               ) : restoring ? (
-                <p className="text-[11px] text-muted-foreground">正在恢复分析结果…</p>
+                <p className="text-[11px] text-muted-foreground">{zh.common.restoreAnalysis}</p>
               ) : hasAnalysis ? (
-                <p className="text-[11px] text-muted-foreground">正在加载摘要…</p>
+                <p className="text-[11px] text-muted-foreground">{zh.common.loadingSummary}</p>
               ) : (
-                <p className="text-[11px] text-muted-foreground">
-                  点击右上角「开始分析」，将基于当前 PR 的 Diff 与规则扫描结果生成评审摘要。
-                </p>
+                <p className="text-[11px] text-muted-foreground">{zh.common.startAnalyzeHint}</p>
               )}
             </div>
           </motion.div>

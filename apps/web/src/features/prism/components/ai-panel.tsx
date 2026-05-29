@@ -77,16 +77,19 @@ function buildStreamLines(
   filesChanged: number,
 ): StreamLine[] {
   const lines: StreamLine[] = [
-    { type: "info", text: `PR 上下文已加载 · ${filesChanged} 个文件` },
+    {
+      type: "info",
+      text: `${zh.ai.stream.prContextLoaded} · ${filesChanged} ${zh.ai.stream.filesUnit}`,
+    },
   ]
 
   if (job) {
     lines.push({
       type: "step",
-      text: `规则扫描进度 ${job.chunkIndex}/${Math.max(job.chunkTotal, 1)} · ${job.progress}%`,
+      text: `${zh.ai.stream.scanProgress} ${job.chunkIndex}/${Math.max(job.chunkTotal, 1)} · ${job.progress}%`,
     })
   } else if (analyzing) {
-    lines.push({ type: "step", text: "正在启动规则扫描任务…" })
+    lines.push({ type: "step", text: zh.ai.stream.scanStarting })
   }
 
   for (const finding of findings.slice(0, 8)) {
@@ -97,11 +100,14 @@ function buildStreamLines(
   }
 
   if (!analyzing && findings.length > 0) {
-    lines.push({ type: "done", text: `分析完成 · 发现 ${findings.length} 个风险项` })
+    lines.push({
+      type: "done",
+      text: `${zh.ai.stream.scanDoneWithFindings} ${findings.length} ${zh.ai.stream.riskItemsUnit}`,
+    })
   } else if (!analyzing && job?.status === "completed") {
-    lines.push({ type: "done", text: "规则扫描完成 · 未发现结构化风险项" })
+    lines.push({ type: "done", text: zh.ai.stream.scanDoneNoFindings })
   } else if (analyzing) {
-    lines.push({ type: "step", text: "正在合并 findings 并生成 AI 摘要…" })
+    lines.push({ type: "step", text: zh.ai.stream.mergingFindings })
   }
 
   return lines

@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion"
 import { BookOpen, GitBranch, Star, Clock, Settings, Loader2, BrainCircuit } from "lucide-react"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { SummaryMarkdown } from "@/features/prism/components/summary-markdown"
@@ -165,7 +166,7 @@ export function ReposView() {
                     ) : (
                       <BrainCircuit className="w-3.5 h-3.5" />
                     )}
-                    {isAnalyzing ? "分析中…" : "Analyze Repository"}
+                    {isAnalyzing ? zh.repos.analyzingRepo : zh.actions.analyzeRepo}
                   </button>
                 </div>
 

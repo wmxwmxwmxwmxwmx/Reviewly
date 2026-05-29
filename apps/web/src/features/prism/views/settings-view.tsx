@@ -155,7 +155,10 @@ export function SettingsView() {
             当前侧边栏左下角会同步显示：<span className="text-foreground">{providerLabel}</span> · <span className="font-mono text-ai-blue">{aiForm.model || "未选择模型"}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span>本月 {monthlyUsage.totalTokens.toLocaleString()} tokens · ¥{monthlyUsage.costCny.toFixed(2)}</span>
+            <span>
+              {zh.settings.monthlyTokens} {monthlyUsage.totalTokens.toLocaleString()} {zh.settings.tokensUnit} · ¥
+              {monthlyUsage.costCny.toFixed(2)}
+            </span>
             <button
               type="button"
               onClick={clearUsage}

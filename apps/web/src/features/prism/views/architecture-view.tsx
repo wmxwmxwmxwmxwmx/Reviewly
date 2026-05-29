@@ -9,6 +9,7 @@ import { useArchitecture } from "@/hooks/use-architecture"
 import { useArchitectureAnalyze } from "@/hooks/use-architecture-analyze"
 import { useArchitectureSelection } from "@/hooks/use-architecture-selection"
 import { useRepos } from "@/hooks/use-repos"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
 export function ArchitectureView() {
@@ -198,7 +199,7 @@ export function ArchitectureView() {
             className="text-xs px-2.5 py-1 rounded-md bg-ai-blue/15 text-ai-blue hover:bg-ai-blue/25 disabled:opacity-50 flex items-center gap-1"
           >
             {aiLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-            AI Analyze Architecture
+            {zh.actions.analyzeArchitecture}
           </button>
         </div>
         {aiError && <p className="px-4 py-2 text-xs text-risk-high">{aiError}</p>}

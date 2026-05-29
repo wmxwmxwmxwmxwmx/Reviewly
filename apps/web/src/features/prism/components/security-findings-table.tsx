@@ -5,6 +5,7 @@ import { ChevronRight, Sparkles } from "lucide-react"
 
 import type { SecurityCenterFinding } from "@reviewly/shared"
 
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
 export const severityConfig = {
@@ -30,7 +31,7 @@ export function SecurityFindingsTable({
   onExplainClick,
 }: SecurityFindingsTableProps) {
   if (loading) {
-    return <p className="px-4 py-6 text-sm text-muted-foreground">加载中…</p>
+    return <p className="px-4 py-6 text-sm text-muted-foreground">{zh.common.loading}</p>
   }
 
   if (items.length === 0) {
@@ -42,12 +43,12 @@ export function SecurityFindingsTable({
       <table className="w-full text-left text-xs">
         <thead className="bg-surface-2 border-b border-border text-muted-foreground">
           <tr>
-            <th className="px-4 py-2 font-medium">规则</th>
-            <th className="px-4 py-2 font-medium">严重度</th>
-            <th className="px-4 py-2 font-medium">仓库 / PR</th>
-            <th className="px-4 py-2 font-medium">位置</th>
-            <th className="px-4 py-2 font-medium">描述</th>
-            <th className="px-4 py-2 font-medium w-28">操作</th>
+            <th className="px-4 py-2 font-medium">{zh.common.rule}</th>
+            <th className="px-4 py-2 font-medium">{zh.common.severity}</th>
+            <th className="px-4 py-2 font-medium">{zh.common.repoPr}</th>
+            <th className="px-4 py-2 font-medium">{zh.common.location}</th>
+            <th className="px-4 py-2 font-medium">{zh.common.description}</th>
+            <th className="px-4 py-2 font-medium w-28">{zh.common.actions}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -101,13 +102,13 @@ export function SecurityFindingsTable({
                       className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-surface-3 text-ai-blue hover:bg-surface-2 disabled:opacity-50"
                     >
                       <Sparkles className="w-3 h-3" />
-                      AI Explain
+                      {zh.actions.aiExplain}
                     </button>
                     <button
                       type="button"
                       onClick={() => onRowClick(row)}
                       className="p-1 opacity-0 group-hover:opacity-100 text-muted-foreground"
-                      aria-label="打开 PR 评审"
+                      aria-label={zh.actions.openPrReview}
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>

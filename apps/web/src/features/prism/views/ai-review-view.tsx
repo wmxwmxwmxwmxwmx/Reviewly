@@ -19,6 +19,7 @@ import { usePullRequestDiff } from "@/hooks/use-pull-request-diff"
 import { usePrAnalysis } from "@/hooks/use-pr-analysis"
 import { importPullRequestByUrl } from "@/lib/api/pull-requests"
 import { PrismApiError } from "@/lib/api/client"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
 interface AIReviewViewProps {
@@ -394,7 +395,9 @@ ${diffContext || "（无 diff 内容）"}`,
             />
 
             {diffError && (
-              <p className="text-xs text-risk-high">Diff 加载失败：{diffError}</p>
+              <p className="text-xs text-risk-high">
+                {zh.common.diffLoadFailed}：{diffError}
+              </p>
             )}
 
             <div className="flex items-center justify-between pt-1">
