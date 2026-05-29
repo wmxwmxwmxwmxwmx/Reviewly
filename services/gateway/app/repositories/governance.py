@@ -8,9 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import AuditLog, GovernanceRule, GovernanceViolation
-from app.mock import seed
-
-
 def _row_to_definition(row: GovernanceRule) -> dict[str, Any]:
     payload = deepcopy(row.payload) if row.payload else {}
     payload["id"] = row.id
@@ -30,16 +27,8 @@ def list_enabled_rule_definitions(session: Session) -> list[dict[str, Any]]:
         select(GovernanceRule).where(GovernanceRule.enabled.is_(True))
     ).all()
     if not rows:
-        return [_default_seed_rule(r) for r in seed.get_governance_rules()]
+        return []
     return [_row_to_definition(r) for r in rows]
-
-
-def _default_seed_rule(seed_rule: dict[str, Any]) -> dict[str, Any]:
-    rule = deepcopy(seed_rule)
-    rule.setdefault("matchType", "keyword")
-    rule.setdefault("keywords", ["token", "密钥", "password", "secret"])
-    rule.setdefault("enabled", True)
-    return rule
 
 
 def list_rule_definitions(
@@ -52,7 +41,7 @@ def list_rule_definitions(
         query = query.where(GovernanceRule.enabled.is_(True))
     rows = session.scalars(query).all()
     if not rows:
-        return [_default_seed_rule(r) for r in seed.get_governance_rules()]
+        return []
     return [_row_to_definition(r) for r in rows]
 
 
@@ -63,9 +52,6 @@ def list_rules(session: Session) -> list[dict]:
 def get_rule(session: Session, rule_id: str) -> dict | None:
     row = session.get(GovernanceRule, rule_id)
     if row is None:
-        for seed_rule in seed.get_governance_rules():
-            if seed_rule["id"] == rule_id:
-                return _default_seed_rule(seed_rule)
         return None
     return _row_to_definition(row)
 
@@ -181,7 +167,7 @@ def list_violations(session: Session) -> list[dict]:
             item["file"] = r.file
             out.append(item)
         return out
-    return [r for r in seed.get_governance_rules() if r.get("violated")]
+    return []
 
 
 def list_audit_logs(session: Session, limit: int = 50) -> list[dict]:

@@ -6,7 +6,6 @@ from typing import Any, AsyncIterator
 from sqlalchemy.orm import Session
 
 from app.engine.summary import build_result_summary
-from app.mock import seed
 from app.repositories import settings as settings_repo
 from app.services.llm_client import fetch_optional_review_finding
 
@@ -48,9 +47,6 @@ async def run_analysis_pipeline(
             findings_list = list(progress["findings"])
         if progress.get("status") == "failed":
             return
-
-    if not findings_list and seed.is_demo_pr(pull_request_id):
-        findings_list = seed.list_findings(pull_request_id)
 
     summary = build_result_summary(findings_list, pull_request_id)
     yield {

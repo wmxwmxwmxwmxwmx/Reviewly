@@ -71,13 +71,8 @@ def repos(
 ) -> list:
     if user and not settings.prism_auth_bypass:
         team_ids = auth_users_repo.get_team_ids_for_user(db, user.id)
-        return repos_repo.list_repos(
-            db,
-            user_id=user.id,
-            team_ids=team_ids,
-            include_seed=settings.debug,
-        )
-    return repos_repo.list_repos(db, include_seed=True)
+        return repos_repo.list_repos(db, user_id=user.id, team_ids=team_ids)
+    return repos_repo.list_repos(db)
 
 
 @router.get("/repos/{repo_id}/analyze-context")

@@ -130,7 +130,7 @@ export function ReposView() {
 
       {!loading && repos.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          暂无仓库。请添加 GitHub 仓库或点击「同步 GitHub 仓库」（需在 Gateway 配置 GITHUB_PAT）。
+          暂无仓库。登录 GitHub 后点击「同步 GitHub 仓库」，或使用「添加仓库」粘贴仓库 URL。
         </p>
       )}
 

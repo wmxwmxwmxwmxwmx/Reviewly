@@ -178,15 +178,7 @@ def list_security_findings_filtered(
     total = session.scalar(count_stmt) or 0
 
     if total == 0:
-        seed_items = _apply_filters(
-            _seed_to_center_items(),
-            severities=severities,
-            repo=repo,
-            q=q,
-        )
-        total = len(seed_items)
-        start = (page - 1) * page_size
-        return seed_items[start : start + page_size], total
+        return [], 0
 
     rows = session.execute(
         base.order_by(AnalysisFinding.severity, AnalysisFinding.id)

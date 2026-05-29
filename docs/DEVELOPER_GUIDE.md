@@ -197,9 +197,16 @@ DATABASE_URL=sqlite:///./prism.db
 
 然后 `alembic upgrade head`（`dev-gateway.ps1` 会自动执行）。
 
-**首次空库 Seed：**
+**演示数据（可选）：**
 
-Gateway 启动时 `load_seed_if_empty()`：若库中**没有任何 PR**，会自动写入 `app/mock/seed.py` 中的演示团队、仓库、PR、治理规则等。这是你在未配置 GitHub 时看到「示例仓库」的原因。
+默认**不会**自动灌入演示数据。仅当 `PRISM_SEED_DB=1` 时，Gateway 启动才会在空库执行 `load_seed_if_empty()`（写入 `app/mock/seed.py` 中的 acme 演示仓库/PR）。正常开发请使用 GitHub OAuth 登录后「同步 GitHub 仓库」。
+
+若库中已有旧版演示数据，可执行一次清理：
+
+```bash
+cd services/gateway
+$env:PYTHONPATH='.'; .venv\Scripts\python.exe scripts\purge_seed_data.py
+```
 
 ### 4.4 仅启动各服务
 
@@ -289,17 +296,17 @@ flowchart LR
   Import[POST /api/pull-requests/import] --> DB
 ```
 
-1. **演示 Seed**（`load_seed_if_empty`）：库中无 PR 时自动导入 mock 数据。  
-2. **手动同步**：仓库管理页 →「同步 GitHub 仓库」→ `POST /api/repos/sync` → `sync_github_repositories`（**必须**配置 `GITHUB_PAT`，否则 500）。  
-3. **按 URL 添加仓库**：`POST /api/repos/import`，body `{ "url": "https://github.com/owner/repo" }`。  
+1. **OAuth 同步（推荐）**：登录后 `POST /api/repos/sync/me`，使用用户 GitHub token。  
+2. **PAT 同步（兼容）**：`POST /api/repos/sync`，需配置 `GITHUB_PAT`。  
+3. **演示 Seed（仅 `PRISM_SEED_DB=1`）**：空库时导入 mock 数据，仅供 demo。  
+4. **按 URL 添加仓库**：`POST /api/repos/import`，body `{ "url": "https://github.com/owner/repo" }`。  
 4. **GitHub App**：`installation` / `pull_request` webhook → `app/github/sync.py` 写入仓库与 PR（含 diff）；无 PAT 时若库中已有 installation_id 可走 App 路径同步。
 
 仓库主键格式：`repo-{github_numeric_id}`。`upsert_repo` 见 `app/repositories/repos.py`。
 
 ### 7.2 PR 来源
 
-- Seed 中的演示 PR  
-- GitHub 同步（开放 PR + diff patch）  
+- GitHub 同步（开放 PR + diff patch，`POST /api/repos/{id}/sync-prs`）  
 - **按 URL 导入**：`POST /api/pull-requests/import`，body `{ "url": "https://github.com/owner/repo/pull/123" }`（建议配置 `GITHUB_PAT`）
 
 ### 7.3 本地克隆缓存
@@ -610,7 +617,16 @@ npm run build          # TypeScript + Next 构建
 
 ### 重置为演示数据
 
-清空数据库（或删除 `prism.db`）后重启 gateway，将重新 `load_seed_if_empty`。
+在 `.env` 设置 `PRISM_SEED_DB=1`，清空数据库后重启 gateway，将执行 `load_seed_if_empty`。
+
+### 清理演示数据、仅保留真实数据
+
+```bash
+cd services/gateway
+$env:PYTHONPATH='.'; .venv\Scripts\python.exe scripts\purge_seed_data.py
+```
+
+然后重启 gateway（保持 `PRISM_SEED_DB=0`）。
 
 ---
 
@@ -621,7 +637,8 @@ npm run build          # TypeScript + Next 构建
 | Dashboard 500，`architecture_graph` 不存在 | 迁移未执行 | `cd services/gateway && alembic upgrade head` |
 | 端口 3001 被占用 | 旧 uvicorn 未退出 | 结束占用进程或换端口 |
 | GitHub 导入/同步 403 | 未配置 PAT、API 限流 | 设置 `GITHUB_PAT` |
-| 同步按钮后仍无仓库 | 未配置 GitHub，接口为 mock | 配置 PAT/App，或依赖首次 seed |
+| 同步按钮后仍无仓库 | 未登录 OAuth 或未配置 PAT | 登录 GitHub 或设置 `GITHUB_PAT` 后同步 |
+| 仍看到 acme 演示仓库 | 库内残留 seed 行 | 运行 `scripts/purge_seed_data.py` |
 | 分析无 diff | DB 无 patch / stub 未返回 | 检查 `pull_request_diffs`、Engine 是否 stub |
 | 前端 API 404 | 网关未启动或 `API_URL` 错误 | 确认 `npm run dev:gateway` 与 rewrite |
 | Postgres 连接失败 | Docker 未启动 | `docker compose up -d` 或改 SQLite |

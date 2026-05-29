@@ -8,33 +8,17 @@ from sqlalchemy.orm import Session
 from app.db.models import Repository
 
 
-def _mock_graph(session: Session, repo_id: str) -> dict:
-    repo = session.get(Repository, repo_id)
-    label = repo_id
-    if repo and repo.payload:
-        label = repo.payload.get("fullName", repo.full_name).split("/")[-1]
-    elif repo:
-        label = repo.full_name.split("/")[-1]
-
+def _empty_graph() -> dict:
     return {
-        "nodes": [
-            {"id": repo_id, "label": label, "path": repo_id, "layer": "module", "language": "unknown"},
-            {"id": f"{repo_id}-api", "label": "api-gateway", "path": "api", "layer": "controller", "language": "typescript"},
-            {"id": f"{repo_id}-payment", "label": "payment-service", "path": "payment", "layer": "service", "language": "python"},
-            {"id": f"{repo_id}-auth", "label": "auth-service", "path": "auth", "layer": "service", "language": "python"},
-        ],
-        "edges": [
-            {"from": f"{repo_id}-api", "to": f"{repo_id}-payment", "kind": "import"},
-            {"from": f"{repo_id}-api", "to": f"{repo_id}-auth", "kind": "import"},
-            {"from": repo_id, "to": f"{repo_id}-api", "kind": "import"},
-        ],
+        "nodes": [],
+        "edges": [],
         "metrics": {
             "cycles": [],
             "giantModules": [],
             "layerViolations": [],
-            "summary": {"fileCount": 4, "edgeCount": 3, "languages": {}},
+            "summary": {"fileCount": 0, "edgeCount": 0, "languages": {}},
         },
-        "status": "ok",
+        "status": "empty",
     }
 
 
@@ -53,4 +37,4 @@ def get_dependency_graph(session: Session, repo_id: str) -> dict:
         out = deepcopy(repo.architecture_graph)
         out.setdefault("status", "ok")
         return out
-    return _mock_graph(session, repo_id)
+    return _empty_graph()

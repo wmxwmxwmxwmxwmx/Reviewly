@@ -8,9 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import User
-from app.mock import seed
-
-
 def _member_dict(row: User) -> dict:
     if row.payload:
         return deepcopy(row.payload)
@@ -26,9 +23,7 @@ def _member_dict(row: User) -> dict:
 
 def list_members(session: Session) -> list[dict]:
     rows = session.scalars(select(User)).all()
-    if rows:
-        return [_member_dict(r) for r in rows]
-    return seed.get_team_members()
+    return [_member_dict(r) for r in rows]
 
 
 def get_member(session: Session, member_id: str) -> dict | None:

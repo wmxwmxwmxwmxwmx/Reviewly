@@ -7,8 +7,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import AnalysisFinding, AnalysisJob, PullRequest, Repository
-from app.mock import seed
 from app.repositories import settings as settings_repo
+from app.repositories.seed_filter import exclude_seed_repositories, is_seed_pull_request
 from app.services.activity_log import list_recent
 
 
@@ -39,17 +39,37 @@ def _scoped_repository_ids(
         return None
     from app.repositories import repos as repos_repo
 
-    rows = repos_repo.list_repos(
-        session,
-        user_id=user_id,
-        team_ids=team_ids,
-        include_seed=False,
-    )
+    rows = repos_repo.list_repos(session, user_id=user_id, team_ids=team_ids)
     return {str(r["id"]) for r in rows}
 
 
+def _empty_dashboard(session: Session) -> dict:
+    return {
+        "pendingPrs": 0,
+        "securityIssues": 0,
+        "qualityScore": 0,
+        "avgReviewHours": 0,
+        "summary": {
+            "openPrCount": 0,
+            "highRiskCount": 0,
+            "securityCount": 0,
+            "performanceCount": 0,
+        },
+        "recentReviews": [],
+        "activities": [],
+        "recentActivity": [],
+        "topRepos": [],
+        "riskDistribution": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+        "analysisTiming": {
+            "avgDurationMs": 0,
+            "completedCount": 0,
+            "recent": [],
+        },
+        "weeklySummary": settings_repo.get_dashboard_weekly_summary(session),
+    }
+
+
 def _enrich_dashboard(
-    base: dict,
     session: Session,
     *,
     user_id: str | None = None,
@@ -60,6 +80,7 @@ def _enrich_dashboard(
 
     open_prs_query = select(PullRequest).where(PullRequest.state == "open")
     open_prs = session.scalars(open_prs_query).all()
+    open_prs = [pr for pr in open_prs if not is_seed_pull_request(pr)]
     if scoped_repo_ids is not None:
         open_prs = [pr for pr in open_prs if pr.repository_id in scoped_repo_ids]
 
@@ -97,7 +118,11 @@ def _enrich_dashboard(
 
     for job in completed_jobs:
         pr = session.get(PullRequest, job.pull_request_id)
-        payload = pr.payload if pr else {}
+        if pr is None or is_seed_pull_request(pr):
+            continue
+        if scoped_repo_ids is not None and pr.repository_id not in scoped_repo_ids:
+            continue
+        payload = pr.payload or {}
         summary = job.result_summary or {}
         duration_ms = 0
         if job.created_at and job.completed_at:
@@ -133,18 +158,16 @@ def _enrich_dashboard(
         )
 
     activities = list_recent(session, limit=20)
-    if not activities:
-        activities = base.get("recentActivity", [])
 
-    repos_query = select(Repository)
+    repos_query = exclude_seed_repositories(select(Repository))
     if scoped_repo_ids is not None:
         if not scoped_repo_ids:
             repos = []
         else:
-            repos_query = repos_query.where(Repository.id.in_(scoped_repo_ids))
-            repos = session.scalars(repos_query).all()
+            repos = session.scalars(repos_query.where(Repository.id.in_(scoped_repo_ids))).all()
     else:
         repos = session.scalars(repos_query).all()
+
     top_repos = []
     for repo in repos[:5]:
         if repo.id.startswith("inst-"):
@@ -168,7 +191,7 @@ def _enrich_dashboard(
         )
 
     avg_duration = int(sum(durations) / len(durations)) if durations else 0
-    quality = 87
+    quality = 0
     if completed_jobs and completed_jobs[0].result_summary:
         scores = [
             completed_jobs[0].result_summary.get("maintainabilityScore"),
@@ -179,29 +202,29 @@ def _enrich_dashboard(
         if nums:
             quality = int(sum(nums) / len(nums))
 
-    result = deepcopy(base)
-    result["pendingPrs"] = open_pr_count or result.get("pendingPrs", 0)
-    result["securityIssues"] = security_count or result.get("securityIssues", 0)
-    result["qualityScore"] = quality
-    result["avgReviewHours"] = round(avg_duration / 3_600_000, 1) if avg_duration else result.get("avgReviewHours", 2.4)
-    result["recentActivity"] = activities
-    result["topRepos"] = top_repos or result.get("topRepos", [])
-    result["summary"] = {
-        "openPrCount": result["pendingPrs"],
-        "highRiskCount": high_risk_count,
-        "securityCount": result["securityIssues"],
-        "performanceCount": performance_count,
+    return {
+        "pendingPrs": open_pr_count,
+        "securityIssues": security_count,
+        "qualityScore": quality,
+        "avgReviewHours": round(avg_duration / 3_600_000, 1) if avg_duration else 0,
+        "summary": {
+            "openPrCount": open_pr_count,
+            "highRiskCount": high_risk_count,
+            "securityCount": security_count,
+            "performanceCount": performance_count,
+        },
+        "recentReviews": recent_reviews,
+        "activities": activities,
+        "recentActivity": activities,
+        "topRepos": top_repos,
+        "riskDistribution": risk_distribution,
+        "analysisTiming": {
+            "avgDurationMs": avg_duration,
+            "completedCount": len(durations),
+            "recent": timing_recent[:5],
+        },
+        "weeklySummary": settings_repo.get_dashboard_weekly_summary(session),
     }
-    result["recentReviews"] = recent_reviews
-    result["activities"] = activities
-    result["riskDistribution"] = risk_distribution
-    result["analysisTiming"] = {
-        "avgDurationMs": avg_duration,
-        "completedCount": len(durations),
-        "recent": timing_recent[:5],
-    }
-    result["weeklySummary"] = settings_repo.get_dashboard_weekly_summary(session)
-    return result
 
 
 def get_dashboard(
@@ -211,7 +234,6 @@ def get_dashboard(
     team_ids: list[str] | None = None,
 ) -> dict:
     team_ids = team_ids or []
-    base = seed.get_dashboard()
     open_prs_query = select(func.count()).select_from(PullRequest).where(PullRequest.state == "open")
     open_prs: int | None = None
     if user_id:
@@ -223,22 +245,8 @@ def get_dashboard(
                 open_prs_query = open_prs_query.where(PullRequest.repository_id.in_(scoped))
     if open_prs is None:
         open_prs = session.scalar(open_prs_query) or 0
-    if open_prs == 0:
-        base["summary"] = {
-            "openPrCount": base.get("pendingPrs", 12),
-            "highRiskCount": 0,
-            "securityCount": base.get("securityIssues", 5),
-            "performanceCount": 0,
-        }
-        base["recentReviews"] = []
-        base["activities"] = base.get("recentActivity", [])
-        base["riskDistribution"] = {"critical": 1, "high": 2, "medium": 5, "low": 4}
-        base["analysisTiming"] = {
-            "avgDurationMs": 0,
-            "completedCount": 0,
-            "recent": [],
-        }
-        base["weeklySummary"] = settings_repo.get_dashboard_weekly_summary(session)
-        return base
 
-    return _enrich_dashboard(base, session, user_id=user_id, team_ids=team_ids)
+    if open_prs == 0:
+        return _empty_dashboard(session)
+
+    return _enrich_dashboard(session, user_id=user_id, team_ids=team_ids)

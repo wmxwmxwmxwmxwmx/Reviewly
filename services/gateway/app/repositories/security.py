@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import AnalysisFinding, AnalysisJob
-from app.mock import seed
 from app.repositories.analysis import _finding_to_api, get_security_stats, list_security_findings
 from app.repositories.security_center import (
     get_finding_with_context,

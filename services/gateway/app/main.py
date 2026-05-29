@@ -52,7 +52,8 @@ async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        load_seed_if_empty(db)
+        if settings.prism_seed_db:
+            load_seed_if_empty(db)
     finally:
         db.close()
     yield

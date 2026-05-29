@@ -38,6 +38,8 @@ def load_seed_if_empty(session: Session) -> bool:
                 team_id="team-default",
                 full_name=repo["fullName"],
                 ai_review_enabled=repo.get("aiReviewEnabled", True),
+                visibility="team",
+                source="seed",
                 payload=deepcopy(repo),
             )
         )

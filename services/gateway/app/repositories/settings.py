@@ -14,22 +14,31 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _default_settings() -> dict:
+    return {
+        "ai": {
+            "provider": "openai",
+            "model": "",
+            "temperature": 0.2,
+            "maxTokens": 4096,
+        },
+        "github": {"connected": False},
+        "notifications": {"email": True, "slack": False},
+        "dashboard": {},
+    }
+
+
 def get_settings(session: Session) -> dict:
     row = session.get(Setting, "default")
     if row is None:
-        from app.mock import seed
-
-        return seed.get_settings()
+        return _default_settings()
     return _public_settings(row)
 
 
 def patch_settings(session: Session, patch: dict) -> dict:
     row = session.get(Setting, "default")
     if row is None:
-        from app.mock import seed
-
-        data = seed.get_settings()
-        row = Setting(id="default", data=data, encrypted_secrets=None)
+        row = Setting(id="default", data=_default_settings(), encrypted_secrets=None)
         session.add(row)
 
     data = deepcopy(row.data)
@@ -108,10 +117,7 @@ def save_dashboard_weekly_summary(
 ) -> dict:
     row = session.get(Setting, "default")
     if row is None:
-        from app.mock import seed
-
-        data = seed.get_settings()
-        row = Setting(id="default", data=data, encrypted_secrets=None)
+        row = Setting(id="default", data=_default_settings(), encrypted_secrets=None)
         session.add(row)
 
     data = deepcopy(row.data)

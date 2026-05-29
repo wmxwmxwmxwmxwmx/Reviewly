@@ -198,16 +198,7 @@ def list_performance_findings_filtered(
     total = session.scalar(count_stmt) or 0
 
     if total == 0:
-        seed_items = _apply_filters(
-            _seed_performance_items(),
-            severities=severities,
-            perf_type=perf_type,
-            repo=repo,
-            q=q,
-        )
-        total = len(seed_items)
-        start = (page - 1) * page_size
-        return seed_items[start : start + page_size], total
+        return [], 0
 
     rows = session.execute(
         base.order_by(AnalysisFinding.severity, AnalysisFinding.id)

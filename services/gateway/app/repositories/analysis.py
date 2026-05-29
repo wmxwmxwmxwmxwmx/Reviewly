@@ -7,7 +7,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import AnalysisFinding, AnalysisJob
-from app.mock import seed
 
 
 def _now_iso() -> str:
@@ -171,9 +170,7 @@ def list_security_findings(session: Session) -> list[dict]:
     rows = session.scalars(
         select(AnalysisFinding).where(AnalysisFinding.type == "security")
     ).all()
-    if rows:
-        return [_finding_to_api(r) for r in rows]
-    return seed.list_security_findings()
+    return [_finding_to_api(r) for r in rows]
 
 
 def get_security_stats(session: Session) -> dict:

@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import PullRequest, PullRequestDiff, Repository
+from app.repositories.seed_filter import exclude_seed_repositories, is_seed_pull_request
 
 
 def list_pull_requests(
@@ -16,7 +17,11 @@ def list_pull_requests(
     author: str | None = None,
     state: str | None = None,
 ) -> list[dict]:
-    rows = session.scalars(select(PullRequest)).all()
+    stmt = exclude_seed_repositories(
+        select(PullRequest).join(Repository, PullRequest.repository_id == Repository.id)
+    )
+    rows = session.scalars(stmt).all()
+    rows = [r for r in rows if not is_seed_pull_request(r)]
     items = [_pr_dict(r) for r in rows]
     if repo:
         items = [p for p in items if repo in p.get("repo", "")]
