@@ -84,7 +84,7 @@ export function SettingsView() {
     <div className="p-5 space-y-5">
       <div>
         <h1 className="text-lg font-semibold text-foreground">系统设置</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">管理您的账户和应用偏好</p>
+        <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.settings}</p>
       </div>
 
       <motion.div

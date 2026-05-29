@@ -88,7 +88,7 @@ export function SecurityView() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">安全中心</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{zh.security.subtitle}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.security}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">

@@ -39,7 +39,7 @@ export function ReposView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-foreground">仓库管理</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{zh.repos.subtitle}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.repos}</p>
         </div>
         <button
           type="button"

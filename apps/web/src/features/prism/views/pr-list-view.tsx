@@ -66,7 +66,7 @@ export function PRListView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-foreground">{zh.pr.title}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">管理和评审代码变更请求</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.pullRequests}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">

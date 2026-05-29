@@ -47,7 +47,7 @@ export function ArchitectureView() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold text-foreground">架构分析</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">模块依赖关系与架构健康度</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.architecture}</p>
         </div>
         <button
           type="button"
