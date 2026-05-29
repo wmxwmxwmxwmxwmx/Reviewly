@@ -1,0 +1,44 @@
+---
+description: PRism project coding style, robustness, and maintainability standards
+alwaysApply: true
+---
+
+# PRism 代码书写规范与鲁棒性要求
+
+本项目是 Next.js + React + TypeScript + Tailwind CSS 的暗色专业研发工具 UI。所有代码修改必须优先保证一致性、可维护性、类型安全和用户体验稳定性。
+
+## 通用原则
+
+- 优先复用现有组件、hooks、工具函数和设计 token，不重复造轮子。
+- 代码应小而清晰：组件只负责一个明确职责，复杂逻辑抽到具名函数或自定义 hook。
+- 避免魔法值。颜色、间距、风险状态、AI 强调色优先使用 `app/globals.css` 中的 CSS variables / Tailwind token。
+- 不提交构建产物、缓存、日志或本地临时文件，例如 `.next/`、`node_modules/`、日志文件。
+
+## TypeScript 规范
+
+- 保持 `strict` 友好：不要用 `any` 逃避建模；优先使用明确类型、泛型、联合类型或 `unknown` + 类型收窄。
+- 组件 props 必须定义清晰类型；跨文件共享的领域类型应集中放置或从数据源导出。
+- 对外部输入、异步结果、可空数据必须显式处理空态、失败态和加载态。
+- 不吞异常。捕获错误时至少保留上下文；UI 层展示可理解的 fallback。
+
+## React / Next.js 规范
+
+- 默认使用函数组件；仅在需要浏览器状态、事件或动画时使用 client component。
+- 避免在 render 中做昂贵计算；必要时使用 `useMemo`，但不要过度优化。
+- 列表必须使用稳定 key，不能用随机值或会频繁变化的 key。
+- 交互组件必须考虑键盘可访问性、focus 样式和禁用态。
+- Framer Motion 动画应克制，避免影响主要信息读取和性能。
+
+## UI / Tailwind 规范
+
+- PRism 视觉风格是暗色 DevTools：`#09090B`、`#0D1117`、`#111827` 为主，`#38BDF8` 和 `#8B5CF6` 为 AI 强调色。
+- 新 UI 优先使用语义类：`bg-background`、`bg-panel`、`bg-card`、`text-muted-foreground`、`text-ai-blue`、`text-risk-high` 等。
+- 避免在组件内直接写新的 hex / oklch 颜色；如确需新增颜色，先扩展全局 token。
+- 保持紧凑的研发工具密度：信息层级清楚，边框克制，hover/focus/active 状态明确。
+
+## 鲁棒性与质量门槛
+
+- 修改后尽量运行相关检查：`npm run lint`、`npm run build` 或至少读取 linter 诊断。
+- 不为了解决类型或 lint 报错而删除重要逻辑；应修正根因。
+- 对 mock data、展示数据和真实数据边界保持清晰，不把临时假数据写成隐式业务事实。
+- 改动应局部、可回滚；避免无关格式化和大范围重排。
