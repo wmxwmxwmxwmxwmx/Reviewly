@@ -4,6 +4,8 @@ import { Suspense, useEffect, useState } from "react"
 import { Menu } from "lucide-react"
 import { Sidebar } from "@/features/prism/components/sidebar"
 import { AISettingsProvider } from "@/features/prism/contexts/ai-settings-context"
+import { SecuritySettingsProvider } from "@/features/prism/contexts/security-settings-context"
+import { SessionLockOverlay } from "@/features/prism/components/session-lock-overlay"
 import { AIReviewSessionProvider } from "@/features/prism/contexts/ai-review-session-context"
 import { ReposProvider } from "@/features/prism/contexts/repos-context"
 import { NavigationProvider, useNavigation } from "@/features/prism/contexts/navigation-context"
@@ -105,22 +107,25 @@ function PRismPageContent() {
 export default function PRismPage() {
   return (
     <AISettingsProvider>
-      <Toaster />
-      <Suspense
-        fallback={
-          <div className="flex h-screen items-center justify-center bg-background text-muted-foreground text-sm">
-            加载中…
-          </div>
-        }
-      >
-        <AIReviewSessionProvider>
-          <ReposProvider>
-            <NavigationProvider>
-              <PRismPageContent />
-            </NavigationProvider>
-          </ReposProvider>
-        </AIReviewSessionProvider>
-      </Suspense>
+      <SecuritySettingsProvider>
+        <Toaster />
+        <Suspense
+          fallback={
+            <div className="flex h-screen items-center justify-center bg-background text-muted-foreground text-sm">
+              加载中…
+            </div>
+          }
+        >
+          <AIReviewSessionProvider>
+            <ReposProvider>
+              <NavigationProvider>
+                <PRismPageContent />
+                <SessionLockOverlay />
+              </NavigationProvider>
+            </ReposProvider>
+          </AIReviewSessionProvider>
+        </Suspense>
+      </SecuritySettingsProvider>
     </AISettingsProvider>
   )
 }

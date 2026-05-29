@@ -53,10 +53,18 @@ npm run start:app
 
 ```bash
 npm run dev:gateway
-# 或
-cd services/gateway && python -m venv .venv && .venv\Scripts\pip install -r requirements.txt
+# 推荐：脚本会自动执行 alembic upgrade head
+```
+
+若直接运行 uvicorn，Gateway 启动时也会尝试执行迁移；若失败请手动：
+
+```bash
+cd services/gateway
+alembic upgrade head
 .venv\Scripts\python -m uvicorn app.main:app --port 3001 --reload
 ```
+
+拉取含数据库变更的代码后，若 Dashboard 返回「服务器内部错误」，请先执行 `alembic upgrade head`。
 
 ### C++ 引擎（可选）
 

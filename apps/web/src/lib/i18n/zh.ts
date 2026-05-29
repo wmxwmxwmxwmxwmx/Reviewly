@@ -215,6 +215,19 @@ export const zh = {
     severityFilterAll: "全部",
     aiReviewEmptyHint: "从合并请求列表选择一条 PR 开始评审",
   },
+  sidebar: {
+    githubConnected: "GitHub 已连接",
+    githubDisconnected: "GitHub 未连接",
+    githubNotConnectedHint: "配置 GITHUB_PAT 或 GitHub App",
+    aiConfigured: "已配置",
+    aiNotConfigured: "未配置",
+    noModelSelected: "未选择模型",
+    monthlyUsage: "本月用量",
+    noTeamMember: "暂无团队成员",
+    demoDataHint: "使用种子数据或同步团队",
+    notLoggedIn: "未登录",
+    signInHint: "请登录以同步仓库",
+  },
 } as const
 
 export type RiskSeverityKey = keyof typeof zh.riskFile

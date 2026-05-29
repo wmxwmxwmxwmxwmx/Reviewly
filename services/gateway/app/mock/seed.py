@@ -171,6 +171,7 @@ _DEFAULT_SETTINGS: dict[str, Any] = {
     "ai": {"provider": "openai", "model": "gpt-4o-mini", "temperature": 0.2},
     "analysis": {"autoRunOnOpen": False, "maxChunks": 32},
     "notifications": {"emailEnabled": False},
+    "security": {"twoFactorEnabled": False, "sessionTimeoutMinutes": 30},
 }
 
 _settings_store: dict[str, Any] = deepcopy(_DEFAULT_SETTINGS)

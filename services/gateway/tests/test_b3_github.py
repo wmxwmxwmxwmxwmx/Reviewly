@@ -4,7 +4,10 @@ from fastapi.testclient import TestClient
 def test_install_url(client: TestClient) -> None:
     r = client.get("/api/integrations/github/install-url")
     assert r.status_code == 200
-    assert "url" in r.json()
+    body = r.json()
+    assert "url" in body
+    assert "connected" in body
+    assert "hostLabel" in body
 
 
 def test_repos_sync_requires_pat_without_github(client: TestClient) -> None:

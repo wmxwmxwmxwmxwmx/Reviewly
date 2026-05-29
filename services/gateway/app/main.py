@@ -1,4 +1,7 @@
+import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -10,9 +13,42 @@ from app.db.models import Base
 from app.db.seed_loader import load_seed_if_empty
 from app.db.session import SessionLocal, engine
 
+logger = logging.getLogger(__name__)
+
+
+def _run_alembic_upgrade() -> None:
+    """Apply pending DB migrations (same as `alembic upgrade head` in dev-gateway.ps1)."""
+    try:
+        from alembic import command
+        from alembic.config import Config
+    except ImportError:
+        logger.warning("Alembic not installed; skipping database migrations")
+        return
+
+    gateway_dir = Path(__file__).resolve().parents[1]
+    ini_path = gateway_dir / "alembic.ini"
+    if not ini_path.is_file():
+        logger.warning("alembic.ini not found at %s; skipping migrations", ini_path)
+        return
+
+    prev_cwd = os.getcwd()
+    try:
+        os.chdir(gateway_dir)
+        cfg = Config(str(ini_path))
+        command.upgrade(cfg, "head")
+        logger.info("Database migrations applied (alembic upgrade head)")
+    except Exception as exc:
+        logger.warning(
+            "Alembic upgrade failed: %s. Run `cd services/gateway && alembic upgrade head` manually.",
+            exc,
+        )
+    finally:
+        os.chdir(prev_cwd)
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    _run_alembic_upgrade()
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:

@@ -378,6 +378,13 @@ export interface WeeklySummaryResponse {
   latencyMs?: number
 }
 
+export type SessionTimeoutMinutes = 0 | 15 | 30 | 60 | 120
+
+export interface SecuritySettings {
+  twoFactorEnabled: boolean
+  sessionTimeoutMinutes: SessionTimeoutMinutes
+}
+
 export interface PrismSettings {
   ai: {
     provider: string
@@ -392,6 +399,7 @@ export interface PrismSettings {
     emailEnabled: boolean
     slackWebhook?: string
   }
+  security: SecuritySettings
 }
 
 export interface PullRequestFilters {
