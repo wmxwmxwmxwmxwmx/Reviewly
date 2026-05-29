@@ -45,6 +45,7 @@ interface MonthlyUsage {
 
 interface AISettingsContextValue {
   settings: AISettings
+  settingsHydrated: boolean
   providerLabel: string
   hasApiKey: boolean
   maskedApiKey: string
@@ -219,15 +220,20 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<AISettingsContextValue>(() => {
-    const providerLabel = AI_PROVIDER_OPTIONS.find((option) => option.value === settings.provider)?.label ?? zh.provider.custom
-    const monthlyRecords = usageRecords.filter((record) => isCurrentMonth(record.createdAt))
+    const resolvedSettings = settingsHydrated ? settings : DEFAULT_SETTINGS
+    const resolvedUsageRecords = settingsHydrated ? usageRecords : []
+    const providerLabel =
+      AI_PROVIDER_OPTIONS.find((option) => option.value === resolvedSettings.provider)?.label ??
+      zh.provider.custom
+    const monthlyRecords = resolvedUsageRecords.filter((record) => isCurrentMonth(record.createdAt))
 
     return {
-      settings,
+      settings: resolvedSettings,
+      settingsHydrated,
       providerLabel,
       hasApiKey: settingsHydrated && settings.apiKey.trim().length > 0,
-      maskedApiKey: maskApiKey(settings.apiKey),
-      usageRecords,
+      maskedApiKey: maskApiKey(settingsHydrated ? settings.apiKey : ""),
+      usageRecords: resolvedUsageRecords,
       monthlyUsage: {
         totalTokens: monthlyRecords.reduce((sum, record) => sum + record.totalTokens, 0),
         costCny: monthlyRecords.reduce((sum, record) => sum + record.costCny, 0),

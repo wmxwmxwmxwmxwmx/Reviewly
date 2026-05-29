@@ -1,6 +1,5 @@
 ﻿"use client"
 
-import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import {
   LayoutDashboard,
@@ -56,14 +55,10 @@ interface SidebarProps {
 }
 
 export function Sidebar({ className, activeView, onViewChange, mobile, onClose }: SidebarProps) {
-  const { settings, providerLabel, hasApiKey, monthlyUsage } = useAISettings()
-  const [mounted, setMounted] = useState(false)
+  const { settings, settingsHydrated, providerLabel, hasApiKey, monthlyUsage } = useAISettings()
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  const configured = mounted && hasApiKey
+  const configured = settingsHydrated && hasApiKey
+  const displayModel = settings.model || "未选择模型"
   const modelUsagePercent = configured ? 67 : 8
   const monthlyTokens = monthlyUsage.totalTokens >= 1_000_000
     ? `${(monthlyUsage.totalTokens / 1_000_000).toFixed(1)}M`
@@ -180,7 +175,12 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
           />
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
-              <div className="text-[11px] font-medium text-foreground truncate">{settings.model || "未选择模型"}</div>
+              <div
+                suppressHydrationWarning
+                className="text-[11px] font-medium text-foreground truncate"
+              >
+                {displayModel}
+              </div>
               <span
                 suppressHydrationWarning
                 className={cn(
