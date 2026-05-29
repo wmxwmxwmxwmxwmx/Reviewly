@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.errors import api_error
@@ -123,9 +124,40 @@ def performance_finding_delete(finding_id: str, db: Session = Depends(get_db)) -
     return {"ok": True}
 
 
+class GovernanceRuleBody(BaseModel):
+    rule: str = Field(min_length=1, max_length=1024)
+    severity: str = "medium"
+    enabled: bool = True
+    description: str | None = None
+    match_type: str = Field(default="keyword", validation_alias="matchType")
+    keywords: list[str] | str = Field(default_factory=list)
+    file_patterns: list[str] | str = Field(default_factory=list, validation_alias="filePatterns")
+    finding_types: list[str] = Field(default_factory=list, validation_alias="findingTypes")
+    finding_severities: list[str] = Field(default_factory=list, validation_alias="findingSeverities")
+
+    model_config = {"populate_by_name": True}
+
+
+class GovernanceRulePatchBody(BaseModel):
+    rule: str | None = Field(default=None, min_length=1, max_length=1024)
+    severity: str | None = None
+    enabled: bool | None = None
+    description: str | None = None
+    match_type: str | None = Field(default=None, validation_alias="matchType")
+    keywords: list[str] | str | None = None
+    file_patterns: list[str] | str | None = Field(default=None, validation_alias="filePatterns")
+    finding_types: list[str] | None = Field(default=None, validation_alias="findingTypes")
+    finding_severities: list[str] | None = Field(default=None, validation_alias="findingSeverities")
+
+    model_config = {"populate_by_name": True}
+
+
 @router.get("/governance/rules")
-def governance_rules(db: Session = Depends(get_db)) -> list:
-    return governance_repo.list_rules(db)
+def governance_rules(
+    include_disabled: bool = Query(False, alias="includeDisabled"),
+    db: Session = Depends(get_db),
+) -> list:
+    return governance_repo.list_rule_definitions(db, include_disabled=include_disabled)
 
 
 @router.get("/governance/rules/{rule_id}")
@@ -137,13 +169,26 @@ def governance_rule_get(rule_id: str, db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/governance/rules")
-def governance_rule_create(body: dict, db: Session = Depends(get_db)) -> dict:
-    return governance_repo.create_rule(db, body)
+def governance_rule_create(body: GovernanceRuleBody, db: Session = Depends(get_db)) -> dict:
+    try:
+        return governance_repo.create_rule(db, body.model_dump(by_alias=True))
+    except ValueError as exc:
+        raise api_error(str(exc), 400) from exc
 
 
 @router.patch("/governance/rules/{rule_id}")
-def governance_rule_update(rule_id: str, body: dict, db: Session = Depends(get_db)) -> dict:
-    row = governance_repo.update_rule(db, rule_id, body)
+def governance_rule_update(
+    rule_id: str,
+    body: GovernanceRulePatchBody,
+    db: Session = Depends(get_db),
+) -> dict:
+    patch = {k: v for k, v in body.model_dump(by_alias=True).items() if v is not None}
+    if not patch:
+        raise api_error("没有可更新的字段", 400)
+    try:
+        row = governance_repo.update_rule(db, rule_id, patch)
+    except ValueError as exc:
+        raise api_error(str(exc), 400) from exc
     if not row:
         raise api_error("治理规则不存在", 404)
     return row

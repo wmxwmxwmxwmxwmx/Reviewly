@@ -315,6 +315,13 @@ def get_governance_rules() -> list[dict[str, Any]]:
             "violated": True,
             "file": "internal/payment/processor.go:312",
             "severity": "critical",
+            "enabled": True,
+            "matchType": "any",
+            "keywords": ["token", "密钥", "password", "secret", "api_key"],
+            "filePatterns": ["**/payment/**", "**/internal/payment/**"],
+            "findingTypes": ["security"],
+            "findingSeverities": ["critical", "high"],
+            "description": "支付相关代码不得输出敏感凭证",
         },
     ]
 

@@ -111,6 +111,16 @@ async def run_job(session: Session, job_id: str) -> None:
         pull_request_id=pr_id,
         payload={"jobId": job_id},
     )
+
+    from app.services.governance_evaluator import run_governance_check
+
+    run_governance_check(
+        session,
+        pr_id,
+        patch=patch,
+        file_paths=file_paths,
+        findings=findings_list,
+    )
     session.commit()
 
 
