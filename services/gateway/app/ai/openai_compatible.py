@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+
 import httpx
 
 from app.ai.providers import normalize_openai_usage
@@ -49,3 +51,60 @@ async def call_openai_compatible(
         "content": content,
         "usage": normalize_openai_usage(data.get("usage")),
     }
+
+
+async def stream_openai_compatible(
+    *,
+    endpoint: str,
+    provider: str,
+    model: str,
+    api_key: str,
+    messages: list[dict],
+    temperature: float = 0.2,
+) -> AsyncIterator[str]:
+    if not endpoint:
+        raise RuntimeError("Custom provider 需要配置 customEndpoint")
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    if provider == "openrouter":
+        headers["HTTP-Referer"] = "http://localhost:3000"
+        headers["X-Title"] = "PRism"
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        async with client.stream(
+            "POST",
+            endpoint,
+            headers=headers,
+            json={
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+                "stream": True,
+            },
+        ) as response:
+            if not response.is_success:
+                body = await response.aread()
+                raise RuntimeError(body.decode("utf-8", errors="replace")[:500])
+
+            async for line in response.aiter_lines():
+                if not line or not line.startswith("data: "):
+                    continue
+                payload = line[6:].strip()
+                if payload == "[DONE]":
+                    break
+                try:
+                    import json
+
+                    data = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+                choices = data.get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta") or {}
+                text = delta.get("content") or ""
+                if text:
+                    yield text

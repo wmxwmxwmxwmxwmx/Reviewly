@@ -10,6 +10,10 @@ from sqlalchemy.orm import Session
 from app.db.models import AnalysisFinding, AnalysisJob
 from app.mock import seed
 from app.repositories.analysis import _finding_to_api, get_security_stats, list_security_findings
+from app.repositories.security_center import (
+    get_finding_with_context,
+    list_security_findings_filtered,
+)
 
 
 def get_finding(session: Session, finding_id: str) -> dict[str, Any] | None:
@@ -68,8 +72,10 @@ def delete_finding(session: Session, finding_id: str) -> bool:
 
 __all__ = [
     "list_security_findings",
+    "list_security_findings_filtered",
     "get_security_stats",
     "get_finding",
+    "get_finding_with_context",
     "create_finding",
     "update_finding",
     "delete_finding",

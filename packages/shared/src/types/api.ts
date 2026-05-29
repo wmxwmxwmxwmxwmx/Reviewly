@@ -102,6 +102,29 @@ export interface SecurityFinding extends AnalysisFinding {
   status?: "open" | "ignored" | "resolved"
 }
 
+/** Security Center list row (aggregated across PRs). */
+export interface SecurityCenterFinding {
+  id: string
+  repo: string
+  prNumber: number
+  file: string
+  line: number
+  severity: "critical" | "high" | "medium" | "low"
+  rule: string
+  description: string
+  suggestion: string
+  status?: "open" | "ignored" | "resolved"
+  pullRequestId?: string
+  title?: string
+}
+
+export interface SecurityFindingsPage {
+  items: SecurityCenterFinding[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 export interface PerformanceFinding extends AnalysisFinding {
   type: "performance"
 }

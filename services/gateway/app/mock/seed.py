@@ -103,6 +103,8 @@ _PULL_REQUESTS: list[dict[str, Any]] = [
 _MOCK_RISKS: list[dict[str, Any]] = [
     {
         "id": "r1",
+        "ruleId": "r1",
+        "rule": "Race Condition",
         "severity": "critical",
         "type": "security",
         "title": "缓存更新存在竞态条件",
@@ -122,6 +124,8 @@ _MOCK_RISKS: list[dict[str, Any]] = [
     },
     {
         "id": "r2",
+        "ruleId": "sql-injection",
+        "rule": "SQL Injection",
         "severity": "critical",
         "type": "security",
         "title": "动态查询存在 SQL 注入风险",
@@ -137,6 +141,8 @@ _MOCK_RISKS: list[dict[str, Any]] = [
     },
     {
         "id": "r3",
+        "ruleId": "r3",
+        "rule": "Resource Leak",
         "severity": "high",
         "type": "security",
         "title": "HTTP 连接池资源未释放",

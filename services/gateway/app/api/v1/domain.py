@@ -1,7 +1,7 @@
 """B5–B9 domain REST APIs."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.errors import api_error
@@ -18,8 +18,23 @@ router = APIRouter(prefix="/api", tags=["domain"])
 
 
 @router.get("/security/findings")
-def security_findings_list(db: Session = Depends(get_db)) -> list:
-    return security_repo.list_security_findings(db)
+def security_findings_list(
+    severity: str | None = None,
+    repo: str | None = None,
+    q: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100, alias="pageSize"),
+    db: Session = Depends(get_db),
+) -> dict:
+    items, total = security_repo.list_security_findings_filtered(
+        db,
+        severity=severity,
+        repo=repo,
+        q=q,
+        page=page,
+        page_size=page_size,
+    )
+    return {"items": items, "total": total, "page": page, "pageSize": page_size}
 
 
 @router.get("/security/stats")

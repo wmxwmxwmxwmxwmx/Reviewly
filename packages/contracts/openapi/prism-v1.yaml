@@ -53,9 +53,28 @@ paths:
       summary: Get analysis job
   /api/security/findings:
     get:
-      summary: List security findings
+      summary: List security findings (filtered, paginated)
+      parameters:
+        - name: severity
+          in: query
+          schema: { type: string }
+        - name: repo
+          in: query
+          schema: { type: string }
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
     post:
       summary: Create security finding
+  /api/security/findings/{findingId}/explain:
+    post:
+      summary: AI explain finding (SSE stream, on-demand)
   /api/security/findings/{findingId}:
     get:
       summary: Get security finding
