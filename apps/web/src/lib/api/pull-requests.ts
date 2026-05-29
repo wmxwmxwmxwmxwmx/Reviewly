@@ -1,4 +1,4 @@
-import type { DiffFile, PaginatedResponse, PullRequest, PullRequestListItem } from "@reviewly/shared"
+import type { DiffFile, PaginatedResponse, PullRequest } from "@reviewly/shared"
 
 import { apiFetch } from "./client"
 
@@ -13,7 +13,7 @@ export function fetchPullRequests(
     }
   }
   const q = qs.toString()
-  return apiFetch<PaginatedResponse<PullRequestListItem>>(
+  return apiFetch<PaginatedResponse<PullRequest>>(
     `/api/pull-requests${q ? `?${q}` : ""}`,
     { signal },
   )

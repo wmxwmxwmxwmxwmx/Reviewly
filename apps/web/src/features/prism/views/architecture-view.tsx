@@ -1,37 +1,27 @@
 "use client"
-
-import { motion } from "framer-motion"
-import { 
-  Network, 
-  Box, 
-  ArrowRight, 
-  AlertTriangle,
-  CheckCircle2,
-  Layers,
-  GitBranch,
-  FileCode,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-
-const modules = [
-  { name: "auth-service", deps: 4, dependents: 8, complexity: "low", health: 92 },
-  { name: "api-gateway", deps: 6, dependents: 12, complexity: "high", health: 68 },
-  { name: "order-module", deps: 8, dependents: 5, complexity: "medium", health: 75 },
-  { name: "user-service", deps: 3, dependents: 10, complexity: "low", health: 88 },
-  { name: "notification", deps: 5, dependents: 2, complexity: "low", health: 95 },
-]
-
-const circularDeps = [
-  { from: "order-module", to: "inventory-service", via: "product-service" },
-  { from: "user-service", to: "notification", via: "email-service" },
-]
-
-const layerViolations = [
-  { file: "src/api/users.ts", violation: "直接访问数据层", suggestion: "通过 Service 层访问" },
-  { file: "src/components/OrderList.tsx", violation: "包含业务逻辑", suggestion: "提取到 hooks 或 utils" },
-]
+import { Network } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { useRepos } from "@/hooks/use-repos"
+import { useArchitecture } from "@/hooks/use-architecture"
 
 export function ArchitectureView() {
+  const { repos, loading:reposLoading, error:reposError } = useRepos()
+  const [repoId, setRepoId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!repoId && repos.length > 0) {
+      setRepoId(repos[0].id)
+    }
+  }, [repoId, repos])
+
+  const selectedLabel = useMemo(() => {
+    if (!repoId) return null
+    const r = repos.find((x) => x.id === repoId)
+    return r ? r.fullName : null
+  }, [repoId, repos])
+
+  const { graph, loading:graphLoading, error:graphError } = useArchitecture(repoId)
+
   return (
     <div className="p-5 space-y-5">
       <div className="flex items-center justify-between">
@@ -45,113 +35,80 @@ export function ArchitectureView() {
         </button>
       </div>
 
-      {/* Module Health */}
-      <div className="rounded-lg border border-border overflow-hidden">
-        <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
-          <Box className="w-4 h-4 text-ai-blue" />
-          <span className="text-sm font-medium text-foreground">模块健康度</span>
+      <div className="rounded-lg border border-border p-4 bg-surface-2 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm font-medium text-foreground">选择仓库</div>
+          {reposError && <p className="text-sm text-risk-high">{reposError}</p>}
         </div>
-        <div className="divide-y divide-border">
-          {modules.map((mod, idx) => (
-            <motion.div
-              key={mod.name}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: idx * 0.05 }}
-              className="px-4 py-3 flex items-center gap-4"
-            >
-              <div className="w-32">
-                <span className="text-sm font-mono text-foreground">{mod.name}</span>
-              </div>
-              <div className="flex items-center gap-4 text-xs text-muted-foreground flex-1">
-                <span>依赖: {mod.deps}</span>
-                <span>被依赖: {mod.dependents}</span>
-                <span className={cn(
-                  "px-1.5 py-0.5 rounded",
-                  mod.complexity === "low" ? "bg-[oklch(0.62_0.17_148/0.15)] text-risk-low" :
-                  mod.complexity === "medium" ? "bg-[oklch(0.75_0.15_85/0.15)] text-risk-medium" : 
-                  "bg-[oklch(0.62_0.21_32/0.15)] text-risk-high"
-                )}>
-                  复杂度: {mod.complexity === "low" ? "低" : mod.complexity === "medium" ? "中" : "高"}
-                </span>
-              </div>
-              <div className="w-24 flex items-center gap-2">
-                <div className="flex-1 h-1.5 rounded-full bg-surface-3 overflow-hidden">
-                  <motion.div
-                    className={cn(
-                      "h-full rounded-full",
-                      mod.health >= 85 ? "bg-risk-low" : mod.health >= 70 ? "bg-risk-medium" : "bg-risk-high"
-                    )}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${mod.health}%` }}
-                    transition={{ duration: 0.6, delay: idx * 0.1 }}
-                  />
-                </div>
-                <span className={cn(
-                  "text-xs font-medium",
-                  mod.health >= 85 ? "text-risk-low" : mod.health >= 70 ? "text-risk-medium" : "text-risk-high"
-                )}>{mod.health}%</span>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+
+        <select
+          value={repoId ?? ""}
+          onChange={(e) => setRepoId(e.target.value || null)}
+          disabled={reposLoading}
+          className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-ai-blue"
+        >
+          {reposLoading && <option value="">加载中…</option>}
+          {!reposLoading && repos.length === 0 && <option value="">暂无仓库</option>}
+          {!reposLoading &&
+            repos.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.fullName}
+              </option>
+            ))}
+        </select>
+
+        {selectedLabel && <div className="text-xs text-muted-foreground">当前：{selectedLabel}</div>}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        {/* Circular Dependencies */}
-        <div className="rounded-lg border border-border overflow-hidden">
-          <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
-            <GitBranch className="w-4 h-4 text-risk-high" />
-            <span className="text-sm font-medium text-foreground">循环依赖</span>
-            <span className="text-xs text-risk-high ml-auto">{circularDeps.length} 个问题</span>
-          </div>
-          <div className="divide-y divide-border">
-            {circularDeps.map((dep, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: idx * 0.05 }}
-                className="px-4 py-3"
-              >
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="font-mono text-foreground">{dep.from}</span>
-                  <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                  <span className="font-mono text-muted-foreground">{dep.via}</span>
-                  <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                  <span className="font-mono text-foreground">{dep.to}</span>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+      <div className="rounded-lg border border-border overflow-hidden">
+        <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
+          <span className="text-sm font-medium text-foreground">依赖图</span>
+          {graph && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              节点 {graph.nodes.length} · 边 {graph.edges.length}
+            </span>
+          )}
         </div>
 
-        {/* Layer Violations */}
-        <div className="rounded-lg border border-border overflow-hidden">
-          <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
-            <Layers className="w-4 h-4 text-risk-medium" />
-            <span className="text-sm font-medium text-foreground">分层违规</span>
-          </div>
-          <div className="divide-y divide-border">
-            {layerViolations.map((v, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: idx * 0.05 }}
-                className="px-4 py-3"
-              >
-                <div className="flex items-center gap-2">
-                  <FileCode className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-xs font-mono text-foreground">{v.file}</span>
+        <div className="p-4 space-y-3">
+          {graphLoading && <p className="text-sm text-muted-foreground">加载依赖图…</p>}
+          {graphError && <p className="text-sm text-risk-high">{graphError}</p>}
+
+          {!graphLoading && graph && (
+            <>
+              <div>
+                <div className="text-xs text-muted-foreground mb-2">Nodes</div>
+                <div className="space-y-1">
+                  {graph.nodes.map((n) => (
+                    <div key={n.id} className="flex items-center justify-between text-xs px-2 py-1 rounded bg-surface-2 border border-border">
+                      <span className="font-mono text-foreground truncate">{n.id}</span>
+                      <span className="text-muted-foreground ml-3 truncate">{n.label}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="mt-1.5 text-xs">
-                  <span className="text-risk-medium">{v.violation}</span>
-                  <span className="text-muted-foreground"> → {v.suggestion}</span>
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground mb-2">Edges</div>
+                <div className="space-y-1">
+                  {graph.edges.map((e, idx) => (
+                    <div
+                      key={`${e.from}-${e.to}-${idx}`}
+                      className="flex items-center gap-2 text-xs px-2 py-1 rounded bg-surface-2 border border-border"
+                    >
+                      <span className="font-mono text-muted-foreground truncate">{e.from}</span>
+                      <span className="text-muted-foreground">→</span>
+                      <span className="font-mono text-muted-foreground truncate">{e.to}</span>
+                    </div>
+                  ))}
                 </div>
-              </motion.div>
-            ))}
-          </div>
+              </div>
+            </>
+          )}
+
+          {!graphLoading && !graphError && !graph && (
+            <p className="text-sm text-muted-foreground">请选择仓库后查看依赖图。</p>
+          )}
         </div>
       </div>
     </div>

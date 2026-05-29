@@ -4,125 +4,16 @@ import { useState, useMemo } from "react"
 import { motion } from "framer-motion"
 import {
   GitPullRequest,
-  GitMerge,
   GitBranch,
   Clock,
-  MessageSquare,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
   Filter,
   Search,
   ChevronRight,
 } from "lucide-react"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
-import { DEFAULT_PR_ID, useNavigation } from "@/features/prism/contexts/navigation-context"
+import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { usePullRequests } from "@/hooks/use-pull-requests"
-
-const pullRequests = [
-  {
-    id: 1842,
-    title: "feat(auth): 实现 OAuth2.0 登录流程",
-    author: "张维",
-    avatar: "ZW",
-    branch: "feature/oauth-login",
-    target: "main",
-    status: "review",
-    checks: "passing",
-    comments: 8,
-    additions: 423,
-    deletions: 56,
-    files: 12,
-    created: "2 小时前",
-    labels: ["feature", "auth"],
-  },
-  {
-    id: 1841,
-    title: "fix(api): 修复用户查询 N+1 问题",
-    author: "李明",
-    avatar: "LM",
-    branch: "fix/user-query-n1",
-    target: "main",
-    status: "approved",
-    checks: "passing",
-    comments: 3,
-    additions: 45,
-    deletions: 89,
-    files: 4,
-    created: "5 小时前",
-    labels: ["bugfix", "performance"],
-  },
-  {
-    id: 1840,
-    title: "refactor: 重构订单模块架构",
-    author: "王芳",
-    avatar: "WF",
-    branch: "refactor/order-module",
-    target: "develop",
-    status: "changes-requested",
-    checks: "failing",
-    comments: 15,
-    additions: 1205,
-    deletions: 876,
-    files: 28,
-    created: "1 天前",
-    labels: ["refactor", "breaking-change"],
-  },
-  {
-    id: 1839,
-    title: "chore: 升级 React 到 v19",
-    author: "陈浩",
-    avatar: "CH",
-    branch: "chore/react-19",
-    target: "main",
-    status: "draft",
-    checks: "pending",
-    comments: 2,
-    additions: 234,
-    deletions: 198,
-    files: 8,
-    created: "2 天前",
-    labels: ["dependencies"],
-  },
-  {
-    id: 1838,
-    title: "docs: 更新 API 文档",
-    author: "赵雪",
-    avatar: "ZX",
-    branch: "docs/api-update",
-    target: "main",
-    status: "merged",
-    checks: "passing",
-    comments: 1,
-    additions: 156,
-    deletions: 42,
-    files: 6,
-    created: "3 天前",
-    labels: ["documentation"],
-  },
-]
-
-const statusConfig = {
-  review: { color: "text-ai-blue", bg: "bg-[oklch(0.62_0.19_240/0.15)]", label: "评审中", icon: GitPullRequest },
-  approved: { color: "text-risk-low", bg: "bg-[oklch(0.62_0.17_148/0.15)]", label: "已批准", icon: CheckCircle2 },
-  "changes-requested": { color: "text-risk-high", bg: "bg-[oklch(0.62_0.21_32/0.15)]", label: "需修改", icon: AlertCircle },
-  draft: { color: "text-muted-foreground", bg: "bg-surface-3", label: "草稿", icon: GitBranch },
-  merged: { color: "text-[oklch(0.6_0.16_300)]", bg: "bg-[oklch(0.6_0.16_300/0.15)]", label: "已合并", icon: GitMerge },
-}
-
-const checksConfig = {
-  passing: { color: "text-risk-low", label: "通过" },
-  failing: { color: "text-risk-high", label: "失败" },
-  pending: { color: "text-risk-medium", label: "进行中" },
-}
-
-const prStats = [
-  { label: "待评审", value: "12", color: "text-ai-blue" },
-  { label: "已批准", value: "5", color: "text-risk-low" },
-  { label: "需修改", value: "3", color: "text-risk-high" },
-  { label: "本周合并", value: "24", color: "text-foreground" },
-]
 
 type FilterTab = "all" | "open" | "closed"
 
@@ -133,20 +24,34 @@ export function PRListView() {
   const [filterTab, setFilterTab] = useState<FilterTab>("open")
 
   const filteredPRs = useMemo(() => {
-    return pullRequests.filter((pr) => {
+    const normalizedSearch = search.trim().toLowerCase()
+    return apiPrs.filter((pr) => {
       const matchesSearch =
-        !search ||
-        pr.title.toLowerCase().includes(search.toLowerCase()) ||
-        pr.author.toLowerCase().includes(search.toLowerCase())
+        !normalizedSearch ||
+        pr.title.toLowerCase().includes(normalizedSearch) ||
+        pr.author.toLowerCase().includes(normalizedSearch)
 
       const matchesTab =
         filterTab === "all" ||
-        (filterTab === "open" && pr.status !== "merged") ||
-        (filterTab === "closed" && pr.status === "merged")
+        (filterTab === "open" && pr.state === "open") ||
+        (filterTab === "closed" && pr.state !== "open")
 
       return matchesSearch && matchesTab
     })
-  }, [search, filterTab])
+  }, [apiPrs, search, filterTab])
+
+  const stats = useMemo(() => {
+    const openCount = apiPrs.filter((p) => p.state === "open").length
+    const mergedCount = apiPrs.filter((p) => p.state === "merged").length
+    const highRiskCount = apiPrs.filter((p) => p.riskLevel === "critical" || p.riskLevel === "high").length
+    const totalCount = apiPrs.length
+    return [
+      { label: "待评审 PR", value: String(openCount), color: "text-ai-blue" },
+      { label: "已合并", value: String(mergedCount), color: "text-risk-low" },
+      { label: "高/临界风险", value: String(highRiskCount), color: "text-risk-high" },
+      { label: "总 PR", value: String(totalCount), color: "text-foreground" },
+    ]
+  }, [apiPrs])
 
   return (
     <div className="p-5 space-y-5">
@@ -195,7 +100,7 @@ export function PRListView() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {prStats.map((stat) => (
+        {stats.map((stat) => (
           <motion.div
             key={stat.label}
             initial={{ opacity: 0, y: 10 }}
@@ -237,9 +142,6 @@ export function PRListView() {
 
         <div className="divide-y divide-border">
           {filteredPRs.map((pr, idx) => {
-            const status = statusConfig[pr.status as keyof typeof statusConfig]
-            const checks = checksConfig[pr.checks as keyof typeof checksConfig]
-            const StatusIcon = status.icon
             return (
               <motion.div
                 key={pr.id}
@@ -248,60 +150,76 @@ export function PRListView() {
                 transition={{ delay: idx * 0.05 }}
                 role="button"
                 tabIndex={0}
-                onClick={() => navigate("ai-review", { prId: DEFAULT_PR_ID })}
-                onKeyDown={(e) => e.key === "Enter" && navigate("ai-review", { prId: DEFAULT_PR_ID })}
+                onClick={() => navigate("ai-review", { prId: pr.id })}
+                onKeyDown={(e) => e.key === "Enter" && navigate("ai-review", { prId: pr.id })}
                 className="px-4 py-3 hover:bg-surface-2/50 transition-colors cursor-pointer group"
               >
                 <div className="flex items-start gap-3">
-                  <div className={cn("p-1.5 rounded", status.bg)}>
-                    <StatusIcon className={cn("w-4 h-4", status.color)} />
+                  <div
+                    className={cn(
+                      "p-1.5 rounded",
+                      pr.riskLevel === "critical"
+                        ? "bg-[oklch(0.55_0.22_27/0.12)]"
+                        : pr.riskLevel === "high"
+                          ? "bg-[oklch(0.62_0.21_32/0.12)]"
+                          : pr.riskLevel === "medium"
+                            ? "bg-[oklch(0.75_0.15_85/0.12)]"
+                            : "bg-surface-3",
+                    )}
+                  >
+                    <GitPullRequest
+                      className={cn(
+                        "w-4 h-4",
+                        pr.riskLevel === "critical"
+                          ? "text-[oklch(0.55_0.22_27)]"
+                          : pr.riskLevel === "high"
+                            ? "text-risk-high"
+                            : pr.riskLevel === "medium"
+                              ? "text-risk-medium"
+                              : "text-risk-low",
+                      )}
+                    />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-foreground hover:text-ai-blue transition-colors">
                         {pr.title}
                       </span>
-                      <span className="text-xs text-muted-foreground">#{pr.id}</span>
+                      <span className="text-xs text-muted-foreground">#{pr.number}</span>
                     </div>
                     <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <div className="w-4 h-4 rounded-full bg-gradient-to-br from-[oklch(0.55_0.19_240)] to-[oklch(0.45_0.14_264)] flex items-center justify-center text-[8px] font-semibold text-white">
-                          {pr.avatar}
+                          {pr.authorAvatar}
                         </div>
                         {pr.author}
                       </span>
                       <span className="flex items-center gap-1">
                         <GitBranch className="w-3 h-3" />
-                        <span className="font-mono">{pr.branch}</span>
+                        <span className="font-mono">{pr.sourceBranch}</span>
                         <span>→</span>
-                        <span className="font-mono">{pr.target}</span>
+                        <span className="font-mono">{pr.targetBranch}</span>
                       </span>
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {pr.created}
+                        {pr.updatedAt || pr.createdAt}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 mt-2">
                       {pr.labels.map((label) => (
                         <span
-                          key={label}
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-surface-3 text-muted-foreground"
+                          key={label.name}
+                          className="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground"
+                          style={{ backgroundColor: label.color }}
                         >
-                          {label}
+                          {label.name}
                         </span>
                       ))}
                     </div>
                   </div>
                   <div className="flex items-center gap-4 text-xs">
-                    <span className={cn("flex items-center gap-1", checks.color)}>
-                      {pr.checks === "passing" && <CheckCircle2 className="w-3.5 h-3.5" />}
-                      {pr.checks === "failing" && <XCircle className="w-3.5 h-3.5" />}
-                      {pr.checks === "pending" && <Clock className="w-3.5 h-3.5" />}
-                      {checks.label}
-                    </span>
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      {pr.comments}
+                    <span className="text-muted-foreground">
+                      {pr.state === "open" ? "待评审" : pr.state === "merged" ? "已合并" : "已关闭"}
                     </span>
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <span className="text-[oklch(0.62_0.17_148)]">+{pr.additions}</span>

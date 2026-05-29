@@ -1,5 +1,6 @@
 ﻿"use client"
 
+import { useMemo } from "react"
 import { motion } from "framer-motion"
 import {
   LayoutDashboard,
@@ -50,6 +51,25 @@ const aiInsights: { severity: string; message: string; action: string; target: N
 export function DashboardView() {
   const { navigate } = useNavigation()
   const { data: dashboard } = useDashboard()
+  const resolvedRecentActivity = dashboard?.recentActivity?.length ? dashboard.recentActivity : recentActivity
+  const resolvedAiInsights = useMemo(() => {
+    if (!dashboard?.recentActivity?.length) return aiInsights
+    return dashboard.recentActivity.slice(0, 3).map((activity) => {
+      const type = activity.type
+      const severity = type.includes("security") ? "high" : type.includes("review") || type.includes("pr") ? "medium" : "low"
+      const target: NavView = type.includes("security")
+        ? "security"
+        : type.includes("pr-opened") || type.includes("pr-merged")
+          ? "pull-requests"
+          : "ai-review"
+      return {
+        severity,
+        message: `${activity.user} ${activity.action}（${activity.repo}）`,
+        action: "查看详情",
+        target,
+      }
+    })
+  }, [dashboard?.recentActivity])
 
   const metrics = dashboard
     ? [
@@ -111,7 +131,7 @@ export function DashboardView() {
             <span className="text-sm font-medium text-foreground">最近活动</span>
           </div>
           <div className="divide-y divide-border">
-            {recentActivity.map((activity, idx) => (
+            {resolvedRecentActivity.map((activity, idx) => (
               <motion.div
                 key={idx}
                 initial={{ opacity: 0 }}
@@ -203,7 +223,7 @@ export function DashboardView() {
           <span className="text-sm font-medium text-foreground">AI 洞察</span>
         </div>
         <div className="divide-y divide-border">
-          {aiInsights.map((insight, idx) => (
+          {resolvedAiInsights.map((insight, idx) => (
             <motion.div
               key={idx}
               initial={{ opacity: 0 }}

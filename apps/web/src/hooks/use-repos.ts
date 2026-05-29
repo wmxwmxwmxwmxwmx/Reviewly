@@ -2,27 +2,28 @@
 
 import { useEffect, useState } from "react"
 
-import { fetchPullRequests } from "@/lib/api/pull-requests"
 import { PrismApiError } from "@/lib/api/client"
-import type { PullRequest } from "@reviewly/shared"
+import { fetchRepos } from "@/lib/api/repos"
+import type { Repository } from "@reviewly/shared"
 
-export function usePullRequests(filters?: Record<string, string | undefined>) {
-  const [items, setItems] = useState<PullRequest[]>([])
+export function useRepos() {
+  const [repos, setRepos] = useState<Repository[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const ac = new AbortController()
     setLoading(true)
-    fetchPullRequests(filters, ac.signal)
-      .then((res) => setItems(res.items))
+    fetchRepos(ac.signal)
+      .then(setRepos)
       .catch((e: unknown) => {
         if (e instanceof DOMException && e.name === "AbortError") return
         setError(e instanceof PrismApiError ? e.message : "加载失败")
       })
       .finally(() => setLoading(false))
-    return () => ac.abort()
-  }, [JSON.stringify(filters ?? {})])
 
-  return { items, loading, error }
+    return () => ac.abort()
+  }, [])
+
+  return { repos, loading, error }
 }

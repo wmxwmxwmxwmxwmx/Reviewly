@@ -20,64 +20,6 @@ import { cn } from "@/lib/utils"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { useSecurity } from "@/hooks/use-security"
 
-const fallbackVulnerabilities = [
-  {
-    id: "CVE-2024-31982",
-    severity: "critical",
-    title: "SQL 注入漏洞",
-    file: "src/api/users.ts",
-    line: 45,
-    cwe: "CWE-89",
-    status: "open",
-    discovered: "2 小时前",
-    description: "用户输入未经参数化直接拼接到 SQL 查询中",
-  },
-  {
-    id: "CVE-2024-28255",
-    severity: "high",
-    title: "跨站脚本攻击 (XSS)",
-    file: "src/components/Comment.tsx",
-    line: 112,
-    cwe: "CWE-79",
-    status: "open",
-    discovered: "5 小时前",
-    description: "dangerouslySetInnerHTML 使用未转义的用户内容",
-  },
-  {
-    id: "GHSA-2024-0034",
-    severity: "high",
-    title: "敏感信息泄露",
-    file: "src/config/database.ts",
-    line: 8,
-    cwe: "CWE-200",
-    status: "in-progress",
-    discovered: "1 天前",
-    description: "数据库连接字符串硬编码在源代码中",
-  },
-  {
-    id: "CVE-2024-21538",
-    severity: "medium",
-    title: "不安全的依赖",
-    file: "package.json",
-    line: 23,
-    cwe: "CWE-1035",
-    status: "open",
-    discovered: "3 天前",
-    description: "lodash@4.17.15 存在原型链污染漏洞",
-  },
-  {
-    id: "PRISM-SEC-0042",
-    severity: "low",
-    title: "弱密码策略",
-    file: "src/auth/validate.ts",
-    line: 67,
-    cwe: "CWE-521",
-    status: "resolved",
-    discovered: "1 周前",
-    description: "密码长度要求仅为 6 位，建议提高到 12 位",
-  },
-]
-
 const severityConfig = {
   critical: { color: "text-[oklch(0.55_0.22_27)]", bg: "bg-[oklch(0.55_0.22_27/0.1)]", label: "严重" },
   high: { color: "text-risk-high", bg: "bg-[oklch(0.62_0.21_32/0.1)]", label: "高危" },
@@ -96,19 +38,18 @@ export function SecurityView() {
   const { findings, stats, loading, error } = useSecurity()
 
   const vulnerabilities =
-    findings.length > 0
-      ? findings.map((f) => ({
-          id: f.id,
-          severity: f.severity,
-          title: f.title,
-          file: f.file,
-          line: f.line,
-          cwe: f.cweId ?? "—",
-          status: (f.status ?? "open") as "open" | "in-progress" | "resolved",
-          discovered: "来自分析",
-          description: f.description ?? "",
-        }))
-      : fallbackVulnerabilities
+    findings.map((f) => ({
+      id: f.id,
+      severity: f.severity,
+      title: f.title,
+      file: f.file,
+      line: f.line,
+      cwe: f.cweId ?? "—",
+      // 当前后端尚未提供严格的“in-progress”语义；仅展示已解决/待处理。
+      status: (f.status === "resolved" ? "resolved" : "open") as "open" | "in-progress" | "resolved",
+      discovered: "来自分析",
+      description: f.description ?? "",
+    }))
 
   const securityMetrics = [
     {
@@ -217,6 +158,9 @@ export function SecurityView() {
           {loading && (
             <p className="px-4 py-6 text-sm text-muted-foreground">加载中…</p>
           )}
+          {!loading && vulnerabilities.length === 0 && (
+            <p className="px-4 py-6 text-sm text-muted-foreground">暂无安全发现。</p>
+          )}
           {!loading &&
             vulnerabilities.map((vuln, idx) => {
             const severity = severityConfig[vuln.severity as keyof typeof severityConfig]
@@ -281,22 +225,9 @@ export function SecurityView() {
           <ShieldCheck className="w-4 h-4 text-ai-blue" />
           <span className="text-sm font-medium text-foreground">安全建议</span>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 rounded-md bg-surface-2 border border-border">
-            <div className="flex items-center gap-2">
-              <Lock className="w-4 h-4 text-risk-medium" />
-              <span className="text-sm font-medium text-foreground">启用 2FA</span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">为所有团队成员启用双因素认证，提高账户安全性</p>
-          </div>
-          <div className="p-3 rounded-md bg-surface-2 border border-border">
-            <div className="flex items-center gap-2">
-              <Key className="w-4 h-4 text-risk-medium" />
-              <span className="text-sm font-medium text-foreground">轮换密钥</span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">API 密钥已使用超过 90 天，建议进行轮换</p>
-          </div>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          当前页面基于结构化 findings 展示风险点；如需“可执行修复建议”，可在后续阶段从 engine/规则输出更多字段后再填充。
+        </p>
       </div>
     </div>
   )

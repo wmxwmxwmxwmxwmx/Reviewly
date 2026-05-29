@@ -18,6 +18,7 @@ import {
   Zap,
 } from "lucide-react"
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
+import { useSidebarBadges } from "@/hooks/use-sidebar-badges"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
@@ -33,17 +34,17 @@ export type NavView =
   | "team"
   | "settings"
 
-const navItems: { icon: typeof LayoutDashboard; label: string; view: NavView; badge: string | null }[] = [
-  { icon: LayoutDashboard, label: zh.nav.dashboard, view: "dashboard", badge: null },
-  { icon: GitPullRequest, label: zh.nav.pullRequests, view: "pull-requests", badge: "12" },
-  { icon: BrainCircuit, label: zh.nav.aiReview, view: "ai-review", badge: "3" },
-  { icon: Shield, label: zh.nav.security, view: "security", badge: "5" },
-  { icon: Gauge, label: zh.nav.performance, view: "performance", badge: null },
-  { icon: Network, label: zh.nav.architecture, view: "architecture", badge: null },
-  { icon: GitBranch, label: zh.nav.governance, view: "governance", badge: "2" },
-  { icon: BookOpen, label: zh.nav.repos, view: "repos", badge: null },
-  { icon: Users, label: zh.nav.team, view: "team", badge: null },
-  { icon: Settings, label: zh.nav.settings, view: "settings", badge: null },
+const navItems: { icon: typeof LayoutDashboard; label: string; view: NavView }[] = [
+  { icon: LayoutDashboard, label: zh.nav.dashboard, view: "dashboard" },
+  { icon: GitPullRequest, label: zh.nav.pullRequests, view: "pull-requests" },
+  { icon: BrainCircuit, label: zh.nav.aiReview, view: "ai-review" },
+  { icon: Shield, label: zh.nav.security, view: "security" },
+  { icon: Gauge, label: zh.nav.performance, view: "performance" },
+  { icon: Network, label: zh.nav.architecture, view: "architecture" },
+  { icon: GitBranch, label: zh.nav.governance, view: "governance" },
+  { icon: BookOpen, label: zh.nav.repos, view: "repos" },
+  { icon: Users, label: zh.nav.team, view: "team" },
+  { icon: Settings, label: zh.nav.settings, view: "settings" },
 ]
 
 interface SidebarProps {
@@ -56,6 +57,7 @@ interface SidebarProps {
 
 export function Sidebar({ className, activeView, onViewChange, mobile, onClose }: SidebarProps) {
   const { settings, settingsHydrated, providerLabel, hasApiKey, monthlyUsage } = useAISettings()
+  const { badges } = useSidebarBadges()
 
   const configured = settingsHydrated && hasApiKey
   const displayModel = settings.model || "未选择模型"
@@ -104,6 +106,18 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
         <ul className="space-y-0.5">
           {navItems.map((item) => {
             const isActive = item.view === activeView
+            const badge =
+              item.view === "pull-requests"
+                ? badges.pullRequests
+                : item.view === "ai-review"
+                  ? badges.aiReview
+                  : item.view === "security"
+                    ? badges.security
+                    : item.view === "governance"
+                      ? badges.governance
+                      : item.view === "performance"
+                        ? badges.performance
+                        : null
             return (
               <li key={item.label}>
                 <motion.button
@@ -130,7 +144,7 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
                     )}
                   />
                   <span className="flex-1 truncate">{item.label}</span>
-                  {item.badge && (
+                  {badge && (
                     <span
                       className={cn(
                         "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
@@ -139,7 +153,7 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
                           : "bg-surface-3 text-muted-foreground"
                       )}
                     >
-                      {item.badge}
+                      {badge}
                     </span>
                   )}
                 </motion.button>
