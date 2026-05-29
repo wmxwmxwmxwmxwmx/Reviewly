@@ -1,1 +1,1 @@
-"""GitHub App integration (B3) — placeholders."""
+"""GitHub App integration (B3)."""

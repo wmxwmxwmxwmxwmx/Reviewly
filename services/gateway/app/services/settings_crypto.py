@@ -37,3 +37,13 @@ def mask_secret(secret: str) -> str:
     if len(secret) <= 8:
         return "****"
     return f"{secret[:3]}****{secret[-4:]}"
+
+
+def is_configured() -> bool:
+    return bool(settings.settings_encryption_key.strip())
+
+
+def encrypt_secrets_json(secrets: dict[str, str]) -> str:
+    import json
+
+    return encrypt_secret(json.dumps(secrets))

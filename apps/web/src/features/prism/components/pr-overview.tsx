@@ -17,10 +17,10 @@ import {
   RotateCcw,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { PRData } from "@/features/prism/data/mock-data"
+import type { PullRequest } from "@reviewly/shared"
 
 interface PROverviewProps {
-  prData: PRData
+  prData: PullRequest
 }
 
 const riskConfig = {
@@ -124,7 +124,7 @@ export function PROverview({ prData }: PROverviewProps) {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground mb-3">
             <div className="flex items-center gap-1.5">
               <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[oklch(0.55_0.19_240)] to-[oklch(0.45_0.14_264)] flex items-center justify-center text-[9px] font-semibold text-white">
-                CW
+                {prData.authorAvatar}
               </div>
               <span>{prData.author}</span>
             </div>

@@ -1,92 +1,98 @@
-"""In-memory analysis job store (B1); B4 will orchestrate engine + LLM."""
+"""Analysis job orchestration (B1 in-memory → B2 DB → B4 pipeline)."""
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
 from typing import Any
+
+from sqlalchemy.orm import Session
 
 from app.grpc_client.engine import get_engine_client
 from app.mock import seed
-
-_jobs: dict[str, dict[str, Any]] = {}
-_latest_by_pr: dict[str, dict[str, Any]] = {}
-_findings_by_pr: dict[str, list[dict[str, Any]]] = {}
+from app.repositories import analysis as analysis_repo
+from app.repositories import pull_requests as pr_repo
 
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+def _default_summary(pull_request_id: str) -> dict[str, Any] | None:
+    return seed.get_latest_analysis(pull_request_id)
 
 
-def create_job(pull_request_id: str) -> dict[str, Any]:
-    if seed.get_pull_request(pull_request_id) is None:
-        raise KeyError(pull_request_id)
-
-    job_id = f"job-{uuid.uuid4().hex[:12]}"
-    job = {
-        "id": job_id,
-        "pullRequestId": pull_request_id,
-        "status": "pending",
-        "progress": 0,
-        "chunkIndex": 0,
-        "chunkTotal": len(seed.get_diff(pull_request_id)) or 1,
-        "createdAt": _now_iso(),
-    }
-    _jobs[job_id] = job
-    return {"jobId": job_id, "_schedule": job_id}
-
-
-async def run_job(job_id: str) -> None:
-    job = _jobs.get(job_id)
-    if not job:
+async def run_job(session: Session, job_id: str) -> None:
+    job_api = analysis_repo.get_job(session, job_id)
+    if not job_api:
         return
 
-    pr_id = job["pullRequestId"]
-    job["status"] = "running"
+    pr_id = job_api["pullRequestId"]
+    analysis_repo.update_job(session, job_id, status="running")
+
     client = get_engine_client()
     findings_list: list[dict[str, Any]] = []
+    diff_files = pr_repo.get_diff(session, pr_id)
+    file_paths = [f["path"] for f in diff_files]
+    patch = ""
+
+    from app.analysis.pipeline import run_analysis_pipeline
 
     try:
-        async for progress in client.run_analysis(
+        async for progress in run_analysis_pipeline(
+            session=session,
             job_id=job_id,
             pull_request_id=pr_id,
-            patch="",
-            file_paths=[f["path"] for f in seed.get_diff(pr_id)],
+            patch=patch,
+            file_paths=file_paths,
+            engine_client=client,
         ):
-            job["progress"] = progress.get("progress", job["progress"])
-            job["chunkIndex"] = progress.get("chunkIndex", job["chunkIndex"])
-            job["chunkTotal"] = progress.get("chunkTotal", job["chunkTotal"])
+            analysis_repo.update_job(
+                session,
+                job_id,
+                status=progress.get("status", "running"),
+                progress=progress.get("progress", 0),
+                chunkIndex=progress.get("chunkIndex", 0),
+                chunkTotal=progress.get("chunkTotal", 0),
+            )
             if progress.get("findings"):
                 findings_list = progress["findings"]
             if progress.get("status") == "failed":
-                job["status"] = "failed"
-                job["error"] = progress.get("error", "分析失败")
+                analysis_repo.update_job(
+                    session,
+                    job_id,
+                    status="failed",
+                    error=progress.get("error", "分析失败"),
+                )
                 return
     except Exception as exc:  # noqa: BLE001
-        job["status"] = "failed"
-        job["error"] = str(exc)
+        analysis_repo.update_job(session, job_id, status="failed", error=str(exc))
         return
 
     if not findings_list:
         findings_list = seed.list_findings(pr_id)
 
-    _findings_by_pr[pr_id] = findings_list
-    summary = seed.get_latest_analysis(pr_id)
-    if summary:
-        _latest_by_pr[pr_id] = summary
-
-    job["status"] = "completed"
-    job["progress"] = 100
-    job["completedAt"] = _now_iso()
-
-
-def get_job(job_id: str) -> dict[str, Any] | None:
-    job = _jobs.get(job_id)
-    return dict(job) if job else None
+    analysis_repo.save_findings(session, job_id, findings_list)
+    summary = _default_summary(pr_id)
+    analysis_repo.update_job(
+        session,
+        job_id,
+        status="completed",
+        progress=100,
+        resultSummary=summary,
+        completedAt=True,
+    )
 
 
-def get_latest_analysis(pull_request_id: str) -> dict[str, Any] | None:
-    return _latest_by_pr.get(pull_request_id) or seed.get_latest_analysis(pull_request_id)
+def create_job(session: Session, pull_request_id: str) -> dict[str, Any]:
+    if pr_repo.get_pull_request(session, pull_request_id) is None:
+        raise KeyError(pull_request_id)
+
+    diff = pr_repo.get_diff(session, pull_request_id)
+    job = analysis_repo.create_job(session, pull_request_id, len(diff) or 1)
+    return {"jobId": job.id, "_schedule": job.id}
 
 
-def get_findings(pull_request_id: str) -> list[dict[str, Any]]:
-    return _findings_by_pr.get(pull_request_id) or seed.list_findings(pull_request_id)
+def get_job(session: Session, job_id: str) -> dict[str, Any] | None:
+    return analysis_repo.get_job(session, job_id)
+
+
+def get_latest_analysis(session: Session, pull_request_id: str) -> dict[str, Any] | None:
+    return analysis_repo.get_latest_analysis(session, pull_request_id)
+
+
+def get_findings(session: Session, pull_request_id: str) -> list[dict[str, Any]]:
+    return analysis_repo.get_findings(session, pull_request_id)

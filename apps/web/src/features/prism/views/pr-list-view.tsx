@@ -17,7 +17,7 @@ import {
 } from "lucide-react"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
-import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import { DEFAULT_PR_ID, useNavigation } from "@/features/prism/contexts/navigation-context"
 import { usePullRequests } from "@/hooks/use-pull-requests"
 
 const pullRequests = [
@@ -248,8 +248,8 @@ export function PRListView() {
                 transition={{ delay: idx * 0.05 }}
                 role="button"
                 tabIndex={0}
-                onClick={() => navigate("ai-review")}
-                onKeyDown={(e) => e.key === "Enter" && navigate("ai-review")}
+                onClick={() => navigate("ai-review", { prId: DEFAULT_PR_ID })}
+                onKeyDown={(e) => e.key === "Enter" && navigate("ai-review", { prId: DEFAULT_PR_ID })}
                 className="px-4 py-3 hover:bg-surface-2/50 transition-colors cursor-pointer group"
               >
                 <div className="flex items-start gap-3">

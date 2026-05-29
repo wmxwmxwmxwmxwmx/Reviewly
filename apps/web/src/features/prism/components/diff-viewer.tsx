@@ -16,8 +16,7 @@ import {
 } from "lucide-react"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
-import type { DiffFile, DiffLine } from "@/features/prism/data/mock-data"
-import { mockDiffFiles } from "@/features/prism/data/mock-data"
+import type { DiffFile, DiffLine } from "@reviewly/shared"
 
 const riskConfig = {
   critical: { label: zh.riskFile.critical, color: "text-risk-critical", bg: "bg-[oklch(0.55_0.22_27/0.08)]", border: "border-[oklch(0.55_0.22_27/0.25)]", dot: "bg-risk-critical" },
@@ -36,25 +35,63 @@ const langIcon: Record<string, string> = {
   py: "PY",
 }
 
-function RiskComment({ comment }: { comment: NonNullable<DiffLine["riskComment"]> }) {
-  const cfg = comment.severity === "critical" ? riskConfig.critical : comment.severity === "high" ? riskConfig.high : riskConfig.medium
+/** 与 DiffLineRow 行号列 + 前缀列宽度一致，保证 AI 提示与代码行对齐 */
+function DiffLineGutter() {
+  return (
+    <div className="flex shrink-0" aria-hidden>
+      <span className="w-10 border-r border-border/50" />
+      <span className="w-10 border-r border-border/50" />
+      <span className="w-5" />
+    </div>
+  )
+}
+
+function riskCommentBorderClass(lineType: DiffLine["type"]) {
+  if (lineType === "add") return "border-l-[oklch(0.62_0.17_148/0.4)]"
+  if (lineType === "delete") return "border-l-[oklch(0.55_0.22_27/0.4)]"
+  return "border-l-border"
+}
+
+function RiskComment({
+  comment,
+  lineType,
+}: {
+  comment: NonNullable<DiffLine["riskComment"]>
+  lineType: DiffLine["type"]
+}) {
+  const cfg =
+    comment.severity === "critical"
+      ? riskConfig.critical
+      : comment.severity === "high"
+        ? riskConfig.high
+        : riskConfig.medium
   return (
     <motion.div
-      initial={{ opacity: 0, y: -4 }}
+      initial={{ opacity: 0, y: -2 }}
       animate={{ opacity: 1, y: 0 }}
-      className={cn("flex items-start gap-2.5 mx-4 my-1.5 px-3 py-2.5 rounded border text-[11px]", cfg.bg, cfg.border)}
+      className="flex items-stretch font-mono text-[11px] border-b border-border/50"
     >
-      <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-        {comment.severity === "critical" ? (
-          <AlertOctagon className={cn("w-3.5 h-3.5", cfg.color)} />
-        ) : (
-          <AlertTriangle className={cn("w-3.5 h-3.5", cfg.color)} />
+      <DiffLineGutter />
+      <div
+        className={cn(
+          "flex flex-1 items-start gap-2.5 border-l-2 py-2 pr-4 pl-3 min-w-0",
+          riskCommentBorderClass(lineType),
+          cfg.bg,
+          cfg.border,
         )}
-        <span className={cn("font-semibold uppercase text-[9px] tracking-wider", cfg.color)}>
-          AI {comment.severity === "critical" ? "严重" : "警告"}
-        </span>
+      >
+        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+          {comment.severity === "critical" ? (
+            <AlertOctagon className={cn("w-3.5 h-3.5", cfg.color)} />
+          ) : (
+            <AlertTriangle className={cn("w-3.5 h-3.5", cfg.color)} />
+          )}
+          <span className={cn("font-semibold uppercase text-[9px] tracking-wider", cfg.color)}>
+            AI {comment.severity === "critical" ? "严重" : "警告"}
+          </span>
+        </div>
+        <p className="text-muted-foreground leading-relaxed flex-1">{comment.message}</p>
       </div>
-      <p className="text-muted-foreground leading-relaxed">{comment.message}</p>
     </motion.div>
   )
 }
@@ -80,13 +117,14 @@ function DiffLineRow({ line }: { line: DiffLine }) {
   const hasRisk = !!line.riskComment
 
   return (
-    <>
+    <div className="border-b border-border/30 last:border-b-0">
       <div
         className={cn(
-          "group flex items-start font-mono text-[11px] hover:bg-accent/30 transition-colors cursor-pointer",
+          "group flex items-start font-mono text-[11px] hover:bg-accent/30 transition-colors",
+          hasRisk && "cursor-pointer",
           bgClass,
           borderClass,
-          hasRisk && "ring-1 ring-inset ring-[oklch(0.55_0.22_27/0.15)]"
+          hasRisk && "ring-1 ring-inset ring-[oklch(0.55_0.22_27/0.15)]",
         )}
         onClick={() => hasRisk && setShowComment(!showComment)}
       >
@@ -118,9 +156,9 @@ function DiffLineRow({ line }: { line: DiffLine }) {
         )}
       </div>
       {hasRisk && showComment && line.riskComment && (
-        <RiskComment comment={line.riskComment} />
+        <RiskComment comment={line.riskComment} lineType={line.type} />
       )}
-    </>
+    </div>
   )
 }
 
@@ -139,11 +177,12 @@ function DiffFileCard({ file, index }: DiffFileCardProps) {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.06 }}
-      className="rounded-lg border border-border overflow-hidden"
+      className="rounded-lg border border-border overflow-hidden isolate"
     >
       {/* File Header */}
       <button
-        className="sticky top-[68px] z-10 w-full flex items-center gap-3 px-4 py-2.5 bg-[oklch(0.155_0.005_264)] border-b border-border hover:bg-surface-3 transition-colors"
+        type="button"
+        className="relative z-10 w-full flex items-center gap-3 px-4 py-2.5 bg-[oklch(0.155_0.005_264)] border-b border-border hover:bg-surface-3 transition-colors"
         onClick={() => setCollapsed(!collapsed)}
       >
         <div className="flex items-center gap-0.5 shrink-0">
@@ -190,7 +229,7 @@ function DiffFileCard({ file, index }: DiffFileCardProps) {
             animate={{ height: "auto" }}
             exit={{ height: 0 }}
             transition={{ duration: 0.2 }}
-            className="overflow-hidden"
+            className="relative z-0 overflow-hidden"
           >
             {file.chunks.length === 0 ? (
               <div className="py-6 text-center text-[11px] text-muted-foreground">
@@ -199,7 +238,7 @@ function DiffFileCard({ file, index }: DiffFileCardProps) {
               </div>
             ) : (
               file.chunks.map((chunk, ci) => (
-                <div key={ci}>
+                <div key={ci} className="relative z-0">
                   {/* Chunk Header */}
                   <div className="flex items-center gap-2 px-4 py-1.5 bg-[oklch(0.62_0.19_240/0.06)] border-y border-[oklch(0.62_0.19_240/0.15)]">
                     <span className="text-[10px] font-mono text-[oklch(0.65_0.15_240)]">{chunk.header}</span>
@@ -218,12 +257,31 @@ function DiffFileCard({ file, index }: DiffFileCardProps) {
 }
 
 interface DiffViewerProps {
+  files: DiffFile[]
   analyzing: boolean
   chunkProgress?: { current: number; total: number }
+  loading?: boolean
 }
 
-export function DiffViewer({ analyzing, chunkProgress }: DiffViewerProps) {
+export function DiffViewer({ files, analyzing, chunkProgress, loading }: DiffViewerProps) {
   const [moreFilesHint, setMoreFilesHint] = useState<string | null>(null)
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+        加载 diff…
+      </div>
+    )
+  }
+
+  if (files.length === 0) {
+    return (
+      <div className="py-12 text-center text-sm text-muted-foreground border border-dashed border-border rounded-lg">
+        暂无文件变更
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-3">
@@ -254,21 +312,24 @@ export function DiffViewer({ analyzing, chunkProgress }: DiffViewerProps) {
       )}
 
       {/* File List */}
-      {mockDiffFiles.map((file, i) => (
+      {files.map((file, i) => (
         <DiffFileCard key={file.path} file={file} index={i} />
       ))}
 
-      {/* More Files Indicator */}
-      <button
-        type="button"
-        onClick={() => setMoreFilesHint("演示环境暂未加载更多文件")}
-        className="flex items-center justify-center gap-2 w-full py-4 text-[11px] text-muted-foreground border border-dashed border-border rounded-lg hover:bg-surface-2 hover:border-ai-blue/30 transition-colors"
-      >
-        <Loader2 className="w-3.5 h-3.5" />
-        <span>另外 40 个文件（按需加载）</span>
-      </button>
-      {moreFilesHint && (
-        <p className="text-center text-[11px] text-ai-blue">{moreFilesHint}</p>
+      {files.length >= 3 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setMoreFilesHint("更多文件将在 GitHub 同步后按需加载")}
+            className="flex items-center justify-center gap-2 w-full py-4 text-[11px] text-muted-foreground border border-dashed border-border rounded-lg hover:bg-surface-2 hover:border-ai-blue/30 transition-colors"
+          >
+            <Loader2 className="w-3.5 h-3.5" />
+            <span>查看更多文件</span>
+          </button>
+          {moreFilesHint && (
+            <p className="text-center text-[11px] text-ai-blue">{moreFilesHint}</p>
+          )}
+        </>
       )}
     </div>
   )

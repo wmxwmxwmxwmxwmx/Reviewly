@@ -14,10 +14,10 @@ import {
 } from "lucide-react"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
-import type { PRData } from "@/features/prism/data/mock-data"
+import type { PullRequest } from "@reviewly/shared"
 
 interface HeaderProps {
-  prData: PRData
+  prData: PullRequest
   analyzing: boolean
   onAnalyze: () => void
   onMenuClick?: () => void

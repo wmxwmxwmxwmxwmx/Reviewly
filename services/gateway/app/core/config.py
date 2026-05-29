@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     github_webhook_secret: str = ""
     app_url: str = "http://localhost:3000"
     settings_encryption_key: str = ""
+    prism_seed_db: bool = False
+    github_app_slug: str = "prism-reviewly"
 
 
 settings = Settings()

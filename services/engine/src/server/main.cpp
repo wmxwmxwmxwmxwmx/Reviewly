@@ -25,8 +25,8 @@ int main(int argc, char** argv) {
             << " recommendation=" << prism::scoring::merge_recommendation(score) << "\n";
   return 0;
 #else
-  std::cout << "gRPC server starting on :50051 (PRISM_USE_GRPC)\n";
-  // B4: wire EngineService from generated stubs
-  return 0;
+  extern int RunGrpcServer(const std::string& addr);
+  const std::string addr = "0.0.0.0:50051";
+  return RunGrpcServer(addr);
 #endif
 }

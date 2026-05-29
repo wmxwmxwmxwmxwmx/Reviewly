@@ -28,9 +28,25 @@ if(PRISM_USE_GRPC)
   set(PROTO_FILE "${PROTO_PATH}/prism/v1/engine.proto")
   set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
   file(MAKE_DIRECTORY ${GENERATED_DIR})
-  protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILE})
-  grpc_generate_cpp(GRPC_SRCS GRPC_HDRS ${CMAKE_CURRENT_BINARY_DIR} ${PROTO_FILE})
-  target_sources(prism_engine PRIVATE ${PROTO_SRCS} ${GRPC_SRCS})
+
+  set(PROTO_SRCS "${GENERATED_DIR}/prism/v1/engine.pb.cc")
+  set(PROTO_HDRS "${GENERATED_DIR}/prism/v1/engine.pb.h")
+  set(GRPC_SRCS "${GENERATED_DIR}/prism/v1/engine.grpc.pb.cc")
+  set(GRPC_HDRS "${GENERATED_DIR}/prism/v1/engine.grpc.pb.h")
+
+  add_custom_command(
+    OUTPUT ${PROTO_SRCS} ${PROTO_HDRS} ${GRPC_SRCS} ${GRPC_HDRS}
+    COMMAND protobuf::protoc
+    ARGS --proto_path=${PROTO_PATH}
+         --cpp_out=${GENERATED_DIR}
+         --grpc_out=${GENERATED_DIR}
+         --plugin=protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>
+         ${PROTO_FILE}
+    DEPENDS ${PROTO_FILE}
+    COMMENT "Generating engine gRPC sources"
+  )
+
+  target_sources(prism_engine PRIVATE ${PROTO_SRCS} ${GRPC_SRCS} src/server/grpc_service.cpp)
   target_link_libraries(prism_engine PRIVATE gRPC::grpc++ protobuf::libprotobuf)
   target_compile_definitions(prism_engine PRIVATE PRISM_USE_GRPC=1)
   target_include_directories(prism_engine PRIVATE ${GENERATED_DIR})
