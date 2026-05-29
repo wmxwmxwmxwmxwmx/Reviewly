@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package prism.v1;
+
+option cc_enable_arenas = true;
+
+// Analysis engine gRPC API (C++ server, Python client).
+
+service EngineService {
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  rpc ParseDiff(ParseDiffRequest) returns (ParseDiffResponse);
+  rpc RunAnalysis(AnalysisInput) returns (stream AnalysisProgress);
+  rpc BuildDependencyGraph(DependencyGraphRequest) returns (DependencyGraphResponse);
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  string status = 1;
+  string version = 2;
+}
+
+message ParseDiffRequest {
+  string patch = 1;
+  string base_path = 2;
+}
+
+message DiffLine {
+  string type = 1;
+  optional int32 old_num = 2;
+  optional int32 new_num = 3;
+  string content = 4;
+}
+
+message DiffChunk {
+  string header = 1;
+  repeated DiffLine lines = 2;
+}
+
+message DiffFile {
+  string path = 1;
+  string type = 2;
+  int32 additions = 3;
+  int32 deletions = 4;
+  string risk_level = 5;
+  string language = 6;
+  bool collapsed = 7;
+  repeated DiffChunk chunks = 8;
+}
+
+message ParseDiffResponse {
+  repeated DiffFile files = 1;
+}
+
+message AnalysisInput {
+  string job_id = 1;
+  string pull_request_id = 2;
+  string patch = 3;
+  repeated string file_paths = 4;
+  AnalysisOptions options = 5;
+}
+
+message AnalysisOptions {
+  bool ignore_lockfiles = 1;
+  int32 max_chunk_lines = 2;
+}
+
+message AnalysisFinding {
+  string id = 1;
+  string type = 2;
+  string severity = 3;
+  string title = 4;
+  string description = 5;
+  string file = 6;
+  int32 line = 7;
+  double confidence = 8;
+  string root_cause = 9;
+  string fix_suggestion = 10;
+  string cwe_id = 11;
+}
+
+message AnalysisProgress {
+  string status = 1;
+  int32 progress = 2;
+  int32 chunk_index = 3;
+  int32 chunk_total = 4;
+  repeated AnalysisFinding findings = 5;
+  string error = 6;
+}
+
+message DependencyGraphRequest {
+  string repo_id = 1;
+  string snapshot_ref = 2;
+}
+
+message GraphNode {
+  string id = 1;
+  string label = 2;
+}
+
+message GraphEdge {
+  string from = 1;
+  string to = 2;
+}
+
+message DependencyGraphResponse {
+  repeated GraphNode nodes = 1;
+  repeated GraphEdge edges = 2;
+}

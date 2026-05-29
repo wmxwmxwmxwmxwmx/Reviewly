@@ -164,7 +164,7 @@ export const mockDiffFiles: DiffFile[] = [
           { type: "context", oldNum: 82, newNum: 89, content: "func buildDynamicQuery(table string, filters map[string]interface{}) string {" },
           { type: "delete", oldNum: 83, content: "\tquery := fmt.Sprintf(\"SELECT * FROM %s WHERE \", table)" },
           { type: "delete", oldNum: 84, content: "\tfor k, v := range filters {" },
-          { type: "delete", oldNum: 85, content: "\t\tquery += fmt.Sprintf(\"%s = '%v' AND \", k, v)", riskComment: { severity: "critical", message: "直接字符串拼接用户输入，存在高危 SQL 注入漏洞（CWE-89），CVSS 9.8 Critical" } },
+          { type: "delete", oldNum: 85, content: "\t\tquery += fmt.Sprintf(\"%s = '%v' AND \", k, v)", riskComment: { severity: "critical", message: "直接字符串拼接用户输入，存在高危 SQL 注入漏洞（CWE-89），CVSS 9.8 严重" } },
           { type: "delete", oldNum: 86, content: "\t}" },
           { type: "add", newNum: 90, content: "\tvar args []interface{}" },
           { type: "add", newNum: 91, content: "\tvar conditions []string" },
@@ -363,12 +363,12 @@ export const mockAISummary = `## 变更摘要
 
 ## 重大风险
 
-> ⚠️ **架构变更存在 3 处 Critical 级别问题**，建议 Merge 前完整修复。
+> ⚠️ **架构变更存在 3 处严重级别问题**，建议合并前完整修复。
 
 - 缓存更新逻辑存在**竞态条件**，高并发下可能导致重复扣款
 - 遗留 SQL 拼接代码存在**注入漏洞**（CVSS 9.8），攻击面覆盖交易查询接口
 - HTTP 连接资源泄漏将在压测场景下引发端口耗尽
 
-## Breaking Changes
+## 破坏性变更
 
 \`PaymentCallback\` 响应体移除 \`legacy_txn_id\` 字段，下游 billing-service、reconcile-service 需同步更新。`

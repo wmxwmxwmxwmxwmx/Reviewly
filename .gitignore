@@ -6,6 +6,10 @@ node_modules/
 out/
 dist/
 build/
+services/gateway/.venv/
+services/gateway/**/__pycache__/
+services/gateway/.pytest_cache/
+services/engine/build/
 
 # Caches
 .turbo/

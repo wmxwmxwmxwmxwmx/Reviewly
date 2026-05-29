@@ -12,6 +12,7 @@ import {
   Menu,
   PanelRight,
 } from "lucide-react"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import type { PRData } from "@/features/prism/data/mock-data"
 
@@ -144,7 +145,7 @@ export function Header({
           {reviewers.map((r, i) => (
             <div
               key={r.initials}
-              title={`Reviewer ${r.initials}`}
+              title={`${zh.pr.reviewer} ${r.initials}`}
               className={cn(
                 "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold text-white bg-gradient-to-br border border-background",
                 r.color

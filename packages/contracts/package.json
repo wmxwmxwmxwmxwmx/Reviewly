@@ -1,0 +1,6 @@
+{
+  "name": "@reviewly/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenAPI and protobuf contracts for PRism"
+}

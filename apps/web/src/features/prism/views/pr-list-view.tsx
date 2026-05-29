@@ -15,8 +15,10 @@ import {
   Search,
   ChevronRight,
 } from "lucide-react"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import { usePullRequests } from "@/hooks/use-pull-requests"
 
 const pullRequests = [
   {
@@ -125,6 +127,7 @@ const prStats = [
 type FilterTab = "all" | "open" | "closed"
 
 export function PRListView() {
+  const { items: apiPrs } = usePullRequests()
   const { navigate } = useNavigation()
   const [search, setSearch] = useState("")
   const [filterTab, setFilterTab] = useState<FilterTab>("open")
@@ -150,7 +153,7 @@ export function PRListView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Pull Request</h1>
+          <h1 className="text-lg font-semibold text-foreground">{zh.pr.title}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">管理和评审代码变更请求</p>
         </div>
         <div className="flex items-center gap-2">
@@ -170,6 +173,25 @@ export function PRListView() {
           </button>
         </div>
       </div>
+
+      {apiPrs.length > 0 && (
+        <div className="rounded-lg border border-ai-blue/30 bg-surface-2 p-3 space-y-2">
+          <p className="text-xs font-medium text-ai-blue">API 同步的合并请求</p>
+          {apiPrs.map((pr) => (
+            <button
+              key={pr.id}
+              type="button"
+              onClick={() => navigate("ai-review", { prId: pr.id })}
+              className="w-full flex items-center justify-between text-left text-sm px-2 py-1.5 rounded hover:bg-surface-3"
+            >
+              <span className="truncate">
+                #{pr.number} {pr.title}
+              </span>
+              <ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground" />
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -191,7 +213,7 @@ export function PRListView() {
         <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
             <GitPullRequest className="w-4 h-4 text-ai-blue" />
-            <span className="text-sm font-medium text-foreground">所有 Pull Requests</span>
+            <span className="text-sm font-medium text-foreground">{zh.pr.allPullRequests}</span>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {(["all", "open", "closed"] as const).map((tab) => {

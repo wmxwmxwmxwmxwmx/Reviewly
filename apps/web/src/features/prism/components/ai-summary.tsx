@@ -15,6 +15,7 @@ import {
   BarChart3,
   AlertOctagon,
 } from "lucide-react"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { mockAISummary } from "@/features/prism/data/mock-data"
 
@@ -29,12 +30,12 @@ interface Section {
 
 const sections: Section[] = [
   { key: "purpose", icon: GitBranch, label: "PR 核心目的", content: "重构支付服务缓存层，将单节点 Redis 升级为 6 节点集群方案（3主3从），引入一致性哈希分片，目标 QPS 从 50K 提升至 200K+。", confidence: 98 },
-  { key: "business", icon: BarChart3, label: "业务影响", content: "影响支付主链路（下单→扣款→回调），预计上线后缓存命中率提升 35%，但 Breaking Change 将影响 billing-service 和 reconcile-service，需协同发版。", severity: "warning", confidence: 92 },
+  { key: "business", icon: BarChart3, label: "业务影响", content: "影响支付主链路（下单→扣款→回调），预计上线后缓存命中率提升 35%，但破坏性变更将影响 billing-service 和 reconcile-service，需协同发版。", severity: "warning", confidence: 92 },
   { key: "arch", icon: Package, label: "架构变更", content: "新增 L1 本地缓存（sync.Map）+ L2 Redis Cluster 两级缓存架构。引入 hystrix-go 熔断器。移除单点 Redis 依赖，新增一致性哈希路由层。", confidence: 95 },
-  { key: "api", icon: Zap, label: "API 变更", content: "PaymentCallback v2 响应结构移除 legacy_txn_id 字段（Breaking）。新增 /internal/cache/flush 管理接口（需鉴权）。", severity: "critical", confidence: 99 },
+  { key: "api", icon: Zap, label: "API 变更", content: "PaymentCallback v2 响应结构移除 legacy_txn_id 字段（破坏性变更）。新增 /internal/cache/flush 管理接口（需鉴权）。", severity: "critical", confidence: 99 },
   { key: "db", icon: Database, label: "数据库影响", content: "本次变更不涉及数据库 Schema 修改。新增 6 条 Redis 集群配置键。支付状态缓存 TTL 从 300s 调整为 600s，需关注缓存过期期间的状态一致性。", confidence: 88 },
-  { key: "security", icon: Lock, label: "权限与安全", content: "发现 2 处 Critical 安全问题：SQL 注入漏洞（CVSS 9.8）+ JWT 算法降级漏洞（CVSS 8.1）。建议本次 Merge 前强制修复，不可豁免。", severity: "critical", confidence: 97 },
-  { key: "breaking", icon: AlertOctagon, label: "Breaking Changes", content: "1. PaymentCallback.legacy_txn_id 字段移除\n2. Redis 连接字符串配置格式变更（集群模式）\n3. 缓存 Key 命名空间前缀变更（payment: → pay:v2:）", severity: "critical", confidence: 99 },
+  { key: "security", icon: Lock, label: "权限与安全", content: `发现 2 处${zh.severity.critical}安全问题：SQL 注入漏洞（CVSS 9.8）+ JWT 算法降级漏洞（CVSS 8.1）。建议本次合并前强制修复，不可豁免。`, severity: "critical", confidence: 97 },
+  { key: "breaking", icon: AlertOctagon, label: zh.ai.breakingChanges, content: "1. PaymentCallback.legacy_txn_id 字段移除\n2. Redis 连接字符串配置格式变更（集群模式）\n3. 缓存 Key 命名空间前缀变更（payment: → pay:v2:）", severity: "critical", confidence: 99 },
 ]
 
 function SimpleMarkdown({ text }: { text: string }) {

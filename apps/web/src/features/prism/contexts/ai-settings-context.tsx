@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { zh } from "@/lib/i18n/zh"
 
 export type AIProvider = "anthropic" | "openai" | "google" | "deepseek" | "openrouter" | "custom"
 
@@ -59,12 +60,12 @@ const SETTINGS_STORAGE_KEY = "prism.ai-settings"
 const USAGE_STORAGE_KEY = "prism.ai-usage-records"
 
 export const AI_PROVIDER_OPTIONS: AIProviderOption[] = [
-  { value: "anthropic", label: "Anthropic", defaultModel: "claude-opus-4.6" },
-  { value: "openai", label: "OpenAI", defaultModel: "gpt-4o-mini" },
-  { value: "google", label: "Google Gemini", defaultModel: "gemini-1.5-pro" },
-  { value: "deepseek", label: "DeepSeek", defaultModel: "deepseek-chat" },
-  { value: "openrouter", label: "OpenRouter", defaultModel: "openrouter/auto" },
-  { value: "custom", label: "Custom", defaultModel: "custom-model" },
+  { value: "anthropic", label: zh.provider.anthropic, defaultModel: "claude-opus-4.6" },
+  { value: "openai", label: zh.provider.openai, defaultModel: "gpt-4o-mini" },
+  { value: "google", label: zh.provider.google, defaultModel: "gemini-1.5-pro" },
+  { value: "deepseek", label: zh.provider.deepseek, defaultModel: "deepseek-chat" },
+  { value: "openrouter", label: zh.provider.openrouter, defaultModel: "openrouter/auto" },
+  { value: "custom", label: zh.provider.custom, defaultModel: "custom-model" },
 ]
 
 const DEFAULT_SETTINGS: AISettings = {
@@ -213,7 +214,7 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<AISettingsContextValue>(() => {
-    const providerLabel = AI_PROVIDER_OPTIONS.find((option) => option.value === settings.provider)?.label ?? "Custom"
+    const providerLabel = AI_PROVIDER_OPTIONS.find((option) => option.value === settings.provider)?.label ?? zh.provider.custom
     const monthlyRecords = usageRecords.filter((record) => isCurrentMonth(record.createdAt))
 
     return {

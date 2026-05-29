@@ -18,6 +18,7 @@ import {
   Zap,
 } from "lucide-react"
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
 export type NavView = 
@@ -33,16 +34,16 @@ export type NavView =
   | "settings"
 
 const navItems: { icon: typeof LayoutDashboard; label: string; view: NavView; badge: string | null }[] = [
-  { icon: LayoutDashboard, label: "总览面板", view: "dashboard", badge: null },
-  { icon: GitPullRequest, label: "Pull Request", view: "pull-requests", badge: "12" },
-  { icon: BrainCircuit, label: "AI 评审", view: "ai-review", badge: "3" },
-  { icon: Shield, label: "安全中心", view: "security", badge: "5" },
-  { icon: Gauge, label: "性能分析", view: "performance", badge: null },
-  { icon: Network, label: "架构分析", view: "architecture", badge: null },
-  { icon: GitBranch, label: "工程治理", view: "governance", badge: "2" },
-  { icon: BookOpen, label: "仓库管理", view: "repos", badge: null },
-  { icon: Users, label: "团队分析", view: "team", badge: null },
-  { icon: Settings, label: "系统设置", view: "settings", badge: null },
+  { icon: LayoutDashboard, label: zh.nav.dashboard, view: "dashboard", badge: null },
+  { icon: GitPullRequest, label: zh.nav.pullRequests, view: "pull-requests", badge: "12" },
+  { icon: BrainCircuit, label: zh.nav.aiReview, view: "ai-review", badge: "3" },
+  { icon: Shield, label: zh.nav.security, view: "security", badge: "5" },
+  { icon: Gauge, label: zh.nav.performance, view: "performance", badge: null },
+  { icon: Network, label: zh.nav.architecture, view: "architecture", badge: null },
+  { icon: GitBranch, label: zh.nav.governance, view: "governance", badge: "2" },
+  { icon: BookOpen, label: zh.nav.repos, view: "repos", badge: null },
+  { icon: Users, label: zh.nav.team, view: "team", badge: null },
+  { icon: Settings, label: zh.nav.settings, view: "settings", badge: null },
 ]
 
 interface SidebarProps {

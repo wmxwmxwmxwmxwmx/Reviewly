@@ -14,16 +14,17 @@ import {
   MessageSquare,
   Loader2,
 } from "lucide-react"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import type { DiffFile, DiffLine } from "@/features/prism/data/mock-data"
 import { mockDiffFiles } from "@/features/prism/data/mock-data"
 
 const riskConfig = {
-  critical: { label: "Critical", color: "text-risk-critical", bg: "bg-[oklch(0.55_0.22_27/0.08)]", border: "border-[oklch(0.55_0.22_27/0.25)]", dot: "bg-risk-critical" },
-  high: { label: "High", color: "text-risk-high", bg: "bg-[oklch(0.65_0.18_46/0.08)]", border: "border-[oklch(0.65_0.18_46/0.25)]", dot: "bg-risk-high" },
-  medium: { label: "Medium", color: "text-risk-medium", bg: "bg-[oklch(0.75_0.16_83/0.08)]", border: "border-[oklch(0.75_0.16_83/0.25)]", dot: "bg-risk-medium" },
-  low: { label: "Low", color: "text-risk-low", bg: "bg-[oklch(0.62_0.17_148/0.08)]", border: "border-[oklch(0.62_0.17_148/0.25)]", dot: "bg-risk-low" },
-  none: { label: "OK", color: "text-muted-foreground", bg: "", border: "border-transparent", dot: "bg-muted" },
+  critical: { label: zh.riskFile.critical, color: "text-risk-critical", bg: "bg-[oklch(0.55_0.22_27/0.08)]", border: "border-[oklch(0.55_0.22_27/0.25)]", dot: "bg-risk-critical" },
+  high: { label: zh.riskFile.high, color: "text-risk-high", bg: "bg-[oklch(0.65_0.18_46/0.08)]", border: "border-[oklch(0.65_0.18_46/0.25)]", dot: "bg-risk-high" },
+  medium: { label: zh.riskFile.medium, color: "text-risk-medium", bg: "bg-[oklch(0.75_0.16_83/0.08)]", border: "border-[oklch(0.75_0.16_83/0.25)]", dot: "bg-risk-medium" },
+  low: { label: zh.riskFile.low, color: "text-risk-low", bg: "bg-[oklch(0.62_0.17_148/0.08)]", border: "border-[oklch(0.62_0.17_148/0.25)]", dot: "bg-risk-low" },
+  none: { label: zh.riskFile.none, color: "text-muted-foreground", bg: "", border: "border-transparent", dot: "bg-muted" },
 }
 
 const langIcon: Record<string, string> = {
@@ -236,7 +237,7 @@ export function DiffViewer({ analyzing, chunkProgress }: DiffViewerProps) {
           <Loader2 className="w-4 h-4 text-ai-blue animate-spin shrink-0" />
           <div className="flex-1">
             <span className="text-xs text-ai-blue">
-              正在分析 Chunk {chunkProgress.current} / {chunkProgress.total}
+              {zh.ai.analyzingChunk} {chunkProgress.current} / {chunkProgress.total}
             </span>
             <div className="mt-1 h-1 rounded-full bg-surface-4 overflow-hidden">
               <motion.div

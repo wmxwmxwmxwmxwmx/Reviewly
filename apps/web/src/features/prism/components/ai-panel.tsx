@@ -26,6 +26,7 @@ import {
   ExternalLink,
 } from "lucide-react"
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { mockRisks, mockGovernanceRules, mockIncidents, type RiskItem } from "@/features/prism/data/mock-data"
 
@@ -50,13 +51,13 @@ const severityConfig = {
 const streamLines = [
   { type: "info", text: "正在加载 PR 上下文... 47 文件，5113 行变更" },
   { type: "step", text: "分析安全漏洞模式..." },
-  { type: "finding", text: "[Critical] payment_cache.go:145 — 竞态条件检测" },
-  { type: "finding", text: "[Critical] query_builder.go:89 — SQL 注入模式匹配" },
+  { type: "finding", text: `[${zh.ai.stream.critical}] payment_cache.go:145 — 竞态条件检测` },
+  { type: "finding", text: `[${zh.ai.stream.critical}] query_builder.go:89 — SQL 注入模式匹配` },
   { type: "step", text: "分析性能影响..." },
-  { type: "step", text: "检测 API Breaking Changes..." },
-  { type: "finding", text: "[Warning] PaymentCallback.legacy_txn_id 字段已移除" },
+  { type: "step", text: zh.ai.stream.detectBreakingChanges },
+  { type: "finding", text: `[${zh.ai.stream.warning}] PaymentCallback.legacy_txn_id 字段已移除` },
   { type: "step", text: "执行工程治理规则检查..." },
-  { type: "finding", text: "[Violation] processor.go:312 — 禁止打印 Token" },
+  { type: "finding", text: `[${zh.ai.stream.violation}] processor.go:312 — 禁止打印 Token` },
   { type: "done", text: "分析完成 · 发现 6 个风险，3 个违规" },
 ]
 
@@ -87,7 +88,7 @@ function AIStreamPanel({ analyzing }: { analyzing: boolean }) {
       {/* Context Window */}
       <div className="px-3 py-2 rounded-md bg-surface-2 border border-border">
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] text-muted-foreground">Context Window</span>
+          <span className="text-[10px] text-muted-foreground">{zh.ai.contextWindow}</span>
           <span className="text-[10px] font-mono text-foreground">67K / 200K</span>
         </div>
         <div className="h-1.5 rounded-full bg-surface-4 overflow-hidden">
@@ -258,10 +259,10 @@ function RisksPanel() {
 function MergePanel() {
   const checks = [
     { label: "CI / 构建通过", status: "pass", detail: "所有 312 个测试通过" },
-    { label: "必需 Reviewer 审批", status: "fail", detail: "需要 security-team 审批" },
-    { label: "严重安全漏洞修复", status: "fail", detail: "2 处 Critical 未修复" },
+    { label: zh.ai.merge.requiredReviewerApproval, status: "fail", detail: "需要 security-team 审批" },
+    { label: "严重安全漏洞修复", status: "fail", detail: `2 处${zh.severity.critical}未修复` },
     { label: "工程治理合规", status: "fail", detail: "3 条规则违规未处理" },
-    { label: "Breaking Change 记录", status: "warn", detail: "CHANGELOG 未更新" },
+    { label: zh.ai.merge.breakingChangeRecord, status: "warn", detail: "CHANGELOG 未更新" },
     { label: "性能回归测试", status: "pass", detail: "基准测试 +12% 提升" },
     { label: "回滚方案确认", status: "warn", detail: "需要 Ops 确认回滚脚本" },
   ]

@@ -17,8 +17,9 @@ import {
 import { cn } from "@/lib/utils"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import type { NavView } from "@/features/prism/components/sidebar"
+import { useDashboard } from "@/hooks/use-dashboard"
 
-const metrics = [
+const defaultMetrics = [
   { icon: GitPullRequest, label: "待评审 PR", value: "12", change: "+3", trend: "up", color: "text-ai-blue" },
   { icon: Shield, label: "安全问题", value: "5", change: "-2", trend: "down", color: "text-risk-high" },
   { icon: Gauge, label: "代码质量", value: "87", suffix: "/100", change: "+5", trend: "up", color: "text-risk-low" },
@@ -33,7 +34,7 @@ const recentActivity = [
   { type: "comment", user: "陈浩", action: "评论了 PR #1841", repo: "prism-core", time: "3 小时前" },
 ]
 
-const topRepos = [
+const defaultTopRepos = [
   { name: "prism-core", prs: 8, issues: 3, health: 92 },
   { name: "auth-service", prs: 4, issues: 1, health: 88 },
   { name: "api-gateway", prs: 6, issues: 5, health: 72 },
@@ -48,6 +49,18 @@ const aiInsights: { severity: string; message: string; action: string; target: N
 
 export function DashboardView() {
   const { navigate } = useNavigation()
+  const { data: dashboard } = useDashboard()
+
+  const metrics = dashboard
+    ? [
+        { icon: GitPullRequest, label: "待评审 PR", value: String(dashboard.pendingPrs), change: "+3", trend: "up" as const, color: "text-ai-blue" },
+        { icon: Shield, label: "安全问题", value: String(dashboard.securityIssues), change: "-2", trend: "down" as const, color: "text-risk-high" },
+        { icon: Gauge, label: "代码质量", value: String(dashboard.qualityScore), suffix: "/100", change: "+5", trend: "up" as const, color: "text-risk-low" },
+        { icon: Clock, label: "平均评审时间", value: String(dashboard.avgReviewHours), suffix: "h", change: "-0.8", trend: "down" as const, color: "text-foreground" },
+      ]
+    : defaultMetrics
+
+  const topRepos = dashboard?.topRepos ?? defaultTopRepos
 
   return (
     <div className="p-5 space-y-5">

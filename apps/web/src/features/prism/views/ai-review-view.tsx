@@ -31,7 +31,7 @@ export function AIReviewView({
     if (analyzing) return
 
     if (!hasApiKey) {
-      setAnalysisError("请先在系统设置中填写 API Key，再启动真实 AI 分析。")
+      setAnalysisError("请先在系统设置中填写 API 密钥，再启动真实 AI 分析。")
       return
     }
 
@@ -59,11 +59,11 @@ export function AIReviewView({
           messages: [
             {
               role: "system",
-              content: "你是 PRism 的资深代码评审 AI。请用中文输出结构化 PR 评审摘要，重点关注安全、性能、架构、Breaking Change 和是否建议合并。输出应简洁、可行动。",
+              content: "你是 PRism 的资深代码评审 AI。请用中文输出结构化 PR 评审摘要，重点关注安全、性能、架构、破坏性变更和是否建议合并。输出应简洁、可行动。",
             },
             {
               role: "user",
-              content: `请评审这个 Pull Request。\n\nPR 标题：${mockPRData.title}\n仓库：${mockPRData.repo}\n分支：${mockPRData.sourceBranch} -> ${mockPRData.targetBranch}\n变更规模：${mockPRData.filesChanged} 文件，+${mockPRData.additions} -${mockPRData.deletions}\n\nDiff 摘要：\n${diffContext}`,
+              content: `请评审这个合并请求。\n\nPR 标题：${mockPRData.title}\n仓库：${mockPRData.repo}\n分支：${mockPRData.sourceBranch} -> ${mockPRData.targetBranch}\n变更规模：${mockPRData.filesChanged} 文件，+${mockPRData.additions} -${mockPRData.deletions}\n\nDiff 摘要：\n${diffContext}`,
             },
           ],
         }),

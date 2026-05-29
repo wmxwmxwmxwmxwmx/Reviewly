@@ -1,0 +1,59 @@
+openapi: 3.1.0
+info:
+  title: PRism API
+  version: 1.0.0
+  description: REST API served by services/gateway
+servers:
+  - url: http://localhost:3001
+paths:
+  /api/ai/chat:
+    post:
+      summary: AI chat proxy
+      operationId: aiChat
+  /api/dashboard:
+    get:
+      summary: Dashboard stats
+      operationId: getDashboard
+  /api/repos:
+    get:
+      summary: List repositories
+      operationId: listRepos
+  /api/pull-requests:
+    get:
+      summary: List pull requests
+      operationId: listPullRequests
+  /api/pull-requests/{id}:
+    get:
+      summary: Get pull request
+      operationId: getPullRequest
+  /api/pull-requests/{id}/diff:
+    get:
+      summary: Get PR diff
+      operationId: getPullRequestDiff
+  /api/pull-requests/{id}/analysis:
+    post:
+      summary: Start analysis job
+      operationId: startAnalysis
+  /api/pull-requests/{id}/analysis/latest:
+    get:
+      summary: Latest analysis summary
+      operationId: getLatestAnalysis
+  /api/pull-requests/{id}/findings:
+    get:
+      summary: Analysis findings
+      operationId: getFindings
+  /api/analysis/jobs/{jobId}:
+    get:
+      summary: Get analysis job
+      operationId: getAnalysisJob
+  /api/security/findings:
+    get:
+      summary: Security findings
+      operationId: listSecurityFindings
+  /api/settings:
+    get:
+      summary: Get settings
+      operationId: getSettings
+    patch:
+      summary: Update settings
+      operationId: patchSettings

@@ -8,6 +8,7 @@ import {
   type AIProvider,
   useAISettings,
 } from "@/features/prism/contexts/ai-settings-context"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
 type SettingItem =
@@ -100,7 +101,7 @@ export function SettingsView() {
               ? "text-risk-low border-risk-low/30 bg-risk-low/10"
               : "text-risk-medium border-risk-medium/30 bg-risk-medium/10"
           )}>
-            {hasApiKey ? `已配置 ${maskedApiKey}` : "未配置 API Key"}
+            {hasApiKey ? `已配置 ${maskedApiKey}` : `未配置 ${zh.settings.apiKey}`}
           </span>
         </div>
         <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -133,7 +134,7 @@ export function SettingsView() {
           </label>
 
           <label className="space-y-2">
-            <span className="text-xs font-medium text-muted-foreground">API Key</span>
+            <span className="text-xs font-medium text-muted-foreground">{zh.settings.apiKey}</span>
             <div className="relative">
               <KeyRound className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
@@ -143,7 +144,7 @@ export function SettingsView() {
                   setAiForm((current) => ({ ...current, apiKey: event.target.value }))
                   setSaved(false)
                 }}
-                placeholder="输入供应商 API Key"
+                placeholder={`输入供应商 ${zh.settings.apiKey}`}
                 className="w-full h-10 rounded-md border border-border bg-surface-2 pl-9 pr-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ai-blue focus:ring-2 focus:ring-ai-blue/20"
               />
             </div>

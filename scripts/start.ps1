@@ -23,7 +23,7 @@ function Test-CommandExists([string]$Name) {
 
 Set-Location $ProjectRoot
 
-Write-Info '正在启动 PRism（Web + API）...'
+Write-Info '正在启动 PRism（Web + Python Gateway）...'
 
 if (-not (Test-CommandExists 'node')) {
   Write-Err '未检测到 Node.js，请先安装 Node.js 18+ 并加入 PATH。'
@@ -33,6 +33,10 @@ if (-not (Test-CommandExists 'node')) {
 if (-not (Test-CommandExists 'npm')) {
   Write-Err '未检测到 npm，请确认 Node.js 安装完整。'
   exit 1
+}
+
+if (-not (Test-CommandExists 'python')) {
+  Write-Warn '未检测到 Python，Gateway 可能无法启动。请安装 Python 3.11+。'
 }
 
 if (-not (Test-Path -Path 'node_modules')) {

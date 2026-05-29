@@ -3,13 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "apps/*",
+    "apps/web",
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n web,api -c cyan,magenta \"npm run dev -w @reviewly/web\" \"npm run dev -w @reviewly/api\"",
-    "build": "npm run build -w @reviewly/shared && npm run build -w @reviewly/api && npm run build -w @reviewly/web",
-    "lint": "npm run lint -w @reviewly/web -w @reviewly/api",
+    "dev": "concurrently -n web,gateway -c cyan,green \"npm run dev -w @reviewly/web\" \"npm run dev:gateway\"",
+    "dev:gateway": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev-gateway.ps1",
+    "dev:engine": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev-engine.ps1",
+    "build": "npm run build -w @reviewly/shared && npm run build -w @reviewly/web",
+    "lint": "npm run lint -w @reviewly/web",
     "start:app": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start.ps1"
   },
   "devDependencies": {
