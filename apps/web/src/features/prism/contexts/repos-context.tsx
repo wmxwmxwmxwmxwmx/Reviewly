@@ -9,27 +9,29 @@ import {
   type ReactNode,
 } from "react"
 
-import type { Repository } from "@reviewly/shared"
+import type { Repository, SyncRepositoriesResponse } from "@reviewly/shared"
 
 import { useAISettings, estimateCostCny } from "@/features/prism/contexts/ai-settings-context"
 import { PrismApiError } from "@/lib/api/client"
+import { useReposSync } from "@/hooks/use-repos-sync"
 import {
   fetchRepoAnalyzeContext,
   fetchRepos,
   saveRepoAiAnalysis,
-  syncRepos,
 } from "@/lib/api/repos"
 
 interface ReposContextValue {
   repos: Repository[]
   loading: boolean
   syncing: boolean
+  importing: boolean
   error: string | null
   syncError: string | null
   analyzingRepoId: string | null
   analysisErrorsByRepoId: Record<string, string>
   refresh: () => Promise<void>
-  sync: () => Promise<void>
+  sync: () => Promise<SyncRepositoriesResponse>
+  importRepo: (url: string) => Promise<Repository | null>
   analyzeRepository: (repoId: string) => Promise<void>
   clearAnalysisError: (repoId: string) => void
 }
@@ -74,7 +76,6 @@ export function ReposProvider({ children }: { children: ReactNode }) {
   const { settings, hasApiKey, recordUsage } = useAISettings()
   const [repos, setRepos] = useState<Repository[]>([])
   const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [analyzingRepoId, setAnalyzingRepoId] = useState<string | null>(null)
@@ -97,18 +98,35 @@ export function ReposProvider({ children }: { children: ReactNode }) {
     void refresh()
   }, [refresh])
 
+  const {
+    importing,
+    syncing,
+    importRepo: importRepoMutation,
+    syncRepos: syncReposMutation,
+  } = useReposSync(refresh)
+
   const sync = useCallback(async () => {
-    setSyncing(true)
     setSyncError(null)
     try {
-      await syncRepos()
-      await refresh()
+      return await syncReposMutation()
     } catch (e: unknown) {
       setSyncError(e instanceof PrismApiError ? e.message : "同步失败")
-    } finally {
-      setSyncing(false)
+      throw e
     }
-  }, [refresh])
+  }, [syncReposMutation])
+
+  const importRepo = useCallback(
+    async (url: string) => {
+      setSyncError(null)
+      try {
+        return await importRepoMutation(url)
+      } catch (e: unknown) {
+        setSyncError(e instanceof PrismApiError ? e.message : "添加仓库失败")
+        throw e
+      }
+    },
+    [importRepoMutation],
+  )
 
   const clearAnalysisError = useCallback((repoId: string) => {
     setAnalysisErrorsByRepoId((prev) => {
@@ -208,12 +226,14 @@ export function ReposProvider({ children }: { children: ReactNode }) {
         repos,
         loading,
         syncing,
+        importing,
         error,
         syncError,
         analyzingRepoId,
         analysisErrorsByRepoId,
         refresh,
         sync,
+        importRepo,
         analyzeRepository,
         clearAnalysisError,
       }}

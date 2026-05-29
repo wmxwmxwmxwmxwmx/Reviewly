@@ -1,13 +1,14 @@
-import type { RepoAnalyzeContext, Repository, RepositoryAiAnalysis } from "@reviewly/shared"
+import type {
+  ImportRepositoryResponse,
+  RepoAnalyzeContext,
+  Repository,
+  RepositoryAiAnalysis,
+  SyncRepositoriesResponse,
+} from "@reviewly/shared"
 
 import { apiFetch } from "./client"
 
-export type SyncReposResult = {
-  syncedRepos?: number
-  synced?: number
-  status: string
-  message?: string
-}
+export type SyncReposResult = SyncRepositoriesResponse
 
 export type SaveRepoAiAnalysisPayload = {
   content: string
@@ -19,9 +20,20 @@ export function fetchRepos(signal?: AbortSignal) {
   return apiFetch<Repository[]>("/api/repos", { signal })
 }
 
-export function syncRepos(signal?: AbortSignal) {
-  return apiFetch<SyncReposResult>("/api/repos/sync", {
+export function syncRepositories(signal?: AbortSignal) {
+  return apiFetch<SyncRepositoriesResponse>("/api/repos/sync", {
     method: "POST",
+    signal,
+  })
+}
+
+/** @deprecated Use syncRepositories */
+export const syncRepos = syncRepositories
+
+export function importRepository(url: string, signal?: AbortSignal) {
+  return apiFetch<ImportRepositoryResponse>("/api/repos/import", {
+    method: "POST",
+    body: JSON.stringify({ url }),
     signal,
   })
 }

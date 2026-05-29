@@ -7,10 +7,12 @@ def test_install_url(client: TestClient) -> None:
     assert "url" in r.json()
 
 
-def test_repos_sync_mock_without_github(client: TestClient) -> None:
+def test_repos_sync_requires_pat_without_github(client: TestClient) -> None:
     r = client.post("/api/repos/sync")
-    assert r.status_code == 200
-    assert "synced" in r.json() or "syncedRepos" in r.json()
+    assert r.status_code == 500
+    body = r.json()
+    err = body.get("error") or (body.get("detail") or {}).get("error", "")
+    assert "GitHub PAT not configured" in err
 
 
 def test_webhook_installation(client: TestClient) -> None:

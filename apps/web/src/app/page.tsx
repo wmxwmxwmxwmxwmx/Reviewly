@@ -9,6 +9,7 @@ import { ReposProvider } from "@/features/prism/contexts/repos-context"
 import { NavigationProvider, useNavigation } from "@/features/prism/contexts/navigation-context"
 import { AIReviewView } from "@/features/prism/views/ai-review-view"
 import { StandardView } from "@/features/prism/components/view-registry"
+import { Toaster } from "@/components/ui/toaster"
 import { zh } from "@/lib/i18n/zh"
 
 function PRismPageContent() {
@@ -104,6 +105,7 @@ function PRismPageContent() {
 export default function PRismPage() {
   return (
     <AISettingsProvider>
+      <Toaster />
       <Suspense
         fallback={
           <div className="flex h-screen items-center justify-center bg-background text-muted-foreground text-sm">
