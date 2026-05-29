@@ -26,3 +26,17 @@ export function fetchPullRequest(id: string, signal?: AbortSignal) {
 export function fetchPullRequestDiff(id: string, signal?: AbortSignal) {
   return apiFetch<DiffFile[]>(`/api/pull-requests/${id}/diff`, { signal })
 }
+
+export type ImportPullRequestResult = {
+  prId: string
+  source: "cache" | "github_app" | "github_public" | string
+}
+
+export function importPullRequestByUrl(url: string, signal?: AbortSignal) {
+  return apiFetch<ImportPullRequestResult>("/api/pull-requests/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+    signal,
+  })
+}

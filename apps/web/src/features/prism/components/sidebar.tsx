@@ -1,5 +1,6 @@
 ﻿"use client"
 
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import {
   LayoutDashboard,
@@ -56,7 +57,14 @@ interface SidebarProps {
 
 export function Sidebar({ className, activeView, onViewChange, mobile, onClose }: SidebarProps) {
   const { settings, providerLabel, hasApiKey, monthlyUsage } = useAISettings()
-  const modelUsagePercent = hasApiKey ? 67 : 8
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const configured = mounted && hasApiKey
+  const modelUsagePercent = configured ? 67 : 8
   const monthlyTokens = monthlyUsage.totalTokens >= 1_000_000
     ? `${(monthlyUsage.totalTokens / 1_000_000).toFixed(1)}M`
     : monthlyUsage.totalTokens >= 1_000
@@ -163,18 +171,24 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
           onClick={() => onViewChange("settings")}
           className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-surface-2 hover:bg-surface-3 transition-colors text-left w-full group"
         >
-          <Cpu className={cn(
-            "w-3.5 h-3.5 shrink-0",
-            hasApiKey ? "text-ai-blue" : "text-risk-medium"
-          )} />
+          <Cpu
+            suppressHydrationWarning
+            className={cn(
+              "w-3.5 h-3.5 shrink-0",
+              configured ? "text-ai-blue" : "text-risk-medium",
+            )}
+          />
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
               <div className="text-[11px] font-medium text-foreground truncate">{settings.model || "未选择模型"}</div>
-              <span className={cn(
-                "text-[9px] shrink-0",
-                hasApiKey ? "text-risk-low" : "text-risk-medium"
-              )}>
-                {hasApiKey ? "已配置" : "未配置"}
+              <span
+                suppressHydrationWarning
+                className={cn(
+                  "text-[9px] shrink-0",
+                  configured ? "text-risk-low" : "text-risk-medium",
+                )}
+              >
+                {configured ? "已配置" : "未配置"}
               </span>
             </div>
             <div className="flex items-center gap-1 mt-1">
@@ -182,15 +196,15 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
                 <motion.div
                   className={cn(
                     "h-full rounded-full",
-                    hasApiKey ? "bg-ai-blue" : "bg-risk-medium"
+                    configured ? "bg-ai-blue" : "bg-risk-medium",
                   )}
                   initial={{ width: 0 }}
                   animate={{ width: `${modelUsagePercent}%` }}
                   transition={{ duration: 1.2, ease: "easeOut" }}
                 />
               </div>
-              <span className="text-[9px] text-muted-foreground shrink-0">
-                {hasApiKey ? "67K / 100K" : providerLabel}
+              <span suppressHydrationWarning className="text-[9px] text-muted-foreground shrink-0">
+                {configured ? "67K / 100K" : providerLabel}
               </span>
             </div>
           </div>

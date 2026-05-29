@@ -22,23 +22,42 @@ import {
   TriangleAlert,
   Flame,
   ScrollText,
-  Building2,
-  ExternalLink,
 } from "lucide-react"
+import type { AnalysisFinding, AnalysisJob, AnalysisSummary } from "@reviewly/shared"
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
-import { mockRisks, mockGovernanceRules, mockIncidents, type RiskItem } from "@/features/prism/data/mock-data"
+import type { RiskItem } from "@/features/prism/data/mock-data"
 
 type PanelTab = "stream" | "risks" | "merge" | "governance" | "incidents"
 
-const tabs: { key: PanelTab; label: string; icon: React.ElementType; badge?: string }[] = [
-  { key: "stream", label: "AI 流", icon: BrainCircuit },
-  { key: "risks", label: "风险", icon: Shield, badge: "6" },
-  { key: "merge", label: "合并", icon: GitMerge },
-  { key: "governance", label: "治理", icon: ScrollText, badge: "3" },
-  { key: "incidents", label: "事故", icon: Flame, badge: "3" },
-]
+function buildTabs(findingsCount: number): { key: PanelTab; label: string; icon: React.ElementType; badge?: string }[] {
+  return [
+    { key: "stream", label: "AI 流", icon: BrainCircuit },
+    { key: "risks", label: "风险", icon: Shield, badge: findingsCount > 0 ? String(findingsCount) : undefined },
+    { key: "merge", label: "合并", icon: GitMerge },
+    { key: "governance", label: "治理", icon: ScrollText },
+    { key: "incidents", label: "事故", icon: Flame },
+  ]
+}
+
+function findingToRiskItem(finding: AnalysisFinding): RiskItem {
+  return {
+    id: finding.id,
+    severity: finding.severity,
+    type: finding.type,
+    title: finding.title,
+    description: finding.description,
+    file: finding.file,
+    line: finding.line,
+    cweId: finding.cweId,
+    confidence: finding.confidence,
+    rootCause: finding.rootCause,
+    exploitability: "medium",
+    fixSuggestion: finding.fixSuggestion,
+    callChain: finding.callChain,
+  }
+}
 
 const severityConfig = {
   critical: { icon: AlertOctagon, color: "text-risk-critical", bg: "bg-[oklch(0.55_0.22_27/0.10)]", border: "border-[oklch(0.55_0.22_27/0.30)]", label: "严重" },
@@ -47,21 +66,57 @@ const severityConfig = {
   low: { icon: Info, color: "text-risk-low", bg: "bg-[oklch(0.62_0.17_148/0.10)]", border: "border-[oklch(0.62_0.17_148/0.30)]", label: "低危" },
 }
 
-// ── AI Stream Panel ────────────────────────────────────────────────────────────
-const streamLines = [
-  { type: "info", text: "正在加载 PR 上下文... 47 文件，5113 行变更" },
-  { type: "step", text: "分析安全漏洞模式..." },
-  { type: "finding", text: `[${zh.ai.stream.critical}] payment_cache.go:145 — 竞态条件检测` },
-  { type: "finding", text: `[${zh.ai.stream.critical}] query_builder.go:89 — SQL 注入模式匹配` },
-  { type: "step", text: "分析性能影响..." },
-  { type: "step", text: zh.ai.stream.detectBreakingChanges },
-  { type: "finding", text: `[${zh.ai.stream.warning}] PaymentCallback.legacy_txn_id 字段已移除` },
-  { type: "step", text: "执行工程治理规则检查..." },
-  { type: "finding", text: `[${zh.ai.stream.violation}] processor.go:312 — 禁止打印 Token` },
-  { type: "done", text: "分析完成 · 发现 6 个风险，3 个违规" },
-]
+type StreamLine = { type: "info" | "step" | "finding" | "done"; text: string }
 
-function AIStreamPanel({ analyzing }: { analyzing: boolean }) {
+function buildStreamLines(
+  analyzing: boolean,
+  job: AnalysisJob | undefined,
+  findings: AnalysisFinding[],
+  filesChanged: number,
+): StreamLine[] {
+  const lines: StreamLine[] = [
+    { type: "info", text: `PR 上下文已加载 · ${filesChanged} 个文件` },
+  ]
+
+  if (job) {
+    lines.push({
+      type: "step",
+      text: `规则扫描进度 ${job.chunkIndex}/${Math.max(job.chunkTotal, 1)} · ${job.progress}%`,
+    })
+  } else if (analyzing) {
+    lines.push({ type: "step", text: "正在启动规则扫描任务…" })
+  }
+
+  for (const finding of findings.slice(0, 8)) {
+    lines.push({
+      type: "finding",
+      text: `[${finding.severity}] ${finding.file}:${finding.line} — ${finding.title}`,
+    })
+  }
+
+  if (!analyzing && findings.length > 0) {
+    lines.push({ type: "done", text: `分析完成 · 发现 ${findings.length} 个风险项` })
+  } else if (!analyzing && job?.status === "completed") {
+    lines.push({ type: "done", text: "规则扫描完成 · 未发现结构化风险项" })
+  } else if (analyzing) {
+    lines.push({ type: "step", text: "正在合并 findings 并生成 AI 摘要…" })
+  }
+
+  return lines
+}
+
+function AIStreamPanel({
+  analyzing,
+  job,
+  findings,
+  filesChanged,
+}: {
+  analyzing: boolean
+  job?: AnalysisJob
+  findings: AnalysisFinding[]
+  filesChanged: number
+}) {
+  const streamLines = buildStreamLines(analyzing, job, findings, filesChanged)
   const { settings, monthlyUsage, usageRecords } = useAISettings()
   const latestUsage = usageRecords[0]
 
@@ -204,16 +259,22 @@ function RiskCard({ risk, index }: { risk: RiskItem; index: number }) {
   )
 }
 
-function RisksPanel() {
-  const criticalCount = mockRisks.filter(r => r.severity === "critical").length
-  const highCount = mockRisks.filter(r => r.severity === "high").length
+function RisksPanel({ findings }: { findings: AnalysisFinding[] }) {
+  const risks = findings.map(findingToRiskItem)
+
+  if (risks.length === 0) {
+    return (
+      <p className="text-[11px] text-muted-foreground py-6 text-center">
+        暂无风险项。点击「开始分析」对当前 Diff 执行规则扫描。
+      </p>
+    )
+  }
 
   return (
     <div className="space-y-3">
-      {/* Summary */}
       <div className="grid grid-cols-4 gap-1.5">
         {(["critical", "high", "medium", "low"] as const).map((s) => {
-          const count = mockRisks.filter(r => r.severity === s).length
+          const count = risks.filter((r) => r.severity === s).length
           const cfg = severityConfig[s]
           return (
             <div key={s} className={cn("flex flex-col items-center gap-0.5 py-2 rounded-md border", cfg.bg, cfg.border)}>
@@ -224,47 +285,44 @@ function RisksPanel() {
         })}
       </div>
 
-      {/* Risk List */}
       <div className="space-y-2">
-        {mockRisks.map((risk, i) => (
+        {risks.map((risk, i) => (
           <RiskCard key={risk.id} risk={risk} index={i} />
         ))}
-      </div>
-
-      {/* Business Risk */}
-      <div className="rounded-md border border-border overflow-hidden">
-        <div className="px-3 py-2 border-b border-border bg-surface-2">
-          <span className="text-[11px] font-semibold text-foreground">业务风险中心</span>
-        </div>
-        <div className="p-2.5 space-y-1.5">
-          {[
-            { module: "payment/", risk: "高", color: "text-risk-critical", glow: "bg-[oklch(0.55_0.22_27/0.06)]" },
-            { module: "auth/", risk: "高", color: "text-risk-high", glow: "bg-[oklch(0.65_0.18_46/0.06)]" },
-            { module: "gateway/", risk: "中", color: "text-risk-medium", glow: "bg-[oklch(0.75_0.16_83/0.06)]" },
-            { module: "billing/", risk: "高", color: "text-risk-high", glow: "bg-[oklch(0.65_0.18_46/0.06)]" },
-          ].map((item) => (
-            <div key={item.module} className={cn("flex items-center gap-2 px-2 py-1.5 rounded", item.glow)}>
-              <Building2 className={cn("w-3.5 h-3.5 shrink-0", item.color)} />
-              <span className="flex-1 text-[11px] font-mono text-foreground">{item.module}</span>
-              <span className={cn("text-[10px] font-semibold", item.color)}>{item.risk}</span>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   )
 }
 
 // ── Merge Panel ───────────────────────────────────────────────────────────────
-function MergePanel() {
+function MergePanel({
+  mergeRecommendation,
+  criticalCount,
+}: {
+  mergeRecommendation?: AnalysisSummary["mergeRecommendation"]
+  criticalCount: number
+}) {
+  const recommendationLabel =
+    mergeRecommendation === "approve"
+      ? "建议合并"
+      : mergeRecommendation === "block"
+        ? "建议阻止合并"
+        : mergeRecommendation === "request_changes"
+          ? "建议修改后再合并"
+          : "尚未分析"
+
   const checks = [
-    { label: "CI / 构建通过", status: "pass", detail: "所有 312 个测试通过" },
-    { label: zh.ai.merge.requiredReviewerApproval, status: "fail", detail: "需要 security-team 审批" },
-    { label: "严重安全漏洞修复", status: "fail", detail: `2 处${zh.severity.critical}未修复` },
-    { label: "工程治理合规", status: "fail", detail: "3 条规则违规未处理" },
-    { label: zh.ai.merge.breakingChangeRecord, status: "warn", detail: "CHANGELOG 未更新" },
-    { label: "性能回归测试", status: "pass", detail: "基准测试 +12% 提升" },
-    { label: "回滚方案确认", status: "warn", detail: "需要 Ops 确认回滚脚本" },
+    {
+      label: "规则扫描结论",
+      status: mergeRecommendation === "approve" ? "pass" : mergeRecommendation ? "fail" : "pending",
+      detail: recommendationLabel,
+    },
+    {
+      label: "严重安全问题",
+      status: criticalCount > 0 ? "fail" : mergeRecommendation ? "pass" : "pending",
+      detail: criticalCount > 0 ? `${criticalCount} 处${zh.severity.critical}待处理` : "未发现严重项",
+    },
+    { label: zh.ai.merge.breakingChangeRecord, status: "pending", detail: "需结合 Diff 人工确认" },
   ]
 
   const iconMap = {
@@ -313,104 +371,40 @@ function MergePanel() {
 // ── Governance Panel ──────────────────────────────────────────────────────────
 function GovernancePanel() {
   return (
-    <div className="space-y-2">
-      <div className="text-[11px] text-muted-foreground pb-1">组织工程规范检查</div>
-      {mockGovernanceRules.map((rule, i) => (
-        <motion.div
-          key={rule.id}
-          initial={{ opacity: 0, x: -4 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: i * 0.05 }}
-          className={cn(
-            "flex items-start gap-2.5 px-3 py-2.5 rounded-md border",
-            rule.violated
-              ? "bg-[oklch(0.55_0.22_27/0.06)] border-[oklch(0.55_0.22_27/0.25)]"
-              : "bg-surface-2 border-border"
-          )}
-        >
-          {rule.violated ? (
-            <XCircle className="w-3.5 h-3.5 text-risk-critical shrink-0 mt-0.5" />
-          ) : (
-            <CheckCircle2 className="w-3.5 h-3.5 text-risk-low shrink-0 mt-0.5" />
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] text-foreground">{rule.rule}</div>
-            {rule.violated && rule.file && (
-              <div className="text-[10px] font-mono text-risk-high mt-0.5 truncate">{rule.file}</div>
-            )}
-          </div>
-          <span className={cn(
-            "text-[9px] px-1.5 py-0.5 rounded shrink-0",
-            rule.severity === "critical" ? "bg-[oklch(0.55_0.22_27/0.15)] text-risk-critical" :
-            rule.severity === "high" ? "bg-[oklch(0.65_0.18_46/0.15)] text-risk-high" :
-            "bg-surface-4 text-muted-foreground"
-          )}>
-            {rule.severity}
-          </span>
-        </motion.div>
-      ))}
-    </div>
+    <p className="text-[11px] text-muted-foreground py-6 text-center">
+      治理规则检查尚未接入 API。完成分析后可在「风险」标签查看规则扫描结果。
+    </p>
   )
 }
 
 // ── Incidents Panel ───────────────────────────────────────────────────────────
 function IncidentsPanel() {
   return (
-    <div className="space-y-3">
-      <div className="text-[11px] text-muted-foreground">与本次变更相似的历史事故</div>
-      {mockIncidents.map((incident, i) => (
-        <motion.div
-          key={incident.id}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: i * 0.07 }}
-          className="rounded-md border border-border bg-surface-2 overflow-hidden"
-        >
-          <div className="px-3 py-2.5">
-            <div className="flex items-start gap-2 mb-1.5">
-              <Flame className="w-3.5 h-3.5 text-risk-high mt-0.5 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-medium text-foreground leading-relaxed">{incident.title}</p>
-              </div>
-            </div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] text-muted-foreground">{incident.date}</span>
-              <div className="flex items-center gap-1">
-                <div
-                  className={cn(
-                    "h-1 rounded-full",
-                    incident.similarity >= 90 ? "bg-risk-critical" :
-                    incident.similarity >= 80 ? "bg-risk-high" : "bg-risk-medium"
-                  )}
-                  style={{ width: `${incident.similarity * 0.6}px` }}
-                />
-                <span className={cn(
-                  "text-[10px] font-semibold",
-                  incident.similarity >= 90 ? "text-risk-critical" :
-                  incident.similarity >= 80 ? "text-risk-high" : "text-risk-medium"
-                )}>
-                  {incident.similarity}% 相似
-                </span>
-              </div>
-            </div>
-            <p className="text-[10px] text-muted-foreground mb-2">{incident.impact}</p>
-            <a href="#" className="inline-flex items-center gap-1 text-[10px] text-ai-blue hover:underline">
-              查看 Postmortem <ExternalLink className="w-2.5 h-2.5" />
-            </a>
-          </div>
-        </motion.div>
-      ))}
-    </div>
+    <p className="text-[11px] text-muted-foreground py-6 text-center">
+      历史事故关联尚未接入 API。
+    </p>
   )
 }
 
 // ── Main Panel ────────────────────────────────────────────────────────────────
 interface AIPanelProps {
   analyzing: boolean
+  findings?: AnalysisFinding[]
+  job?: AnalysisJob
+  mergeRecommendation?: AnalysisSummary["mergeRecommendation"]
+  filesChanged?: number
 }
 
-export function AIPanel({ analyzing }: AIPanelProps) {
+export function AIPanel({
+  analyzing,
+  findings = [],
+  job,
+  mergeRecommendation,
+  filesChanged = 0,
+}: AIPanelProps) {
   const [activeTab, setActiveTab] = useState<PanelTab>("risks")
+  const tabs = buildTabs(findings.length)
+  const criticalCount = findings.filter((f) => f.severity === "critical").length
 
   return (
     <aside className="w-[390px] shrink-0 flex flex-col h-screen border-l border-border bg-[oklch(0.125_0.004_264)]">
@@ -472,9 +466,18 @@ export function AIPanel({ analyzing }: AIPanelProps) {
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.2 }}
           >
-            {activeTab === "stream" && <AIStreamPanel analyzing={analyzing} />}
-            {activeTab === "risks" && <RisksPanel />}
-            {activeTab === "merge" && <MergePanel />}
+            {activeTab === "stream" && (
+              <AIStreamPanel
+                analyzing={analyzing}
+                job={job}
+                findings={findings}
+                filesChanged={filesChanged}
+              />
+            )}
+            {activeTab === "risks" && <RisksPanel findings={findings} />}
+            {activeTab === "merge" && (
+              <MergePanel mergeRecommendation={mergeRecommendation} criticalCount={criticalCount} />
+            )}
             {activeTab === "governance" && <GovernancePanel />}
             {activeTab === "incidents" && <IncidentsPanel />}
           </motion.div>

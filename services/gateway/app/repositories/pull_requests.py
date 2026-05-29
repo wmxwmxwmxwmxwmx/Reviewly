@@ -5,7 +5,7 @@ from copy import deepcopy
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import PullRequest, PullRequestDiff
+from app.db.models import PullRequest, PullRequestDiff, Repository
 
 
 def list_pull_requests(
@@ -27,6 +27,17 @@ def list_pull_requests(
     if state:
         items = [p for p in items if p.get("state") == state]
     return items
+
+
+def find_by_repo_number(session: Session, owner: str, repo: str, number: int) -> str | None:
+    full_name = f"{owner}/{repo}"
+    row = session.scalar(
+        select(PullRequest.id)
+        .join(Repository, PullRequest.repository_id == Repository.id)
+        .where(Repository.full_name == full_name, PullRequest.number == number)
+        .limit(1)
+    )
+    return row
 
 
 def get_pull_request(session: Session, pr_id: str) -> dict | None:

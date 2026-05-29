@@ -163,6 +163,7 @@ export function estimateCostCny(provider: AIProvider, totalTokens: number) {
 export function AISettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AISettings>(DEFAULT_SETTINGS)
   const [usageRecords, setUsageRecords] = useState<AIUsageRecord[]>([])
+  const [settingsHydrated, setSettingsHydrated] = useState(false)
 
   useEffect(() => {
     try {
@@ -179,16 +180,20 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
     } catch {
       setSettings(DEFAULT_SETTINGS)
       setUsageRecords([])
+    } finally {
+      setSettingsHydrated(true)
     }
   }, [])
 
   useEffect(() => {
+    if (!settingsHydrated) return
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
-  }, [settings])
+  }, [settings, settingsHydrated])
 
   useEffect(() => {
+    if (!settingsHydrated) return
     window.localStorage.setItem(USAGE_STORAGE_KEY, JSON.stringify(usageRecords))
-  }, [usageRecords])
+  }, [usageRecords, settingsHydrated])
 
   const updateSettings = useCallback((nextSettings: AISettings) => {
     setSettings(normalizeSettings(nextSettings))
@@ -220,7 +225,7 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
     return {
       settings,
       providerLabel,
-      hasApiKey: settings.apiKey.trim().length > 0,
+      hasApiKey: settingsHydrated && settings.apiKey.trim().length > 0,
       maskedApiKey: maskApiKey(settings.apiKey),
       usageRecords,
       monthlyUsage: {
@@ -233,7 +238,7 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
       recordUsage,
       clearUsage,
     }
-  }, [settings, usageRecords, updateSettings, updateSetting, recordUsage, clearUsage])
+  }, [settings, settingsHydrated, usageRecords, updateSettings, updateSetting, recordUsage, clearUsage])
 
   return <AISettingsContext.Provider value={value}>{children}</AISettingsContext.Provider>
 }

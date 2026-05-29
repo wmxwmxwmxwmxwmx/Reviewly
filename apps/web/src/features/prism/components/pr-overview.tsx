@@ -17,10 +17,14 @@ import {
   RotateCcw,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { PullRequest } from "@reviewly/shared"
+import type { AnalysisSummary, PullRequest } from "@reviewly/shared"
 
 interface PROverviewProps {
   prData: PullRequest
+  analysisScores?: Pick<
+    AnalysisSummary,
+    "riskScore" | "securityScore" | "performanceScore" | "maintainabilityScore"
+  >
 }
 
 const riskConfig = {
@@ -36,7 +40,24 @@ const deployRisk = {
   low: { label: "低", color: "text-risk-low" },
 }
 
-function RiskRing({ score, riskLevel }: { score: number; riskLevel: keyof typeof riskConfig }) {
+type RiskLevelKey = keyof typeof riskConfig
+type DeployRiskKey = keyof typeof deployRisk
+
+function getRiskConfig(level: string | undefined) {
+  if (level && level in riskConfig) {
+    return riskConfig[level as RiskLevelKey]
+  }
+  return riskConfig.medium
+}
+
+function getDeployRisk(level: string | undefined) {
+  if (level && level in deployRisk) {
+    return deployRisk[level as DeployRiskKey]
+  }
+  return deployRisk.medium
+}
+
+function RiskRing({ score, riskLevel }: { score: number; riskLevel: RiskLevelKey }) {
   const cfg = riskConfig[riskLevel]
   const r = 40
   const circ = 2 * Math.PI * r
@@ -98,8 +119,19 @@ function ScoreBar({ label, score, icon: Icon, color }: { label: string; score: n
   )
 }
 
-export function PROverview({ prData }: PROverviewProps) {
-  const cfg = riskConfig[prData.riskLevel]
+export function PROverview({ prData, analysisScores }: PROverviewProps) {
+  const cfg = getRiskConfig(prData.riskLevel)
+  const deployCfg = getDeployRisk(prData.deploymentRisk)
+  const rollbackCfg = getDeployRisk(prData.rollbackComplexity)
+  const riskRingLevel: RiskLevelKey =
+    prData.riskLevel && prData.riskLevel in riskConfig
+      ? (prData.riskLevel as RiskLevelKey)
+      : "medium"
+
+  const riskScore = analysisScores?.riskScore ?? prData.riskScore ?? 0
+  const securityScore = analysisScores?.securityScore ?? prData.securityScore ?? 0
+  const performanceScore = analysisScores?.performanceScore ?? prData.performanceScore ?? 0
+  const maintainabilityScore = analysisScores?.maintainabilityScore ?? prData.maintainabilityScore ?? 0
 
   return (
     <motion.div
@@ -170,16 +202,16 @@ export function PROverview({ prData }: PROverviewProps) {
 
           {/* Sub Scores */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
-            <ScoreBar label="安全评分" score={prData.securityScore} icon={Shield} color="text-risk-high" />
-            <ScoreBar label="性能评分" score={prData.performanceScore} icon={TrendingUp} color="text-ai-blue" />
-            <ScoreBar label="可维护性" score={prData.maintainabilityScore} icon={Wrench} color="text-risk-medium" />
+            <ScoreBar label="安全评分" score={securityScore} icon={Shield} color="text-risk-high" />
+            <ScoreBar label="性能评分" score={performanceScore} icon={TrendingUp} color="text-ai-blue" />
+            <ScoreBar label="可维护性" score={maintainabilityScore} icon={Wrench} color="text-risk-medium" />
             <div className="flex items-center gap-2.5">
               <Rocket className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <div className="flex-1">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-muted-foreground">部署风险</span>
-                  <span className={cn("text-[11px] font-semibold", deployRisk[prData.deploymentRisk].color)}>
-                    {deployRisk[prData.deploymentRisk].label}
+                  <span className={cn("text-[11px] font-semibold", deployCfg.color)}>
+                    {deployCfg.label}
                   </span>
                 </div>
               </div>
@@ -189,8 +221,8 @@ export function PROverview({ prData }: PROverviewProps) {
               <div className="flex-1">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-muted-foreground">回滚复杂度</span>
-                  <span className={cn("text-[11px] font-semibold", deployRisk[prData.rollbackComplexity].color)}>
-                    {deployRisk[prData.rollbackComplexity].label}
+                  <span className={cn("text-[11px] font-semibold", rollbackCfg.color)}>
+                    {rollbackCfg.label}
                   </span>
                 </div>
               </div>
@@ -200,7 +232,7 @@ export function PROverview({ prData }: PROverviewProps) {
 
         {/* Right: Risk Ring */}
         <div className="flex flex-col items-center gap-3 shrink-0">
-          <RiskRing score={prData.riskScore} riskLevel={prData.riskLevel} />
+          <RiskRing score={riskScore} riskLevel={riskRingLevel} />
           <div className={cn("flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold border", cfg.bg, cfg.border, cfg.color)}>
             <AlertTriangle className="w-3 h-3" />
             {cfg.label}

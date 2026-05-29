@@ -65,7 +65,7 @@ async def run_job(session: Session, job_id: str) -> None:
         analysis_repo.update_job(session, job_id, status="failed", error=str(exc))
         return
 
-    if not findings_list:
+    if not findings_list and seed.is_demo_pr(pr_id):
         findings_list = seed.list_findings(pr_id)
 
     analysis_repo.save_findings(session, job_id, findings_list)

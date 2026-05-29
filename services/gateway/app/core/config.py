@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     settings_encryption_key: str = ""
     prism_seed_db: bool = False
     github_app_slug: str = "prism-reviewly"
+    github_pat: str = ""
 
 
 settings = Settings()

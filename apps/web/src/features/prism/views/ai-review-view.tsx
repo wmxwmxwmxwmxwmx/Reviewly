@@ -1,8 +1,10 @@
 ﻿"use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import type { AnalysisFinding } from "@reviewly/shared"
 import { Loader2 } from "lucide-react"
 import { Header } from "@/features/prism/components/header"
+import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { PROverview } from "@/features/prism/components/pr-overview"
 import { AISummary } from "@/features/prism/components/ai-summary"
 import { DiffViewer } from "@/features/prism/components/diff-viewer"
@@ -10,6 +12,9 @@ import { AIPanel } from "@/features/prism/components/ai-panel"
 import { estimateCostCny, useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { usePullRequest } from "@/hooks/use-pull-request"
 import { usePullRequestDiff } from "@/hooks/use-pull-request-diff"
+import { usePrAnalysis } from "@/hooks/use-pr-analysis"
+import { importPullRequestByUrl } from "@/lib/api/pull-requests"
+import { PrismApiError } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
 
 interface AIReviewViewProps {
@@ -34,22 +39,82 @@ function buildDiffContext(files: ReturnType<typeof usePullRequestDiff>["files"])
     .join("\n\n---\n\n")
 }
 
+function buildFindingsContext(findings: AnalysisFinding[]) {
+  if (findings.length === 0) {
+    return "（规则扫描未发现结构化风险项，请仅依据 Diff 做评审。）"
+  }
+
+  return findings
+    .map(
+      (f) =>
+        `- [${f.severity}] ${f.file}:${f.line} ${f.title}\n  ${f.description}\n  修复建议：${f.fixSuggestion}`,
+    )
+    .join("\n")
+}
+
 export function AIReviewView({
   prId,
   onMenuClick,
   aiPanelOpen = true,
   onToggleAIPanel,
 }: AIReviewViewProps) {
+  const { navigate } = useNavigation()
   const { settings, hasApiKey, recordUsage } = useAISettings()
   const { data: pr, loading: prLoading, error: prError } = usePullRequest(prId)
   const { files: diffFiles, loading: diffLoading, error: diffError } = usePullRequestDiff(prId)
+  const { findings, latest, job, loadPersisted, runAnalysis, reset } = usePrAnalysis(prId)
 
   const [analyzing, setAnalyzing] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [syncLabel, setSyncLabel] = useState("同步完成")
   const [chunkProgress, setChunkProgress] = useState({ current: 0, total: 1 })
   const [generatedSummary, setGeneratedSummary] = useState<string | undefined>()
   const [analysisError, setAnalysisError] = useState<string | null>(null)
 
+  useEffect(() => {
+    reset()
+    setGeneratedSummary(undefined)
+    setAnalysisError(null)
+
+    const controller = new AbortController()
+    void loadPersisted(controller.signal)
+    return () => controller.abort()
+  }, [prId, reset, loadPersisted])
+
+  const handleImportUrl = useCallback(
+    async (url: string) => {
+      setImporting(true)
+      setImportError(null)
+      try {
+        const result = await importPullRequestByUrl(url)
+        if (result.source === "cache") {
+          setSyncLabel("已加载")
+        } else if (result.source === "github_app") {
+          setSyncLabel("已从 GitHub 同步")
+        } else {
+          setSyncLabel("已从 GitHub 导入")
+        }
+        if (result.prId !== prId) {
+          navigate("ai-review", { prId: result.prId })
+        }
+      } catch (error) {
+        const message =
+          error instanceof PrismApiError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : "无法加载 PR"
+        setImportError(message)
+      } finally {
+        setImporting(false)
+      }
+    },
+    [navigate, prId],
+  )
+
   const diffTotal = useMemo(() => Math.max(diffFiles.length, 1), [diffFiles.length])
+  const hasAnalysis = findings.length > 0 || Boolean(generatedSummary) || Boolean(latest?.summary)
 
   const handleAnalyze = async () => {
     if (analyzing || !pr) return
@@ -63,8 +128,32 @@ export function AIReviewView({
     setAnalysisError(null)
     setChunkProgress({ current: 0, total: diffTotal })
 
+    let jobFindings: AnalysisFinding[] = []
+    let jobSummary: string | undefined
+    const errors: string[] = []
+
+    try {
+      const result = await runAnalysis({
+        onProgress: (activeJob) => {
+          setChunkProgress({
+            current: Math.max(activeJob.chunkIndex, 0),
+            total: Math.max(activeJob.chunkTotal, diffTotal),
+          })
+        },
+      })
+      jobFindings = result.findings
+      jobSummary = result.latest.summary
+      setChunkProgress({
+        current: result.job.chunkTotal || diffTotal,
+        total: Math.max(result.job.chunkTotal, diffTotal),
+      })
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : "规则扫描任务失败")
+    }
+
     try {
       const diffContext = buildDiffContext(diffFiles)
+      const findingsContext = buildFindingsContext(jobFindings)
 
       const response = await fetch("/api/ai/chat", {
         method: "POST",
@@ -77,11 +166,22 @@ export function AIReviewView({
             {
               role: "system",
               content:
-                "你是 PRism 的资深代码评审 AI。请用中文输出结构化 PR 评审摘要，重点关注安全、性能、架构、破坏性变更和是否建议合并。输出应简洁、可行动。",
+                "你是 PRism 的资深代码评审 AI。请用中文输出结构化 PR 评审摘要（Markdown），重点关注安全、性能、架构、破坏性变更和是否建议合并。必须仅基于用户提供的 Diff 与 findings，禁止编造未出现的文件或问题。",
             },
             {
               role: "user",
-              content: `请评审这个合并请求。\n\nPR 标题：${pr.title}\n仓库：${pr.repo}\n分支：${pr.sourceBranch} -> ${pr.targetBranch}\n变更规模：${pr.filesChanged} 文件，+${pr.additions} -${pr.deletions}\n\nDiff 摘要：\n${diffContext || "（无 diff 内容）"}`,
+              content: `请评审这个合并请求。
+
+PR 标题：${pr.title}
+仓库：${pr.repo}
+分支：${pr.sourceBranch} -> ${pr.targetBranch}
+变更规模：${pr.filesChanged} 文件，+${pr.additions} -${pr.deletions}
+
+规则扫描 findings：
+${findingsContext}
+
+Diff 摘要：
+${diffContext || "（无 diff 内容）"}`,
             },
           ],
         }),
@@ -93,13 +193,12 @@ export function AIReviewView({
         const errMsg =
           typeof data?.error === "string"
             ? data.error
-            : data?.detail?.error ?? "AI 分析失败"
+            : data?.detail?.error ?? "AI 摘要生成失败"
         throw new Error(errMsg)
       }
 
       const totalTokens = Number(data?.usage?.totalTokens) || 0
-      setGeneratedSummary(data?.content || "模型未返回内容。")
-      setChunkProgress({ current: diffTotal, total: diffTotal })
+      setGeneratedSummary(data?.content || jobSummary || "模型未返回内容。")
 
       recordUsage({
         provider: settings.provider,
@@ -111,11 +210,32 @@ export function AIReviewView({
         latencyMs: Number(data?.latencyMs) || 0,
       })
     } catch (error) {
-      setAnalysisError(error instanceof Error ? error.message : "AI 分析失败")
-    } finally {
-      setAnalyzing(false)
+      errors.push(error instanceof Error ? error.message : "AI 摘要生成失败")
+      if (jobSummary) {
+        setGeneratedSummary(jobSummary)
+      }
     }
+
+    if (errors.length > 0) {
+      const partial = jobFindings.length > 0 || Boolean(jobSummary) || Boolean(generatedSummary)
+      if (!partial) {
+        setAnalysisError(errors.join("；"))
+      } else {
+        setAnalysisError(errors.join("；"))
+      }
+    }
+
+    setAnalyzing(false)
   }
+
+  const analysisScores = latest
+    ? {
+        riskScore: latest.riskScore,
+        securityScore: latest.securityScore,
+        performanceScore: latest.performanceScore,
+        maintainabilityScore: latest.maintainabilityScore,
+      }
+    : undefined
 
   if (prLoading) {
     return (
@@ -142,17 +262,23 @@ export function AIReviewView({
             prData={pr}
             analyzing={analyzing}
             onAnalyze={handleAnalyze}
+            onImportUrl={handleImportUrl}
+            importing={importing}
+            importError={importError}
+            syncLabel={syncLabel}
             onMenuClick={onMenuClick}
             aiPanelOpen={aiPanelOpen}
             onToggleAIPanel={onToggleAIPanel}
           />
 
           <div className="p-5 space-y-4">
-            <PROverview prData={pr} />
+            <PROverview prData={pr} analysisScores={analysisScores} />
             <AISummary
               streaming={analyzing}
               model={settings.model}
               generatedSummary={generatedSummary}
+              jobSummary={latest?.summary}
+              hasAnalysis={hasAnalysis}
               error={analysisError}
             />
 
@@ -187,7 +313,15 @@ export function AIReviewView({
           !aiPanelOpen && "max-xl:w-0 max-xl:overflow-hidden",
         )}
       >
-        {aiPanelOpen && <AIPanel analyzing={analyzing} />}
+        {aiPanelOpen && (
+          <AIPanel
+            analyzing={analyzing}
+            findings={findings}
+            job={job ?? undefined}
+            mergeRecommendation={latest?.mergeRecommendation}
+            filesChanged={pr.filesChanged}
+          />
+        )}
       </div>
     </div>
   )

@@ -49,7 +49,7 @@ async def run_analysis_pipeline(
         if progress.get("status") == "failed":
             return
 
-    if not findings_list:
+    if not findings_list and seed.is_demo_pr(pull_request_id):
         findings_list = seed.list_findings(pull_request_id)
 
     summary = build_result_summary(findings_list, pull_request_id)

@@ -1,7 +1,9 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.errors import api_error
+from app.github.import_pr import import_pull_request_by_url
 from app.db.deps import get_db
 from app.repositories import analysis as analysis_repo
 from app.repositories import dashboard as dashboard_repo
@@ -11,6 +13,16 @@ from app.repositories import settings as settings_repo
 from app.services import analysis_jobs
 
 router = APIRouter(prefix="/api", tags=["data"])
+
+
+class ImportPrBody(BaseModel):
+    url: str = Field(min_length=1)
+    pr_url: str | None = Field(default=None, validation_alias="prUrl")
+
+    model_config = {"populate_by_name": True}
+
+    def resolved_url(self) -> str:
+        return (self.pr_url or self.url).strip()
 
 
 @router.get("/dashboard")
@@ -35,6 +47,11 @@ def pull_requests(
 ) -> dict:
     items = pr_repo.list_pull_requests(db, repo=repo, risk=risk, author=author, state=state)
     return {"items": items[:limit], "cursor": cursor, "hasMore": len(items) > limit}
+
+
+@router.post("/pull-requests/import")
+async def import_pull_request(body: ImportPrBody, db: Session = Depends(get_db)) -> dict:
+    return await import_pull_request_by_url(db, body.resolved_url())
 
 
 @router.get("/pull-requests/{pr_id}")

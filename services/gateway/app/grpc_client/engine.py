@@ -30,7 +30,7 @@ class StubEngineClient:
     ) -> AsyncIterator[dict[str, Any]]:
         _ = job_id, pull_request_id
         findings, chunks = analyze_patch(patch, file_paths)
-        if not findings:
+        if not findings and seed.is_demo_pr(pull_request_id):
             findings = seed.list_findings(pull_request_id)
 
         for progress in iter_chunk_progress(chunks, findings):

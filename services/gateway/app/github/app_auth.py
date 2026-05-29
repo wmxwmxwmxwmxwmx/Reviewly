@@ -61,3 +61,27 @@ async def get_installation_token(installation_id: str) -> str:
 
     _token_cache[installation_id] = (token, expiry_ts)
     return token
+
+
+async def get_installation_id_for_repo(owner: str, repo: str) -> str | None:
+    """Return installation id if the GitHub App is installed on owner/repo."""
+    if not settings.github_app_id or not settings.github_app_private_key:
+        return None
+
+    app_jwt = create_app_jwt()
+    url = f"https://api.github.com/repos/{owner}/{repo}/installation"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(
+            url,
+            headers={
+                "Authorization": f"Bearer {app_jwt}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        data: dict[str, Any] = resp.json()
+        inst_id = data.get("id")
+        return str(inst_id) if inst_id is not None else None

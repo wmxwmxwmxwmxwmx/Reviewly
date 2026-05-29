@@ -62,6 +62,28 @@ docker compose up -d postgres   # 若仓库提供 compose
 
 ---
 
+### 通过 PR URL 导入（AI 评审顶栏）
+
+**做什么：** 在 Web **AI 评审**页顶栏粘贴 `https://github.com/owner/repo/pull/123`，按 **Enter** 或点击箭头，将 PR 与 diff 导入本地库并打开该 PR。
+
+**数据路径（Gateway 自动选择）：**
+
+1. 若该 PR 已在库中 → 直接跳转（`source: cache`）
+2. 若已配置 **GitHub App** 且已安装到该仓库 → App 拉取（`github_app`）
+3. 否则尝试 **公开仓库** REST API（`github_public`）；私有仓库需 App 或 `.env` 中的 `GITHUB_PAT`
+
+**API（可选调试）：**
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:3001/api/pull-requests/import -Method POST `
+  -ContentType "application/json" `
+  -Body '{"url":"https://github.com/owner/repo/pull/1"}'
+```
+
+**成功标准：** 返回 `prId`；浏览器跳转到对应 PR，Diff 区域有内容。公开仓无需 App；私有仓需完成下文 GitHub App 或配置 `GITHUB_PAT`。
+
+---
+
 ### 2. 设置加密密钥（保存 API Key 时必需）
 
 **做什么：** 为 `secrets` 字段配置 Fernet 密钥。

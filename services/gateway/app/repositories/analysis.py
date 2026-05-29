@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import AnalysisFinding, AnalysisJob, PullRequest
+from app.db.models import AnalysisFinding, AnalysisJob
 from app.mock import seed
 
 
@@ -122,10 +122,7 @@ def get_latest_analysis(session: Session, pull_request_id: str) -> dict | None:
     if job and job.result_summary:
         return deepcopy(job.result_summary)
 
-    pr = session.get(PullRequest, pull_request_id)
-    if pr is None:
-        return None
-    return seed.get_latest_analysis(pull_request_id)
+    return None
 
 
 def get_findings(session: Session, pull_request_id: str) -> list[dict]:
@@ -142,11 +139,8 @@ def get_findings(session: Session, pull_request_id: str) -> list[dict]:
         rows = session.scalars(
             select(AnalysisFinding).where(AnalysisFinding.job_id == job.id)
         ).all()
-        if rows:
-            return [_finding_to_api(r) for r in rows]
+        return [_finding_to_api(r) for r in rows]
 
-    if session.get(PullRequest, pull_request_id):
-        return seed.list_findings(pull_request_id)
     return []
 
 

@@ -10,6 +10,10 @@ _SEED_JSON = Path(__file__).parent / "seed_data.json"
 
 DEFAULT_PR_ID = "pr-2847"
 
+
+def is_demo_pr(pr_id: str) -> bool:
+    return pr_id == DEFAULT_PR_ID
+
 _REPOS: list[dict[str, Any]] = [
     {
         "id": "repo-payment",

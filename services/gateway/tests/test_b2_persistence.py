@@ -40,6 +40,66 @@ def test_security_stats(client: TestClient) -> None:
     assert body["status"] == "ok"
 
 
+def test_findings_empty_without_job_for_non_demo_pr(client: TestClient) -> None:
+    from unittest.mock import AsyncMock, patch
+
+    from app.mock.seed import DEFAULT_PR_ID
+
+    mock_pr = {
+        "id": 999002,
+        "number": 99,
+        "title": "imported pr",
+        "state": "open",
+        "user": {"login": "dev"},
+        "updated_at": "2025-01-01T00:00:00Z",
+        "created_at": "2025-01-01T00:00:00Z",
+        "head": {"ref": "feat"},
+        "base": {"ref": "main", "repo": {"id": 889}},
+        "additions": 1,
+        "deletions": 0,
+        "changed_files": 1,
+        "html_url": "https://github.com/octocat/other/pull/99",
+    }
+    mock_repo = {"id": 889, "full_name": "octocat/other", "default_branch": "main"}
+
+    with (
+        patch(
+            "app.github.import_pr.get_installation_id_for_repo",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "app.github.public_client.get_repo",
+            new_callable=AsyncMock,
+            return_value=mock_repo,
+        ),
+        patch(
+            "app.github.public_client.get_pull_request",
+            new_callable=AsyncMock,
+            return_value=mock_pr,
+        ),
+        patch(
+            "app.github.public_client.get_pull_diff_patch",
+            new_callable=AsyncMock,
+            return_value="",
+        ),
+    ):
+        imported = client.post(
+            "/api/pull-requests/import",
+            json={"url": "https://github.com/octocat/other/pull/99"},
+        )
+    assert imported.status_code == 200
+    pr_id = imported.json()["prId"]
+    assert pr_id != DEFAULT_PR_ID
+
+    findings = client.get(f"/api/pull-requests/{pr_id}/findings")
+    assert findings.status_code == 200
+    assert findings.json() == []
+
+    latest = client.get(f"/api/pull-requests/{pr_id}/analysis/latest")
+    assert latest.status_code == 404
+
+
 def test_diff_parser_unit() -> None:
     from app.grpc_client.diff_parser import parse_unified_diff
 
