@@ -32,6 +32,14 @@ def test_settings_patch(client: TestClient) -> None:
     assert r.json()["ai"]["temperature"] == 0.3
 
 
+def test_security_stats(client: TestClient) -> None:
+    r = client.get("/api/security/stats")
+    assert r.status_code == 200
+    body = r.json()
+    assert "openFindings" in body
+    assert body["status"] == "ok"
+
+
 def test_diff_parser_unit() -> None:
     from app.grpc_client.diff_parser import parse_unified_diff
 

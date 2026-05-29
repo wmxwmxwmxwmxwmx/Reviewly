@@ -10,13 +10,10 @@ from app.core.config import settings
 from app.core.errors import api_error
 from app.db.deps import get_db
 from app.github import sync, webhooks
-from app.grpc_client.engine import get_engine_client
 from app.mock import seed
-from app.repositories import analysis as analysis_repo
-from app.repositories import governance as governance_repo
 from app.repositories import settings as settings_repo
-from app.repositories import team as team_repo
 from app.services import settings_crypto
+from app.services.integration_test import run_integration_test
 
 router = APIRouter(prefix="/api", tags=["placeholders"])
 
@@ -60,62 +57,21 @@ async def github_webhook(
     return {"ok": True, "event": event}
 
 
-@router.get("/governance/rules")
-def governance_rules(db: Session = Depends(get_db)) -> list:
-    return governance_repo.list_rules(db)
-
-
-@router.get("/governance/violations")
-def governance_violations(db: Session = Depends(get_db)) -> list:
-    return governance_repo.list_violations(db)
-
-
-@router.get("/team/members")
-def team_members(db: Session = Depends(get_db)) -> list:
-    return team_repo.list_members(db)
-
-
-@router.get("/performance/stats")
-def performance_stats(db: Session = Depends(get_db)) -> dict:
-    findings = analysis_repo.list_security_findings(db)
-    perf = [f for f in findings if f.get("type") != "security"]
-    return {
-        "openFindings": len(perf) or 4,
-        "avgImpact": "medium",
-        "status": "ok",
-    }
-
-
-@router.get("/performance/findings")
-def performance_findings(db: Session = Depends(get_db)) -> list:
-    all_findings = analysis_repo.get_findings(db, seed.DEFAULT_PR_ID)
-    perf = [f for f in all_findings if f.get("type") != "security"]
-    return perf or [f for f in seed.list_findings(seed.DEFAULT_PR_ID) if f.get("type") != "security"]
-
-
-@router.get("/architecture/repos/{repo_id}/graph")
-async def architecture_graph(repo_id: str) -> dict:
-    client = get_engine_client()
-    graph = await client.build_dependency_graph(repo_id)
-    graph["status"] = "ok"
-    return graph
-
-
 @router.post("/settings/test-integration")
-def test_integration(db: Session = Depends(get_db)) -> dict:
-    cfg = settings_repo.get_settings(db)
-    provider = cfg.get("ai", {}).get("provider", "")
-    if not provider:
-        return {"ok": False, "message": "未配置 AI 供应商"}
-    if settings_crypto.is_configured():
-        return {"ok": True, "message": "设置已加载，密钥已加密存储"}
-    return {"ok": True, "message": "设置已加载（B10 加密未启用）"}
+async def test_integration(db: Session = Depends(get_db)) -> dict:
+    return await run_integration_test(db)
 
 
 @router.post("/settings/rotate-secret")
 def rotate_secret(db: Session = Depends(get_db)) -> dict:
     if not settings_crypto.is_configured():
         raise api_error("请先配置 SETTINGS_ENCRYPTION_KEY", 501)
-    row = settings_repo.get_settings(db)
-    _ = row
-    return {"ok": True, "message": "密钥轮换已记录（占位：需写入新 encrypted_secrets）"}
+    try:
+        result = settings_repo.rotate_secrets(db)
+    except ValueError as exc:
+        raise api_error(str(exc), 501) from exc
+    return {
+        "ok": True,
+        "rotated": result["rotated"],
+        "message": f"已重新加密 {result['rotated']} 条密钥",
+    }

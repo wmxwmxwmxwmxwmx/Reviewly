@@ -18,8 +18,9 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import { useSecurity } from "@/hooks/use-security"
 
-const vulnerabilities = [
+const fallbackVulnerabilities = [
   {
     id: "CVE-2024-31982",
     severity: "critical",
@@ -77,13 +78,6 @@ const vulnerabilities = [
   },
 ]
 
-const securityMetrics = [
-  { label: "安全评分", value: "72", change: "+3", trend: "up", suffix: "/100" },
-  { label: "开放漏洞", value: "5", change: "-2", trend: "down", suffix: "" },
-  { label: "严重问题", value: "1", change: "0", trend: "neutral", suffix: "" },
-  { label: "平均修复时间", value: "2.4", change: "-0.5", trend: "down", suffix: "天" },
-]
-
 const severityConfig = {
   critical: { color: "text-[oklch(0.55_0.22_27)]", bg: "bg-[oklch(0.55_0.22_27/0.1)]", label: "严重" },
   high: { color: "text-risk-high", bg: "bg-[oklch(0.62_0.21_32/0.1)]", label: "高危" },
@@ -99,6 +93,53 @@ const statusConfig = {
 
 export function SecurityView() {
   const { navigate } = useNavigation()
+  const { findings, stats, loading, error } = useSecurity()
+
+  const vulnerabilities =
+    findings.length > 0
+      ? findings.map((f) => ({
+          id: f.id,
+          severity: f.severity,
+          title: f.title,
+          file: f.file,
+          line: f.line,
+          cwe: f.cweId ?? "—",
+          status: (f.status ?? "open") as "open" | "in-progress" | "resolved",
+          discovered: "来自分析",
+          description: f.description ?? "",
+        }))
+      : fallbackVulnerabilities
+
+  const securityMetrics = [
+    {
+      label: "安全评分",
+      value: stats ? String(Math.max(0, 100 - stats.critical * 15)) : "72",
+      change: "+3",
+      trend: "up" as const,
+      suffix: "/100",
+    },
+    {
+      label: "开放漏洞",
+      value: stats ? String(stats.openFindings) : "5",
+      change: "-2",
+      trend: "down" as const,
+      suffix: "",
+    },
+    {
+      label: "严重问题",
+      value: stats ? String(stats.critical) : "1",
+      change: "0",
+      trend: "neutral" as const,
+      suffix: "",
+    },
+    {
+      label: "高危问题",
+      value: stats ? String(stats.high) : "2",
+      change: "0",
+      trend: "neutral" as const,
+      suffix: "",
+    },
+  ]
 
   return (
     <div className="p-5 space-y-5">
@@ -119,6 +160,8 @@ export function SecurityView() {
           </button>
         </div>
       </div>
+
+      {error && <p className="text-sm text-risk-high">{error}</p>}
 
       {/* Metrics */}
       <div className="grid grid-cols-4 gap-3">
@@ -171,7 +214,11 @@ export function SecurityView() {
         </div>
 
         <div className="divide-y divide-border">
-          {vulnerabilities.map((vuln, idx) => {
+          {loading && (
+            <p className="px-4 py-6 text-sm text-muted-foreground">加载中…</p>
+          )}
+          {!loading &&
+            vulnerabilities.map((vuln, idx) => {
             const severity = severityConfig[vuln.severity as keyof typeof severityConfig]
             const status = statusConfig[vuln.status as keyof typeof statusConfig]
             return (

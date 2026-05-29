@@ -6,54 +6,121 @@ info:
 servers:
   - url: http://localhost:3001
 paths:
+  /health:
+    get:
+      summary: Health check
   /api/ai/chat:
     post:
       summary: AI chat proxy
-      operationId: aiChat
   /api/dashboard:
     get:
       summary: Dashboard stats
-      operationId: getDashboard
   /api/repos:
     get:
       summary: List repositories
-      operationId: listRepos
+  /api/repos/sync:
+    post:
+      summary: Sync repositories from GitHub
   /api/pull-requests:
     get:
       summary: List pull requests
-      operationId: listPullRequests
   /api/pull-requests/{id}:
     get:
       summary: Get pull request
-      operationId: getPullRequest
   /api/pull-requests/{id}/diff:
     get:
       summary: Get PR diff
-      operationId: getPullRequestDiff
   /api/pull-requests/{id}/analysis:
     post:
       summary: Start analysis job
-      operationId: startAnalysis
   /api/pull-requests/{id}/analysis/latest:
     get:
       summary: Latest analysis summary
-      operationId: getLatestAnalysis
   /api/pull-requests/{id}/findings:
     get:
       summary: Analysis findings
-      operationId: getFindings
   /api/analysis/jobs/{jobId}:
     get:
       summary: Get analysis job
-      operationId: getAnalysisJob
   /api/security/findings:
     get:
-      summary: Security findings
-      operationId: listSecurityFindings
+      summary: List security findings
+    post:
+      summary: Create security finding
+  /api/security/findings/{findingId}:
+    get:
+      summary: Get security finding
+    patch:
+      summary: Update security finding
+    delete:
+      summary: Delete security finding
+  /api/security/stats:
+    get:
+      summary: Security stats
+  /api/performance/stats:
+    get:
+      summary: Performance stats
+  /api/performance/findings:
+    get:
+      summary: List performance findings
+  /api/performance/findings/{findingId}:
+    get:
+      summary: Get performance finding
+    post:
+      summary: Create performance finding
+    patch:
+      summary: Update performance finding
+    delete:
+      summary: Delete performance finding
+  /api/governance/rules:
+    get:
+      summary: List governance rules
+    post:
+      summary: Create governance rule
+  /api/governance/rules/{ruleId}:
+    get:
+      summary: Get governance rule
+    patch:
+      summary: Update governance rule
+    delete:
+      summary: Delete governance rule
+  /api/governance/violations:
+    get:
+      summary: List governance violations
+  /api/governance/audit-logs:
+    get:
+      summary: List audit logs
+    post:
+      summary: Create audit log
+  /api/team/members:
+    get:
+      summary: List team members
+    post:
+      summary: Create team member
+  /api/team/members/{memberId}:
+    get:
+      summary: Get team member
+    patch:
+      summary: Update team member
+    delete:
+      summary: Delete team member
+  /api/architecture/repos/{repoId}/graph:
+    get:
+      summary: Dependency graph
   /api/settings:
     get:
       summary: Get settings
-      operationId: getSettings
     patch:
       summary: Update settings
-      operationId: patchSettings
+  /api/settings/test-integration:
+    post:
+      summary: Test AI integration
+  /api/settings/rotate-secret:
+    post:
+      summary: Rotate encrypted secrets
+  /api/integrations/github/install-url:
+    get:
+      summary: GitHub App install URL
+  /api/webhooks/github:
+    post:
+      summary: GitHub webhook

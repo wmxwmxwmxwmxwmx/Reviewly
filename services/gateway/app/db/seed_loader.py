@@ -104,5 +104,27 @@ def load_seed_if_empty(session: Session) -> bool:
             )
         )
 
+    from app.repositories import analysis as analysis_repo
+
+    job = analysis_repo.create_job(session, seed.DEFAULT_PR_ID, 1)
+    seeded_findings: list = []
+    for f in seed.list_findings(seed.DEFAULT_PR_ID):
+        seeded_findings.append(deepcopy(f))
+    seeded_findings.append(
+        {
+            "id": "perf-seed-1",
+            "type": "performance",
+            "severity": "medium",
+            "title": "示例性能发现",
+            "file": "internal/cache/payment_cache.go",
+            "line": 50,
+            "description": "seed",
+            "confidence": 80,
+            "rootCause": "",
+            "fixSuggestion": "",
+        }
+    )
+    analysis_repo.save_findings(session, job.id, seeded_findings)
+
     session.commit()
     return True

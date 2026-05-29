@@ -18,7 +18,10 @@ add_executable(prism_engine
   src/rules/rules.cpp
   src/graph/graph.cpp
 )
-target_link_libraries(prism_engine PRIVATE prism_diff prism_scoring)
+add_library(prism_rules src/rules/rules.cpp)
+target_include_directories(prism_rules PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+target_link_libraries(prism_engine PRIVATE prism_diff prism_scoring prism_rules)
 target_include_directories(prism_engine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if(PRISM_USE_GRPC)

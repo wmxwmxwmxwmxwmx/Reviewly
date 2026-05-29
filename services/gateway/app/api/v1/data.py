@@ -114,11 +114,6 @@ def analysis_job(job_id: str, db: Session = Depends(get_db)) -> dict:
     return job
 
 
-@router.get("/security/findings")
-def security_findings(db: Session = Depends(get_db)) -> list:
-    return analysis_repo.list_security_findings(db)
-
-
 @router.get("/settings")
 def get_settings(db: Session = Depends(get_db)) -> dict:
     return settings_repo.get_settings(db)

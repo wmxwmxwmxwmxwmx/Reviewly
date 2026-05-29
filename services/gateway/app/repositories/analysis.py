@@ -30,7 +30,9 @@ def _job_to_api(job: AnalysisJob) -> dict:
 
 def _finding_to_api(row: AnalysisFinding) -> dict:
     if row.payload:
-        return deepcopy(row.payload)
+        out = deepcopy(row.payload)
+        out["id"] = row.id
+        return out
     return {
         "id": row.id,
         "type": row.type,
@@ -87,17 +89,21 @@ def update_job(session: Session, job_id: str, **fields: object) -> None:
 
 
 def save_findings(session: Session, job_id: str, findings: list[dict]) -> None:
-    for f in findings:
+    for i, f in enumerate(findings):
+        raw_id = f.get("id") or f"finding-{i}"
+        fid = raw_id if str(raw_id).startswith(f"{job_id}:") else f"{job_id}:{raw_id}"
+        payload = deepcopy(f)
+        payload["id"] = fid
         session.add(
             AnalysisFinding(
-                id=f.get("id", f"finding-{job_id}-{f.get('file', 'x')}"),
+                id=fid,
                 job_id=job_id,
                 type=f.get("type", "security"),
                 severity=f.get("severity", "medium"),
                 title=f.get("title", ""),
                 file=f.get("file", ""),
                 line=int(f.get("line", 0)),
-                payload=deepcopy(f),
+                payload=payload,
             )
         )
     session.commit()
@@ -151,3 +157,18 @@ def list_security_findings(session: Session) -> list[dict]:
     if rows:
         return [_finding_to_api(r) for r in rows]
     return seed.list_security_findings()
+
+
+def get_security_stats(session: Session) -> dict:
+    findings = list_security_findings(session)
+    critical = sum(1 for f in findings if f.get("severity") == "critical")
+    high = sum(1 for f in findings if f.get("severity") == "high")
+    medium = sum(1 for f in findings if f.get("severity") == "medium")
+    return {
+        "openFindings": len(findings),
+        "critical": critical,
+        "high": high,
+        "medium": medium,
+        "low": len(findings) - critical - high - medium,
+        "status": "ok",
+    }

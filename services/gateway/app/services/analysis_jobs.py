@@ -1,18 +1,16 @@
-"""Analysis job orchestration (B1 in-memory → B2 DB → B4 pipeline)."""
+"""Analysis job orchestration (B1 → B2 DB → B4 pipeline)."""
 from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.models import PullRequestDiff
 from app.grpc_client.engine import get_engine_client
 from app.mock import seed
 from app.repositories import analysis as analysis_repo
 from app.repositories import pull_requests as pr_repo
-
-
-def _default_summary(pull_request_id: str) -> dict[str, Any] | None:
-    return seed.get_latest_analysis(pull_request_id)
 
 
 async def run_job(session: Session, job_id: str) -> None:
@@ -25,9 +23,12 @@ async def run_job(session: Session, job_id: str) -> None:
 
     client = get_engine_client()
     findings_list: list[dict[str, Any]] = []
+    result_summary: dict[str, Any] | None = None
+
     diff_files = pr_repo.get_diff(session, pr_id)
     file_paths = [f["path"] for f in diff_files]
-    patch = ""
+    diff_row = session.scalar(select(PullRequestDiff).where(PullRequestDiff.pull_request_id == pr_id))
+    patch = diff_row.patch if diff_row and diff_row.patch else ""
 
     from app.analysis.pipeline import run_analysis_pipeline
 
@@ -50,6 +51,8 @@ async def run_job(session: Session, job_id: str) -> None:
             )
             if progress.get("findings"):
                 findings_list = progress["findings"]
+            if progress.get("resultSummary"):
+                result_summary = progress["resultSummary"]
             if progress.get("status") == "failed":
                 analysis_repo.update_job(
                     session,
@@ -66,13 +69,18 @@ async def run_job(session: Session, job_id: str) -> None:
         findings_list = seed.list_findings(pr_id)
 
     analysis_repo.save_findings(session, job_id, findings_list)
-    summary = _default_summary(pr_id)
+
+    if not result_summary:
+        from app.engine.summary import build_result_summary
+
+        result_summary = build_result_summary(findings_list, pr_id)
+
     analysis_repo.update_job(
         session,
         job_id,
         status="completed",
         progress=100,
-        resultSummary=summary,
+        resultSummary=result_summary,
         completedAt=True,
     )
 

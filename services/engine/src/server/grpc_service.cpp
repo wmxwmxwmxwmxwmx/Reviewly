@@ -1,6 +1,8 @@
 #ifdef PRISM_USE_GRPC
 
 #include "diff/parser.hpp"
+#include "rules/rules.hpp"
+#include "scoring/scoring.hpp"
 
 #include <grpcpp/grpcpp.h>
 #include <iostream>
@@ -57,20 +59,49 @@ class EngineServiceImpl final : public prism::v1::EngineService::Service {
 
   Status RunAnalysis(ServerContext*, const prism::v1::AnalysisInput* request,
                      ServerWriter<prism::v1::AnalysisProgress>* writer) override {
+    const std::string patch = request->patch();
+    auto files = prism::diff::parse_unified_diff(patch);
     const int total = std::max(static_cast<int>(request->file_paths_size()), 1);
+
+    int critical = 0, high = 0, medium = 0;
     for (int i = 0; i < total; ++i) {
       prism::v1::AnalysisProgress progress;
       progress.set_status("running");
       progress.set_progress(static_cast<int>((i + 1) * 100 / total));
       progress.set_chunk_index(i + 1);
       progress.set_chunk_total(total);
+
+      if (i < static_cast<int>(files.size())) {
+        std::string content;
+        for (const auto& chunk : files[i].chunks) {
+          for (const auto& line : chunk.lines) {
+            content += line.content + "\n";
+          }
+        }
+        auto findings = prism::rules::scan_sql_concat(files[i].path, content);
+        for (const auto& f : findings) {
+          auto* out = progress.add_findings();
+          out->set_id(f.id);
+          out->set_type("security");
+          out->set_severity(f.severity);
+          out->set_title(f.title);
+          out->set_file(f.file);
+          out->set_line(f.line);
+          if (f.severity == "critical") ++critical;
+          else if (f.severity == "high") ++high;
+          else ++medium;
+        }
+      }
       writer->Write(progress);
     }
+
     prism::v1::AnalysisProgress done;
     done.set_status("completed");
     done.set_progress(100);
     done.set_chunk_index(total);
     done.set_chunk_total(total);
+    const int risk = prism::scoring::aggregate_risk_score(critical, high, medium);
+    (void)risk;
     writer->Write(done);
     return Status::OK;
   }

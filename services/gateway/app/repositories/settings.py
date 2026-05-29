@@ -29,6 +29,13 @@ def patch_settings(session: Session, patch: dict) -> dict:
     data = deepcopy(row.data)
     secrets_patch = patch.pop("secrets", None)
 
+    ai_patch = patch.get("ai")
+    if isinstance(ai_patch, dict) and ai_patch.get("apiKey"):
+        provider = ai_patch.get("provider") or data.get("ai", {}).get("provider", "openai")
+        if secrets_patch is None:
+            secrets_patch = {}
+        secrets_patch[str(provider)] = str(ai_patch.pop("apiKey"))
+
     for key, value in patch.items():
         if isinstance(value, dict) and isinstance(data.get(key), dict):
             data[key].update(value)
@@ -64,3 +71,29 @@ def _decrypt_secrets(blob: str) -> dict:
 
     raw = decrypt_secret(blob)
     return json.loads(raw)
+
+
+def get_decrypted_secrets(session: Session) -> dict[str, str]:
+    """Return plaintext API keys from encrypted store; empty dict if unavailable."""
+    row = session.get(Setting, "default")
+    if row is None or not row.encrypted_secrets or not settings_crypto.is_configured():
+        return {}
+    try:
+        secrets = _decrypt_secrets(row.encrypted_secrets)
+        return {k: v for k, v in secrets.items() if isinstance(v, str) and v.strip()}
+    except Exception:
+        return {}
+
+
+def rotate_secrets(session: Session) -> dict[str, int]:
+    """Re-encrypt stored secrets with current SETTINGS_ENCRYPTION_KEY (validates round-trip)."""
+    row = session.get(Setting, "default")
+    if row is None or not row.encrypted_secrets:
+        return {"rotated": 0}
+    if not settings_crypto.is_configured():
+        raise ValueError("SETTINGS_ENCRYPTION_KEY 未配置")
+
+    secrets = _decrypt_secrets(row.encrypted_secrets)
+    row.encrypted_secrets = settings_crypto.encrypt_secrets_json(secrets)
+    session.commit()
+    return {"rotated": len(secrets)}

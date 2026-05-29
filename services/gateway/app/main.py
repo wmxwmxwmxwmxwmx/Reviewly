@@ -14,12 +14,11 @@ from app.db.session import SessionLocal, engine
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
-    if settings.prism_seed_db:
-        db = SessionLocal()
-        try:
-            load_seed_if_empty(db)
-        finally:
-            db.close()
+    db = SessionLocal()
+    try:
+        load_seed_if_empty(db)
+    finally:
+        db.close()
     yield
 
 
