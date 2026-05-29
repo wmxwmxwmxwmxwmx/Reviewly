@@ -25,9 +25,9 @@ interface HeaderProps {
 }
 
 const reviewers = [
-  { initials: "LM", color: "from-[oklch(0.55_0.19_240)] to-[oklch(0.45_0.14_280)]" },
-  { initials: "XH", color: "from-[oklch(0.55_0.19_148)] to-[oklch(0.45_0.14_180)]" },
-  { initials: "WP", color: "from-[oklch(0.55_0.19_46)] to-[oklch(0.45_0.14_27)]" },
+  { initials: "LM", color: "from-ai-blue to-ai-purple" },
+  { initials: "XH", color: "from-risk-low to-risk-info" },
+  { initials: "WP", color: "from-risk-high to-risk-critical" },
 ]
 
 export function Header({
@@ -42,7 +42,7 @@ export function Header({
   const [focused, setFocused] = useState(false)
 
   return (
-    <header className="sticky top-0 z-30 flex items-center gap-3 sm:gap-4 h-[68px] px-4 sm:px-5 border-b border-border bg-[oklch(0.125_0.004_264/0.95)] backdrop-blur-sm shrink-0">
+    <header className="sticky top-0 z-30 flex items-center gap-3 sm:gap-4 h-[68px] px-4 sm:px-5 border-b border-border bg-panel/95 backdrop-blur-sm shrink-0 shadow-[0_18px_50px_rgba(0,0,0,0.20)]">
       {onMenuClick && (
         <button
           type="button"
@@ -58,8 +58,8 @@ export function Header({
         className={cn(
           "relative flex items-center gap-2 flex-1 max-w-[400px] h-9 px-3 rounded-md border bg-surface-2 transition-all duration-200",
           focused
-            ? "border-ai-blue shadow-[0_0_0_2px_oklch(0.62_0.19_240/0.15)]"
-            : "border-border hover:border-[oklch(0.32_0.006_264)]"
+            ? "border-ai-blue shadow-[0_0_0_2px_rgba(56,189,248,0.15)]"
+            : "border-border hover:border-border-strong"
         )}
       >
         <Github className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -95,11 +95,11 @@ export function Header({
           </span>
         </div>
         <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono shrink-0">
-          <span className="px-1.5 py-0.5 rounded bg-[oklch(0.62_0.19_240/0.10)] text-[oklch(0.72_0.19_240)] border border-[oklch(0.62_0.19_240/0.20)]">
+          <span className="px-1.5 py-0.5 rounded bg-ai-blue/10 text-ai-blue border border-ai-blue/20">
             {prData.sourceBranch}
           </span>
           <ArrowRight className="w-3 h-3" />
-          <span className="px-1.5 py-0.5 rounded bg-[oklch(0.62_0.17_148/0.10)] text-[oklch(0.72_0.17_148)] border border-[oklch(0.62_0.17_148/0.20)]">
+          <span className="px-1.5 py-0.5 rounded bg-risk-low/10 text-risk-low border border-risk-low/20">
             {prData.targetBranch}
           </span>
         </div>
@@ -163,7 +163,7 @@ export function Header({
             onClick={onToggleAIPanel}
             className={cn(
               "flex items-center justify-center w-8 h-8 rounded-md transition-colors shrink-0 xl:hidden",
-              aiPanelOpen ? "bg-[oklch(0.62_0.19_240/0.15)] text-ai-blue" : "hover:bg-accent text-muted-foreground"
+              aiPanelOpen ? "bg-ai-blue/15 text-ai-blue" : "hover:bg-accent text-muted-foreground"
             )}
             aria-label="切换 AI 面板"
           >
@@ -178,8 +178,8 @@ export function Header({
           className={cn(
             "relative flex items-center gap-2 px-4 h-8 rounded-md text-sm font-medium text-white transition-all duration-200 overflow-hidden",
             analyzing
-              ? "bg-[oklch(0.45_0.14_240)] cursor-not-allowed"
-              : "bg-ai-blue hover:bg-[oklch(0.68_0.20_240)] shadow-[0_0_0_0_oklch(0.62_0.19_240/0.3)] hover:shadow-[0_0_16px_2px_oklch(0.62_0.19_240/0.3)]"
+              ? "bg-ai-blue-dim cursor-not-allowed"
+              : "bg-ai-blue hover:bg-sky-300 text-primary-foreground shadow-[0_0_0_0_rgba(56,189,248,0.3)] hover:shadow-[0_0_18px_2px_rgba(56,189,248,0.32)]"
           )}
           whileHover={!analyzing ? { scale: 1.02 } : {}}
           whileTap={!analyzing ? { scale: 0.97 } : {}}

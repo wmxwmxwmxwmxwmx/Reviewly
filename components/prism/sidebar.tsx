@@ -56,18 +56,18 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
   return (
     <aside
       className={cn(
-        "flex flex-col w-[260px] shrink-0 h-screen bg-[oklch(0.125_0.004_264)] border-r border-border overflow-hidden",
+        "flex flex-col w-[260px] shrink-0 h-screen bg-sidebar-surface border-r border-border overflow-hidden shadow-[20px_0_60px_rgba(0,0,0,0.28)]",
         className
       )}
     >
       {/* Logo */}
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-border">
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-gradient-to-r from-ai-blue/5 to-ai-purple/5">
         <div className="relative flex items-center justify-center w-8 h-8 shrink-0">
-          <svg viewBox="0 0 32 32" fill="none" className="w-8 h-8">
-            <rect x="2" y="2" width="28" height="28" rx="6" fill="oklch(0.18 0.08 240)" />
-            <path d="M8 24L16 8L24 24" stroke="oklch(0.72 0.19 240)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M10.5 19h11" stroke="oklch(0.72 0.19 240)" strokeWidth="2" strokeLinecap="round" opacity="0.6" />
-            <circle cx="16" cy="8" r="2" fill="oklch(0.85 0.20 240)" />
+          <svg viewBox="0 0 32 32" fill="none" className="w-8 h-8 drop-shadow-[0_0_14px_rgba(56,189,248,0.22)]">
+            <rect x="2" y="2" width="28" height="28" rx="6" fill="#0D1117" stroke="rgba(56,189,248,0.28)" />
+            <path d="M8 24L16 8L24 24" stroke="#38BDF8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M10.5 19h11" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" opacity="0.85" />
+            <circle cx="16" cy="8" r="2" fill="#E5E7EB" />
           </svg>
         </div>
         <div className="flex flex-col leading-tight min-w-0 flex-1">
@@ -98,7 +98,7 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
                   className={cn(
                     "relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors group w-full text-left",
                     isActive
-                      ? "bg-[oklch(0.62_0.19_240/0.12)] text-foreground"
+                      ? "bg-ai-blue/10 text-foreground ring-1 ring-ai-blue/20 shadow-[0_0_24px_rgba(56,189,248,0.08)]"
                       : "text-muted-foreground hover:text-foreground hover:bg-accent"
                   )}
                   whileHover={{ x: 1 }}
@@ -122,7 +122,7 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
                       className={cn(
                         "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
                         isActive
-                          ? "bg-[oklch(0.62_0.19_240/0.2)] text-[oklch(0.72_0.19_240)]"
+                          ? "bg-ai-blue/20 text-ai-blue"
                           : "bg-surface-3 text-muted-foreground"
                       )}
                     >
@@ -177,7 +177,7 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
 
         {/* User Info */}
         <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-accent transition-colors cursor-pointer">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[oklch(0.55_0.19_240)] to-[oklch(0.45_0.14_264)] flex items-center justify-center text-[11px] font-semibold text-white shrink-0">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-ai-blue to-ai-purple flex items-center justify-center text-[11px] font-semibold text-white shrink-0 shadow-[0_0_18px_rgba(139,92,246,0.22)]">
             ZW
           </div>
           <div className="flex-1 min-w-0">
