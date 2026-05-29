@@ -38,6 +38,8 @@ class Repository(Base):
     ai_review_enabled: Mapped[bool] = mapped_column(default=True)
     settings: Mapped[dict | None] = mapped_column(JSON)
     payload: Mapped[dict | None] = mapped_column(JSON)
+    architecture_graph: Mapped[dict | None] = mapped_column(JSON)
+    architecture_scanned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PullRequest(Base):

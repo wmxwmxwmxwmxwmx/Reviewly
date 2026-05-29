@@ -10,6 +10,10 @@ from sqlalchemy.orm import Session
 from app.db.models import AnalysisFinding, AnalysisJob
 from app.mock import seed
 from app.repositories.analysis import _finding_to_api
+from app.repositories.performance_center import (
+    get_finding_with_context,
+    list_performance_findings_filtered,
+)
 
 
 def list_performance_findings(session: Session) -> list[dict[str, Any]]:
@@ -72,6 +76,18 @@ def update_finding(session: Session, finding_id: str, body: dict[str, Any]) -> d
     session.commit()
     session.refresh(row)
     return _finding_to_api(row)
+
+
+__all__ = [
+    "list_performance_findings",
+    "list_performance_findings_filtered",
+    "get_performance_stats",
+    "get_finding",
+    "get_finding_with_context",
+    "create_finding",
+    "update_finding",
+    "delete_finding",
+]
 
 
 def delete_finding(session: Session, finding_id: str) -> bool:

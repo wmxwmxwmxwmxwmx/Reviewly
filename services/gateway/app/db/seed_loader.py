@@ -110,19 +110,37 @@ def load_seed_if_empty(session: Session) -> bool:
     seeded_findings: list = []
     for f in seed.list_findings(seed.DEFAULT_PR_ID):
         seeded_findings.append(deepcopy(f))
-    seeded_findings.append(
-        {
-            "id": "perf-seed-1",
-            "type": "performance",
-            "severity": "medium",
-            "title": "示例性能发现",
-            "file": "internal/cache/payment_cache.go",
-            "line": 50,
-            "description": "seed",
-            "confidence": 80,
-            "rootCause": "",
-            "fixSuggestion": "",
-        }
+    seeded_findings.extend(
+        [
+            {
+                "id": "perf-seed-blocking",
+                "ruleId": "blocking-io",
+                "type": "performance",
+                "perfType": "Blocking IO",
+                "severity": "medium",
+                "title": "同步 sleep 可能阻塞",
+                "file": "internal/gateway/client.go",
+                "line": 88,
+                "description": "time.Sleep 出现在热路径，可能降低吞吐。",
+                "confidence": 80,
+                "rootCause": "",
+                "fixSuggestion": "使用 context 超时或异步调度替代固定 sleep。",
+            },
+            {
+                "id": "perf-seed-n1",
+                "ruleId": "n-plus-one-query",
+                "type": "performance",
+                "perfType": "N+1 Query",
+                "severity": "high",
+                "title": "循环内数据库查询",
+                "file": "internal/db/query_builder.go",
+                "line": 120,
+                "description": "for 循环内调用 Query，存在 N+1 风险。",
+                "confidence": 85,
+                "rootCause": "",
+                "fixSuggestion": "批量预取或使用 JOIN 一次加载关联数据。",
+            },
+        ]
     )
     analysis_repo.save_findings(session, job.id, seeded_findings)
 

@@ -129,8 +129,72 @@ export interface PerformanceFinding extends AnalysisFinding {
   type: "performance"
 }
 
+/** Performance Center list row (aggregated across PRs). */
+export interface PerformanceCenterFinding {
+  id: string
+  file: string
+  line: number
+  type: string
+  severity: "critical" | "high" | "medium" | "low"
+  description: string
+  suggestion: string
+  repo?: string
+  prNumber?: number
+  pullRequestId?: string
+  title?: string
+  ruleId?: string
+}
+
+export interface PerformanceFindingsPage {
+  items: PerformanceCenterFinding[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 export interface ArchitectureFinding extends AnalysisFinding {
   type: "architecture"
+}
+
+export interface ArchitectureNode {
+  id: string
+  label: string
+  path?: string
+  language?: string
+  layer?: string
+  lines?: number
+  importCount?: number
+}
+
+export interface ArchitectureEdge {
+  from: string
+  to: string
+  kind?: string
+}
+
+export interface ArchitectureScanMetrics {
+  cycles: string[][]
+  giantModules: {
+    id: string
+    path: string
+    lines: number
+    importCount: number
+  }[]
+  layerViolations: { from: string; to: string; reason: string }[]
+  summary: {
+    fileCount: number
+    edgeCount: number
+    languages: Record<string, number>
+  }
+}
+
+export interface ArchitectureGraph {
+  nodes: ArchitectureNode[]
+  edges: ArchitectureEdge[]
+  metrics?: ArchitectureScanMetrics
+  status: string
+  scannedAt?: string
+  cachePath?: string
 }
 
 export interface GovernanceRule {

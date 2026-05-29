@@ -90,7 +90,29 @@ paths:
       summary: Performance stats
   /api/performance/findings:
     get:
-      summary: List performance findings
+      summary: List performance findings (filtered, paginated)
+      parameters:
+        - name: severity
+          in: query
+          schema: { type: string }
+        - name: type
+          in: query
+          schema: { type: string }
+        - name: repo
+          in: query
+          schema: { type: string }
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+  /api/performance/findings/{findingId}/optimize:
+    post:
+      summary: AI optimize finding (SSE stream, on-demand)
   /api/performance/findings/{findingId}:
     get:
       summary: Get performance finding
@@ -132,9 +154,15 @@ paths:
       summary: Update team member
     delete:
       summary: Delete team member
+  /api/architecture/scan:
+    post:
+      summary: Clone repo and build dependency graph
   /api/architecture/repos/{repoId}/graph:
     get:
       summary: Dependency graph
+  /api/architecture/repos/{repoId}/analyze:
+    post:
+      summary: Stream AI architecture analysis (on demand)
   /api/settings:
     get:
       summary: Get settings

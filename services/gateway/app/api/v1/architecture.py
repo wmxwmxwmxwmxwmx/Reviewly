@@ -1,0 +1,63 @@
+"""Architecture scan and on-demand AI analysis."""
+from __future__ import annotations
+
+import json
+
+from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from app.db.deps import get_db
+from app.repositories import architecture as architecture_repo
+from app.services import architecture_analyze
+from app.services import architecture_scan as architecture_scan_service
+
+router = APIRouter(prefix="/api/architecture", tags=["architecture"])
+
+
+class ScanBody(BaseModel):
+    repo_id: str = Field(validation_alias="repoId")
+
+    model_config = {"populate_by_name": True}
+
+
+class AnalyzeBody(BaseModel):
+    stream: bool = True
+
+
+@router.post("/scan")
+async def scan_repository(body: ScanBody, db: Session = Depends(get_db)) -> dict:
+    return await architecture_scan_service.run_scan(db, body.repo_id)
+
+
+@router.get("/repos/{repo_id}/graph")
+def architecture_graph(repo_id: str, db: Session = Depends(get_db)) -> dict:
+    graph = architecture_repo.get_dependency_graph(db, repo_id)
+    graph.setdefault("status", "ok")
+    return graph
+
+
+@router.post("/repos/{repo_id}/analyze")
+async def architecture_analyze(
+    repo_id: str,
+    body: AnalyzeBody | None = None,
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    _ = body
+
+    async def event_stream():
+        try:
+            async for delta in architecture_analyze.stream_architecture_analysis(db, repo_id):
+                payload = json.dumps({"delta": delta}, ensure_ascii=False)
+                yield f"data: {payload}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:  # noqa: BLE001
+            yield f"data: {json.dumps({'error': str(exc)}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

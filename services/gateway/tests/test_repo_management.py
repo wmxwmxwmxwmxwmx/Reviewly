@@ -28,13 +28,21 @@ def test_repos_sync_mock_without_github(client: TestClient) -> None:
     assert "syncedRepos" in body or "synced" in body
 
 
-def test_repo_clone_returns_501(client: TestClient) -> None:
+@patch("app.services.repo_clone._run_git")
+@patch("app.services.repo_clone._resolve_token", new_callable=AsyncMock)
+def test_repo_clone_ok(
+    mock_token: AsyncMock,
+    mock_git,
+    client: TestClient,
+) -> None:
+    mock_token.return_value = "ghp_test"
     repos = client.get("/api/repos").json()
     if not repos:
         pytest.skip("no repos in db")
     repo_id = repos[0]["id"]
     r = client.post(f"/api/repos/{repo_id}/clone")
-    assert r.status_code == 501
+    assert r.status_code == 200
+    assert r.json().get("ok") is True
 
 
 def test_analyze_context_not_found(client: TestClient) -> None:

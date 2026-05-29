@@ -6,6 +6,16 @@ from typing import Any
 
 from app.repositories.security_center import RULE_LABELS
 
+PERF_TYPE_LABELS: dict[str, str] = {
+    "blocking-io": "Blocking IO",
+    "large-object-copy": "Large Object Copy",
+    "duplicate-db-query": "Duplicate DB Query",
+    "high-complexity-loop": "High Complexity Loop",
+    "string-copy": "Unnecessary String Copy",
+    "unused-move": "Unused Move",
+    "n-plus-one-query": "N+1 Query",
+}
+
 _SECRET_PATTERNS = [
     re.compile(r"(?i)(api[_-]?key|password|secret)\s*=\s*['\"][^'\"]+['\"]"),
     re.compile(r"AKIA[0-9A-Z]{16}"),
@@ -37,12 +47,15 @@ def _base_finding(
     description: str = "",
     cwe_id: str | None = None,
     fix_suggestion: str = "",
+    perf_type: str | None = None,
 ) -> dict[str, Any]:
-    rule_label = RULE_LABELS.get(rule_id, rule_id)
-    return {
+    perf_label = perf_type or PERF_TYPE_LABELS.get(rule_id, rule_id)
+    security_rule = RULE_LABELS.get(rule_id, rule_id)
+
+    out: dict[str, Any] = {
         "id": rule_id,
         "ruleId": rule_id,
-        "rule": rule_label,
+        "rule": security_rule if ftype == "security" else perf_label,
         "type": ftype,
         "severity": severity,
         "title": title,
@@ -54,6 +67,9 @@ def _base_finding(
         "fixSuggestion": fix_suggestion,
         "cweId": cwe_id,
     }
+    if ftype == "performance":
+        out["perfType"] = perf_label
+    return out
 
 
 def scan_sql_concat(file: str, content: str) -> list[dict[str, Any]]:
@@ -160,29 +176,156 @@ def scan_command_injection(file: str, content: str) -> list[dict[str, Any]]:
     return []
 
 
-def scan_performance(file: str, content: str) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    if "for " in content and "range" in content and content.count("for ") > 3:
-        findings.append(
+def scan_blocking_io(file: str, content: str) -> list[dict[str, Any]]:
+    if "sleep(" in content or "time.Sleep" in content:
+        return [
             _base_finding(
-                rule_id=f"perf-loop-{file}",
+                rule_id="blocking-io",
                 ftype="performance",
                 severity="medium",
-                title="嵌套循环可能影响性能",
-                file=file,
-                description="检测到多处循环，建议评估时间复杂度。",
-            )
-        )
-    if "sleep(" in content or "time.Sleep" in content:
-        findings.append(
-            _base_finding(
-                rule_id=f"perf-sleep-{file}",
-                ftype="performance",
-                severity="low",
                 title="同步 sleep 可能阻塞",
                 file=file,
+                perf_type="Blocking IO",
+                description="Diff 中出现 sleep，可能阻塞 goroutine 或线程。",
+                fix_suggestion="使用 context 超时、异步 IO 或事件驱动替代忙等/sleep。",
             )
-        )
+        ]
+    if ("http.Get" in content or "requests.get" in content) and "await " not in content:
+        return [
+            _base_finding(
+                rule_id="blocking-io",
+                ftype="performance",
+                severity="high",
+                title="疑似同步 HTTP 调用",
+                file=file,
+                perf_type="Blocking IO",
+                description="同步 HTTP 客户端可能阻塞请求路径。",
+                fix_suggestion="改用异步客户端或放入后台 worker。",
+            )
+        ]
+    return []
+
+
+def scan_large_object_copy(file: str, content: str) -> list[dict[str, Any]]:
+    if re.search(r"make\(\[\].*,\s*\d{4,}", content) or (
+        "copy(" in content and ("[]byte" in content or "make([]" in content)
+    ):
+        return [
+            _base_finding(
+                rule_id="large-object-copy",
+                ftype="performance",
+                severity="medium",
+                title="大对象拷贝",
+                file=file,
+                perf_type="Large Object Copy",
+                description="检测到大缓冲区分配或 copy 操作。",
+                fix_suggestion="使用指针、切片视图或流式处理减少拷贝。",
+            )
+        ]
+    return []
+
+
+def scan_duplicate_db_query(file: str, content: str) -> list[dict[str, Any]]:
+    queries = len(re.findall(r"(?i)(Query|db\.Get|SELECT\s)", content))
+    if queries >= 3:
+        return [
+            _base_finding(
+                rule_id="duplicate-db-query",
+                ftype="performance",
+                severity="medium",
+                title="重复数据库查询",
+                file=file,
+                perf_type="Duplicate DB Query",
+                description="同一 diff 片段内出现多次查询调用。",
+                fix_suggestion="合并查询、使用批量接口或缓存结果。",
+            )
+        ]
+    return []
+
+
+def scan_high_complexity_loop(file: str, content: str) -> list[dict[str, Any]]:
+    for_count = content.count("for ")
+    if for_count > 3 or (content.count("for ") >= 2 and "for " in content[content.find("for ") + 1 :]):
+        nested = "for " in content.split("for ", 1)[-1] if "for " in content else False
+        if for_count > 3 or nested:
+            return [
+                _base_finding(
+                    rule_id="high-complexity-loop",
+                    ftype="performance",
+                    severity="medium",
+                    title="高复杂度循环",
+                    file=file,
+                    perf_type="High Complexity Loop",
+                    description="嵌套或多重循环可能带来 O(n²) 或更高复杂度。",
+                    fix_suggestion="评估算法复杂度；考虑索引、哈希表或批处理。",
+                )
+            ]
+    return []
+
+
+def scan_string_copy(file: str, content: str) -> list[dict[str, Any]]:
+    if content.count('" + ') >= 3 or content.count("' + ") >= 3:
+        if "strings.Builder" not in content and "StringBuilder" not in content:
+            return [
+                _base_finding(
+                    rule_id="string-copy",
+                    ftype="performance",
+                    severity="low",
+                    title="不必要字符串拼接",
+                    file=file,
+                    perf_type="Unnecessary String Copy",
+                    description="链式 + 拼接在循环中可能产生大量临时对象。",
+                    fix_suggestion="使用 strings.Builder / fmt.Fprintf 或预分配 buffer。",
+                )
+            ]
+    return []
+
+
+def scan_unused_move(file: str, content: str) -> list[dict[str, Any]]:
+    if "std::move" in content or ".clone()" in content:
+        return [
+            _base_finding(
+                rule_id="unused-move",
+                ftype="performance",
+                severity="low",
+                title="移动/克隆语义可优化",
+                file=file,
+                perf_type="Unused Move",
+                description="检测到 move 或 clone；确认是否可避免多余拷贝。",
+                fix_suggestion="优先传递引用/指针；仅在必要时 move。",
+            )
+        ]
+    return []
+
+
+def scan_n_plus_one_query(file: str, content: str) -> list[dict[str, Any]]:
+    if ("for " in content or "range" in content) and re.search(
+        r"(?i)(Query|Find\(|db\.|SELECT\s)", content
+    ):
+        return [
+            _base_finding(
+                rule_id="n-plus-one-query",
+                ftype="performance",
+                severity="high",
+                title="潜在 N+1 查询",
+                file=file,
+                perf_type="N+1 Query",
+                description="循环体内出现数据库查询模式。",
+                fix_suggestion="使用 JOIN、IN 查询或 DataLoader 批量预取。",
+            )
+        ]
+    return []
+
+
+def scan_performance(file: str, content: str) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    findings.extend(scan_blocking_io(file, content))
+    findings.extend(scan_large_object_copy(file, content))
+    findings.extend(scan_duplicate_db_query(file, content))
+    findings.extend(scan_high_complexity_loop(file, content))
+    findings.extend(scan_string_copy(file, content))
+    findings.extend(scan_unused_move(file, content))
+    findings.extend(scan_n_plus_one_query(file, content))
     return findings
 
 
@@ -215,7 +358,7 @@ def scan_file(file: str, content: str) -> list[dict[str, Any]]:
     seen: set[str] = set()
     unique: list[dict[str, Any]] = []
     for f in findings:
-        key = f.get("ruleId", f.get("id", ""))
+        key = f"{f.get('file', '')}:{f.get('ruleId', f.get('id', ''))}"
         if key not in seen:
             seen.add(key)
             unique.append(f)

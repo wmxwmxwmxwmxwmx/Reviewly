@@ -1,37 +1,70 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
-import type { ArchitectureGraph } from "@/lib/api/architecture"
-import { fetchArchitectureGraph } from "@/lib/api/architecture"
 import { PrismApiError } from "@/lib/api/client"
+import {
+  fetchArchitectureGraph,
+  postArchitectureScan,
+  type ArchitectureGraph,
+} from "@/lib/api/architecture"
 
 export function useArchitecture(repoId: string | null) {
   const [graph, setGraph] = useState<ArchitectureGraph | null>(null)
   const [loading, setLoading] = useState(false)
+  const [scanning, setScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!repoId) {
-      setGraph(null)
-      setLoading(false)
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!repoId) {
+        setGraph(null)
+        return
+      }
+      setLoading(true)
       setError(null)
-      return
-    }
-
-    const ac = new AbortController()
-    setLoading(true)
-    setError(null)
-    fetchArchitectureGraph(repoId, ac.signal)
-      .then(setGraph)
-      .catch((e: unknown) => {
+      try {
+        const data = await fetchArchitectureGraph(repoId, signal)
+        setGraph(data)
+      } catch (e: unknown) {
         if (e instanceof DOMException && e.name === "AbortError") return
         setError(e instanceof PrismApiError ? e.message : "加载失败")
-      })
-      .finally(() => setLoading(false))
+      } finally {
+        setLoading(false)
+      }
+    },
+    [repoId],
+  )
 
+  useEffect(() => {
+    const ac = new AbortController()
+    void load(ac.signal)
     return () => ac.abort()
+  }, [load])
+
+  const scan = useCallback(async () => {
+    if (!repoId) return
+    setScanning(true)
+    setError(null)
+    try {
+      const data = await postArchitectureScan(repoId)
+      setGraph(data)
+    } catch (e: unknown) {
+      setError(e instanceof PrismApiError ? e.message : "扫描失败")
+    } finally {
+      setScanning(false)
+    }
   }, [repoId])
 
-  return { graph, loading, error }
+  const refetch = useCallback(() => load(), [load])
+
+  return {
+    graph,
+    metrics: graph?.metrics ?? null,
+    loading,
+    scanning,
+    error,
+    scan,
+    refetch,
+  }
 }

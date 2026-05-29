@@ -66,10 +66,10 @@ async def repo_analyze_context(repo_id: str, db: Session = Depends(get_db)) -> d
 
 
 @router.post("/repos/{repo_id}/clone")
-def repo_clone_placeholder(repo_id: str, db: Session = Depends(get_db)) -> dict:
-    if repos_repo.get_repo_row(db, repo_id) is None:
-        raise api_error("仓库不存在", 404)
-    raise api_error("仓库 clone 尚未实现，将用于架构分析与全仓扫描", 501)
+async def repo_clone(repo_id: str, db: Session = Depends(get_db)) -> dict:
+    from app.services.repo_clone import ensure_repo_clone
+
+    return await ensure_repo_clone(db, repo_id)
 
 
 @router.get("/pull-requests")

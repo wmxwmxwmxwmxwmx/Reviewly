@@ -6,9 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import api_error
 from app.db.deps import get_db
-from app.grpc_client.engine import get_engine_client
 from app.repositories import analysis as analysis_repo
-from app.repositories import architecture as architecture_repo
 from app.repositories import governance as governance_repo
 from app.repositories import performance as performance_repo
 from app.repositories import security as security_repo
@@ -76,8 +74,25 @@ def performance_stats(db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/performance/findings")
-def performance_findings(db: Session = Depends(get_db)) -> list:
-    return performance_repo.list_performance_findings(db)
+def performance_findings(
+    severity: str | None = None,
+    perf_type: str | None = Query(None, alias="type"),
+    repo: str | None = None,
+    q: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100, alias="pageSize"),
+    db: Session = Depends(get_db),
+) -> dict:
+    items, total = performance_repo.list_performance_findings_filtered(
+        db,
+        severity=severity,
+        perf_type=perf_type,
+        repo=repo,
+        q=q,
+        page=page,
+        page_size=page_size,
+    )
+    return {"items": items, "total": total, "page": page, "pageSize": page_size}
 
 
 @router.get("/performance/findings/{finding_id}")
@@ -189,12 +204,3 @@ def team_member_delete(member_id: str, db: Session = Depends(get_db)) -> dict:
     return {"ok": True}
 
 
-@router.get("/architecture/repos/{repo_id}/graph")
-async def architecture_graph(repo_id: str, db: Session = Depends(get_db)) -> dict:
-    client = get_engine_client()
-    graph = await client.build_dependency_graph(repo_id)
-    db_graph = architecture_repo.get_dependency_graph(db, repo_id)
-    if len(db_graph.get("nodes", [])) > len(graph.get("nodes", [])):
-        return db_graph
-    graph["status"] = "ok"
-    return graph
