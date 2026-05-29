@@ -28,6 +28,12 @@ def test_parse_github_pr_url_invalid() -> None:
     assert exc.value.status_code == 400
 
 
+def test_parse_github_pr_url_missing_number() -> None:
+    with pytest.raises(Exception) as exc:
+        parse_github_pr_url("https://github.com/obra/superpowers/pull/")
+    assert exc.value.status_code == 400
+
+
 def test_import_pull_request_cache_hit(client: TestClient) -> None:
     url = "https://github.com/acme-corp/backend/pull/2847"
     r = client.post("/api/pull-requests/import", json={"url": url})

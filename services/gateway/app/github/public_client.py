@@ -7,8 +7,13 @@ import httpx
 
 from app.core.config import settings
 from app.core.errors import api_error
+from app.github.github_errors import raise_for_github_response
 
 _API_VERSION = "2022-11-28"
+
+
+def _has_pat() -> bool:
+    return bool(settings.github_pat.strip())
 
 
 def _auth_headers(*, accept: str = "application/vnd.github+json") -> dict[str, str]:
@@ -22,16 +27,15 @@ def _auth_headers(*, accept: str = "application/vnd.github+json") -> dict[str, s
     return headers
 
 
+def _check_response(resp: httpx.Response, *, resource: str) -> None:
+    raise_for_github_response(resp, resource=resource, has_pat=_has_pat())
+
+
 async def get_repo(owner: str, repo: str) -> dict[str, Any]:
     url = f"https://api.github.com/repos/{owner}/{repo}"
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.get(url, headers=_auth_headers())
-        if resp.status_code in (403, 404):
-            raise api_error(
-                "无法访问该仓库（可能为私有仓库）。请安装 GitHub App 或在 .env 配置 GITHUB_PAT。",
-                403,
-            )
-        resp.raise_for_status()
+        _check_response(resp, resource="该仓库")
         return resp.json()
 
 
@@ -39,12 +43,7 @@ async def get_pull_request(owner: str, repo: str, number: int) -> dict[str, Any]
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.get(url, headers=_auth_headers())
-        if resp.status_code in (403, 404):
-            raise api_error(
-                "无法访问该 PR（可能为私有仓库）。请安装 GitHub App 或在 .env 配置 GITHUB_PAT。",
-                403,
-            )
-        resp.raise_for_status()
+        _check_response(resp, resource="该 PR")
         return resp.json()
 
 
@@ -59,9 +58,7 @@ async def list_user_repos() -> list[dict[str, Any]]:
             headers=_auth_headers(),
             params={"affiliation": "owner,collaborator,organization_member", "per_page": 100, "sort": "updated"},
         )
-        if resp.status_code in (401, 403):
-            raise api_error("GitHub PAT 无效或权限不足，无法列出仓库。", 403)
-        resp.raise_for_status()
+        _check_response(resp, resource="您的仓库列表")
         return resp.json()
 
 
@@ -73,12 +70,8 @@ async def list_open_pull_requests(owner: str, repo: str) -> list[dict[str, Any]]
             headers=_auth_headers(),
             params={"state": "open", "per_page": 100},
         )
-        if resp.status_code in (403, 404):
-            raise api_error(
-                f"无法访问 {owner}/{repo} 的 PR 列表。",
-                403,
-            )
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            _check_response(resp, resource=f"{owner}/{repo} 的 PR 列表")
         return resp.json()
 
 
@@ -99,10 +92,5 @@ async def get_pull_diff_patch(owner: str, repo: str, number: int) -> str:
             url,
             headers=_auth_headers(accept="application/vnd.github.v3.diff"),
         )
-        if resp.status_code in (403, 404):
-            raise api_error(
-                "无法获取 PR diff（可能为私有仓库）。请安装 GitHub App 或在 .env 配置 GITHUB_PAT。",
-                403,
-            )
-        resp.raise_for_status()
+        _check_response(resp, resource="该 PR 的 diff")
         return resp.text

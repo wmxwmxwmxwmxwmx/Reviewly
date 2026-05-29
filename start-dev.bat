@@ -1,3 +1,6 @@
-@echo off
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\start.ps1"
-exit /b %errorlevel%
+@echo off
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\start.ps1"
+
+exit /b %errorlevel%
+
