@@ -79,6 +79,7 @@ export function AIReviewView({
     latest,
     job,
     loadingPersisted,
+    persistError,
     loadPersisted,
     runAnalysis,
     setJob,
@@ -109,11 +110,25 @@ export function AIReviewView({
 
   useEffect(() => {
     const controller = new AbortController()
-    void loadPersisted(controller.signal)
+    void loadPersisted(controller.signal).catch(() => {
+      /* persistError 已由 hook 记录 */
+    })
     return () => controller.abort()
   }, [prId, loadPersisted])
 
+  const sessionHasData = hasCachedSession(prId)
+
   useEffect(() => {
+    const isEmptySnapshot =
+      findings.length === 0 &&
+      latest === null &&
+      job === null &&
+      !generatedSummary
+
+    if (loadingPersisted && !sessionHasData && isEmptySnapshot) {
+      return
+    }
+
     patchSession(prId, {
       findings,
       latest,
@@ -132,6 +147,8 @@ export function AIReviewView({
     analysisError,
     syncLabel,
     activePanelTab,
+    loadingPersisted,
+    sessionHasData,
     patchSession,
   ])
 
@@ -167,7 +184,6 @@ export function AIReviewView({
   )
 
   const diffTotal = useMemo(() => Math.max(diffFiles.length, 1), [diffFiles.length])
-  const sessionHasData = hasCachedSession(prId)
   const hasAnalysis =
     findings.length > 0 ||
     Boolean(generatedSummary) ||
@@ -302,7 +318,10 @@ ${diffContext || "（无 diff 内容）"}`,
       }
     : undefined
 
-  if (prLoading) {
+  const summaryError = analysisError ?? persistError
+  const showFullPagePrLoading = prLoading && !sessionHasData
+
+  if (showFullPagePrLoading) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
         <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -311,7 +330,7 @@ ${diffContext || "（无 diff 内容）"}`,
     )
   }
 
-  if (prError || !pr) {
+  if ((prError || !pr) && !sessionHasData) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-risk-high px-4 text-center">
         {prError ?? "合并请求不存在"}
@@ -323,21 +342,34 @@ ${diffContext || "（无 diff 内容）"}`,
     <div className="flex flex-1 min-w-0 overflow-hidden">
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <main className="flex-1 overflow-y-auto">
-          <Header
-            prData={pr}
-            analyzing={analyzing}
-            onAnalyze={handleAnalyze}
-            onImportUrl={handleImportUrl}
-            importing={importing}
-            importError={importError}
-            syncLabel={syncLabel}
-            onMenuClick={onMenuClick}
-            aiPanelOpen={aiPanelOpen}
-            onToggleAIPanel={onToggleAIPanel}
-          />
+          {pr ? (
+            <Header
+              prData={pr}
+              analyzing={analyzing}
+              hasAnalysis={hasAnalysis}
+              onAnalyze={handleAnalyze}
+              onImportUrl={handleImportUrl}
+              importing={importing}
+              importError={importError}
+              syncLabel={syncLabel}
+              onMenuClick={onMenuClick}
+              aiPanelOpen={aiPanelOpen}
+              onToggleAIPanel={onToggleAIPanel}
+            />
+          ) : (
+            <div className="flex items-center gap-2 h-[68px] px-5 border-b border-border text-sm text-muted-foreground shrink-0">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              正在加载 PR 信息…
+            </div>
+          )}
 
           <div className="p-5 space-y-4">
-            <PROverview prData={pr} analysisScores={analysisScores} />
+            {pr ? (
+              <PROverview prData={pr} analysisScores={analysisScores} />
+            ) : prError ? (
+              <p className="text-xs text-risk-high">{prError}</p>
+            ) : null}
+
             <AISummary
               streaming={analyzing}
               model={settings.model}
@@ -345,7 +377,8 @@ ${diffContext || "（无 diff 内容）"}`,
               jobSummary={latest?.summary}
               hasAnalysis={hasAnalysis}
               restoring={restoring}
-              error={analysisError}
+              error={summaryError}
+              onGoToSettings={() => navigate("settings")}
             />
 
             {diffError && (
@@ -354,11 +387,13 @@ ${diffContext || "（无 diff 内容）"}`,
 
             <div className="flex items-center justify-between pt-1">
               <h3 className="text-sm font-semibold text-foreground">文件变更</h3>
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                <span>{pr.filesChanged} 文件</span>
-                <span className="text-[oklch(0.62_0.17_148)]">+{pr.additions.toLocaleString()}</span>
-                <span className="text-[oklch(0.55_0.22_27)]">-{pr.deletions.toLocaleString()}</span>
-              </div>
+              {pr && (
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                  <span>{pr.filesChanged} 文件</span>
+                  <span className="text-[oklch(0.62_0.17_148)]">+{pr.additions.toLocaleString()}</span>
+                  <span className="text-[oklch(0.55_0.22_27)]">-{pr.deletions.toLocaleString()}</span>
+                </div>
+              )}
             </div>
 
             <DiffViewer
@@ -385,7 +420,7 @@ ${diffContext || "（无 diff 内容）"}`,
             findings={findings}
             job={job ?? undefined}
             mergeRecommendation={latest?.mergeRecommendation}
-            filesChanged={pr.filesChanged}
+            filesChanged={pr?.filesChanged ?? 0}
             activeTab={activePanelTab}
             onActiveTabChange={setActivePanelTab}
           />

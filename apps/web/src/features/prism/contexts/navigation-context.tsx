@@ -102,7 +102,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const navigate = useCallback(
     (view: NavView, params?: NavParams) => {
       const query = buildQuery(view, params, urlPrId ?? prId, lastReviewedPrId)
-      router.push(`/?${query}`)
+      router.replace(`/?${query}`)
     },
     [router, urlPrId, prId, lastReviewedPrId],
   )

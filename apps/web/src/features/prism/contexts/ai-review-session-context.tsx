@@ -35,6 +35,8 @@ export type AIReviewSessionPatch = Partial<
   hydratedAt?: number
 }
 
+const SUMMARY_STORAGE_PREFIX = "prism:ai-summary:"
+
 function emptySession(): AIReviewSession {
   return {
     findings: [],
@@ -51,6 +53,41 @@ function hasSessionData(session: AIReviewSession): boolean {
     session.job !== null ||
     Boolean(session.generatedSummary)
   )
+}
+
+function readStoredSummary(prId: string): string | undefined {
+  if (typeof window === "undefined") return undefined
+  try {
+    const value = sessionStorage.getItem(`${SUMMARY_STORAGE_PREFIX}${prId}`)
+    return value ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+function writeStoredSummary(prId: string, summary: string | undefined) {
+  if (typeof window === "undefined") return
+  try {
+    const key = `${SUMMARY_STORAGE_PREFIX}${prId}`
+    if (summary) {
+      sessionStorage.setItem(key, summary)
+    } else {
+      sessionStorage.removeItem(key)
+    }
+  } catch {
+    /* 容量不足或隐私模式时静默降级 */
+  }
+}
+
+function mergeSessionWithStorage(
+  prId: string,
+  session: AIReviewSession,
+): AIReviewSession {
+  const storedSummary = readStoredSummary(prId)
+  if (storedSummary && !session.generatedSummary) {
+    return { ...session, generatedSummary: storedSummary }
+  }
+  return session
 }
 
 interface AIReviewSessionContextValue {
@@ -71,11 +108,15 @@ export function AIReviewSessionProvider({ children }: { children: ReactNode }) {
   const [lastReviewedPrId, setLastReviewedPrIdState] = useState<string | null>(null)
 
   const getSession = useCallback((prId: string): AIReviewSession => {
-    return sessionsRef.current.get(prId) ?? emptySession()
+    const mem = sessionsRef.current.get(prId) ?? emptySession()
+    return mergeSessionWithStorage(prId, mem)
   }, [])
 
   const patchSession = useCallback((prId: string, patch: AIReviewSessionPatch) => {
     const prev = sessionsRef.current.get(prId) ?? emptySession()
+    if ("generatedSummary" in patch) {
+      writeStoredSummary(prId, patch.generatedSummary)
+    }
     sessionsRef.current.set(prId, {
       ...prev,
       ...patch,
@@ -86,11 +127,15 @@ export function AIReviewSessionProvider({ children }: { children: ReactNode }) {
 
   const clearSession = useCallback((prId: string) => {
     sessionsRef.current.delete(prId)
+    writeStoredSummary(prId, undefined)
   }, [])
 
   const hasCachedSession = useCallback((prId: string) => {
-    const session = sessionsRef.current.get(prId)
-    return session ? hasSessionData(session) : false
+    const session = mergeSessionWithStorage(
+      prId,
+      sessionsRef.current.get(prId) ?? emptySession(),
+    )
+    return hasSessionData(session)
   }, [])
 
   const setLastReviewedPrId = useCallback((prId: string) => {
