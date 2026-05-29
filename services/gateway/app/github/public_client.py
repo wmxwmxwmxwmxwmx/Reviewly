@@ -74,6 +74,32 @@ async def get_readme(owner: str, repo: str) -> str:
         return resp.text
 
 
+async def list_pull_files(owner: str, repo: str, number: int) -> list[dict[str, Any]]:
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}/files"
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.get(
+            url,
+            headers=_auth_headers(),
+            params={"per_page": 100},
+        )
+        _check_response(resp, resource="该 PR 的文件列表")
+        data = resp.json()
+        return data if isinstance(data, list) else []
+
+
+async def list_pull_commits(owner: str, repo: str, number: int) -> list[dict[str, Any]]:
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}/commits"
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.get(
+            url,
+            headers=_auth_headers(),
+            params={"per_page": 100},
+        )
+        _check_response(resp, resource="该 PR 的 commits")
+        data = resp.json()
+        return data if isinstance(data, list) else []
+
+
 async def get_pull_diff_patch(owner: str, repo: str, number: int) -> str:
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
     async with httpx.AsyncClient(timeout=120.0) as client:

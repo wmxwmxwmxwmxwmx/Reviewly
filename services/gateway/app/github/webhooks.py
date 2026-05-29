@@ -1,8 +1,6 @@
 """GitHub webhook verification and dispatch."""
 from __future__ import annotations
 
-import hashlib
-import hmac
 import logging
 from typing import Any
 
@@ -10,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.github import sync
+from app.integrations.github.webhook_verify import verify_signature
 from app.services.pr_sync import sync_from_webhook_pr
 
 logger = logging.getLogger(__name__)
@@ -17,17 +16,6 @@ logger = logging.getLogger(__name__)
 
 def _github_configured() -> bool:
     return bool(settings.github_app_id and settings.github_app_private_key)
-
-
-def verify_signature(body: bytes, signature_header: str | None) -> bool:
-    secret = settings.github_webhook_secret
-    if not secret:
-        return settings.debug
-    if not signature_header or not signature_header.startswith("sha256="):
-        return False
-    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    received = signature_header.removeprefix("sha256=")
-    return hmac.compare_digest(expected, received)
 
 
 async def handle_event(session: Session, event: str, payload: dict[str, Any]) -> None:
@@ -51,6 +39,17 @@ async def handle_event(session: Session, event: str, payload: dict[str, Any]) ->
         if action == "deleted":
             return
         if _github_configured():
+            await sync.sync_installation(session, inst_str)
+        return
+
+    if event == "installation_repositories":
+        action = payload.get("action", "")
+        installation = payload.get("installation", {})
+        inst_id = installation.get("id")
+        if not inst_id:
+            return
+        inst_str = str(inst_id)
+        if action in ("added", "removed") and _github_configured():
             await sync.sync_installation(session, inst_str)
         return
 

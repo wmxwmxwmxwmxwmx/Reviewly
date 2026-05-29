@@ -18,7 +18,8 @@ import { usePullRequest } from "@/hooks/use-pull-request"
 import { usePullRequestDiff } from "@/hooks/use-pull-request-diff"
 import { usePrAnalysis } from "@/hooks/use-pr-analysis"
 import { importPullRequestByUrl } from "@/lib/api/pull-requests"
-import { PrismApiError } from "@/lib/api/client"
+import { extractApiErrorMessage, parseFetchJson, PrismApiError } from "@/lib/api/client"
+import { getAuthToken } from "@/lib/auth/storage"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
@@ -161,11 +162,11 @@ export function AIReviewView({
       try {
         const result = await importPullRequestByUrl(url)
         if (result.source === "cache") {
-          setSyncLabel("已加载")
+          setSyncLabel(zh.common.loaded)
         } else if (result.source === "github_app") {
-          setSyncLabel("已从 GitHub 同步")
+          setSyncLabel(zh.common.syncedFromGithub)
         } else {
-          setSyncLabel("已从 GitHub 导入")
+          setSyncLabel(zh.common.importedFromGithub)
         }
         if (result.prId !== prId) {
           navigate("ai-review", { prId: result.prId })
@@ -176,7 +177,7 @@ export function AIReviewView({
             ? error.message
             : error instanceof Error
               ? error.message
-              : "无法加载 PR"
+              : zh.common.importFailed
         setImportError(message)
       } finally {
         setImporting(false)
@@ -251,9 +252,13 @@ export function AIReviewView({
       const diffContext = buildDiffContext(diffFiles)
       const findingsContext = buildFindingsContext(jobFindings)
 
+      const authToken = getAuthToken()
       const response = await fetch("/api/ai/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
         body: JSON.stringify({
           provider: settings.provider,
           model: settings.model,
@@ -283,14 +288,13 @@ ${diffContext || "（无 diff 内容）"}`,
         }),
       })
 
-      const data = await response.json()
+      const data = await parseFetchJson<{
+        content?: string
+        usage?: { totalTokens?: number }
+      }>(response)
 
       if (!response.ok) {
-        const errMsg =
-          typeof data?.error === "string"
-            ? data.error
-            : data?.detail?.error ?? "AI 摘要生成失败"
-        throw new Error(errMsg)
+        throw new Error(extractApiErrorMessage(data, "AI 摘要生成失败"))
       }
 
       const totalTokens = Number(data?.usage?.totalTokens) || 0

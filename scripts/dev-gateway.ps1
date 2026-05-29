@@ -37,7 +37,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $env:PRISM_STUB_ENGINE = "1"
 if (-not $env:GITHUB_PAT -and -not $env:GITHUB_APP_ID) {
-    Write-Warning "GITHUB_PAT 未配置：GitHub PR 导入易受 API 限流影响。请在 services/gateway/.env 设置 GITHUB_PAT。"
+    Write-Warning "GITHUB_PAT not set; set it in services/gateway/.env for higher GitHub API limits."
 }
-Write-Host "Starting gateway on http://localhost:3001 (PRISM_STUB_ENGINE=1)"
+Write-Host "Starting gateway at http://localhost:3001"
 & $python -m uvicorn app.main:app --host 0.0.0.0 --port 3001 --reload

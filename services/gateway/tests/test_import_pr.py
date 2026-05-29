@@ -86,6 +86,24 @@ def test_import_pull_request_public_api(client: TestClient) -> None:
             new_callable=AsyncMock,
             return_value="diff --git a/README.md b/README.md\n",
         ),
+        patch(
+            "app.github.public_client.list_pull_files",
+            new_callable=AsyncMock,
+            return_value=[
+                {
+                    "filename": "README.md",
+                    "patch": "@@ -1 +1 @@\n+test",
+                    "additions": 1,
+                    "deletions": 0,
+                    "status": "modified",
+                }
+            ],
+        ),
+        patch(
+            "app.github.public_client.list_pull_commits",
+            new_callable=AsyncMock,
+            return_value=[{"sha": "abc123"}],
+        ),
     ):
         r = client.post(
             "/api/pull-requests/import",

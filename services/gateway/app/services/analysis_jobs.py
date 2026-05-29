@@ -10,6 +10,7 @@ from app.db.models import PullRequestDiff
 from app.grpc_client.engine import get_engine_client
 from app.mock import seed
 from app.repositories import analysis as analysis_repo
+from app.repositories import pull_request_files as pr_files_repo
 from app.repositories import pull_requests as pr_repo
 
 
@@ -25,10 +26,18 @@ async def run_job(session: Session, job_id: str) -> None:
     findings_list: list[dict[str, Any]] = []
     result_summary: dict[str, Any] | None = None
 
-    diff_files = pr_repo.get_diff(session, pr_id)
-    file_paths = [f["path"] for f in diff_files]
-    diff_row = session.scalar(select(PullRequestDiff).where(PullRequestDiff.pull_request_id == pr_id))
-    patch = diff_row.patch if diff_row and diff_row.patch else ""
+    stored_paths = pr_files_repo.file_paths(session, pr_id)
+    if stored_paths:
+        file_paths = stored_paths
+        patch = pr_files_repo.build_combined_patch(session, pr_id)
+        diff_files = pr_files_repo.to_diff_view_rows(pr_files_repo.list_files(session, pr_id))
+    else:
+        diff_files = pr_repo.get_diff(session, pr_id)
+        file_paths = [f["path"] for f in diff_files]
+        diff_row = session.scalar(
+            select(PullRequestDiff).where(PullRequestDiff.pull_request_id == pr_id)
+        )
+        patch = diff_row.patch if diff_row and diff_row.patch else ""
 
     from app.analysis.pipeline import run_analysis_pipeline
 
@@ -128,8 +137,10 @@ def create_job(session: Session, pull_request_id: str) -> dict[str, Any]:
     if pr_repo.get_pull_request(session, pull_request_id) is None:
         raise KeyError(pull_request_id)
 
-    diff = pr_repo.get_diff(session, pull_request_id)
-    job = analysis_repo.create_job(session, pull_request_id, len(diff) or 1)
+    file_count = len(pr_files_repo.file_paths(session, pull_request_id))
+    if not file_count:
+        file_count = len(pr_repo.get_diff(session, pull_request_id))
+    job = analysis_repo.create_job(session, pull_request_id, file_count or 1)
     return {"jobId": job.id, "_schedule": job.id}
 
 

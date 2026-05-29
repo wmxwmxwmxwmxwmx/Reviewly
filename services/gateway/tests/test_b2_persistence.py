@@ -94,6 +94,16 @@ def test_findings_empty_without_job_for_non_demo_pr(client: TestClient) -> None:
             new_callable=AsyncMock,
             return_value="",
         ),
+        patch(
+            "app.github.public_client.list_pull_files",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "app.github.public_client.list_pull_commits",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
     ):
         imported = client.post(
             "/api/pull-requests/import",

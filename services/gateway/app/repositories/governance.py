@@ -25,7 +25,56 @@ def _row_to_definition(row: GovernanceRule) -> dict[str, Any]:
     return payload
 
 
+def ensure_builtin_rules(session: Session) -> None:
+    """Seed default governance rules when the table is empty."""
+    existing = session.scalar(select(GovernanceRule.id).limit(1))
+    if existing:
+        return
+    builtins = [
+        {
+            "id": "gov-forbidden-secrets",
+            "rule": "禁止在代码中提交密钥或 Token",
+            "severity": "critical",
+            "matchType": "keyword",
+            "keywords": ["api_key", "secret", "password", "private_key", "BEGIN RSA"],
+        },
+        {
+            "id": "gov-forbidden-paths",
+            "rule": "禁止修改生产部署与凭证路径",
+            "severity": "high",
+            "matchType": "file_pattern",
+            "filePatterns": ["**/.env*", "**/secrets/**", "**/deploy/prod/**"],
+        },
+        {
+            "id": "gov-missing-tests",
+            "rule": "业务代码变更应包含测试文件",
+            "severity": "medium",
+            "matchType": "missing_tests",
+        },
+        {
+            "id": "gov-large-pr",
+            "rule": "超大 PR 需要拆分审查",
+            "severity": "medium",
+            "matchType": "large_pr",
+            "maxLines": 800,
+            "maxFiles": 40,
+        },
+    ]
+    for spec in builtins:
+        session.add(
+            GovernanceRule(
+                id=spec["id"],
+                rule=spec["rule"],
+                severity=spec["severity"],
+                enabled=True,
+                payload=spec,
+            )
+        )
+    session.flush()
+
+
 def list_enabled_rule_definitions(session: Session) -> list[dict[str, Any]]:
+    ensure_builtin_rules(session)
     rows = session.scalars(
         select(GovernanceRule).where(GovernanceRule.enabled.is_(True))
     ).all()
@@ -98,7 +147,14 @@ def _normalize_rule_body(body: dict[str, Any]) -> dict[str, Any]:
     payload["severity"] = severity
     payload["enabled"] = bool(payload.get("enabled", True))
     match_type = str(payload.get("matchType", "keyword")).lower()
-    if match_type not in ("keyword", "file_pattern", "finding", "any"):
+    if match_type not in (
+        "keyword",
+        "file_pattern",
+        "finding",
+        "any",
+        "missing_tests",
+        "large_pr",
+    ):
         match_type = "keyword"
     payload["matchType"] = match_type
     for key in ("keywords", "filePatterns", "findingTypes", "findingSeverities"):

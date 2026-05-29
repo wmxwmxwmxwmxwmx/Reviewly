@@ -115,6 +115,22 @@ class PullRequestDiff(Base):
     patch: Mapped[str | None] = mapped_column(Text)
 
 
+class PullRequestFile(Base):
+    """One changed file in a pull request (GitHub pulls/{number}/files)."""
+
+    __tablename__ = "pull_request_files"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    pull_request_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("pull_requests.id", ondelete="CASCADE"), index=True
+    )
+    filename: Mapped[str] = mapped_column(String(1024))
+    patch: Mapped[str | None] = mapped_column(Text)
+    additions: Mapped[int] = mapped_column(Integer, default=0)
+    deletions: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(32), default="modified")
+
+
 class AnalysisJob(Base):
     __tablename__ = "analysis_jobs"
 

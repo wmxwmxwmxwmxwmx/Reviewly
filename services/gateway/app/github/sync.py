@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Repository
 from app.github import public_client
-from app.github.client import GitHubClient
+from app.integrations.github.github_client import GitHubClient
 from app.grpc_client.engine import get_engine_client
+from app.repositories import pull_request_files as pr_files_repo
 from app.repositories import pull_requests as pr_repo
 from app.repositories import repos as repos_repo
 
@@ -71,6 +72,23 @@ def _map_pr(gh_pr: dict[str, Any], repo_id: str, repo_label: str) -> tuple[str, 
     return pr_id, payload
 
 
+async def _fetch_pr_files_and_commits(
+    owner: str,
+    name: str,
+    number: int,
+    *,
+    installation_id: str | None,
+) -> tuple[list[dict[str, Any]], int]:
+    if installation_id:
+        client = GitHubClient(installation_id)
+        gh_files = await client.list_pull_files(owner, name, number)
+        commits = await client.list_pull_commits(owner, name, number)
+    else:
+        gh_files = await public_client.list_pull_files(owner, name, number)
+        commits = await public_client.list_pull_commits(owner, name, number)
+    return gh_files, len(commits)
+
+
 async def _persist_pull_request(
     session: Session,
     *,
@@ -80,6 +98,8 @@ async def _persist_pull_request(
     name: str,
     installation_id: str | None,
     patch: str,
+    gh_files: list[dict[str, Any]] | None = None,
+    commit_count: int | None = None,
 ) -> str:
     engine = get_engine_client()
     full_name = gh_repo.get("full_name") or f"{owner}/{name}"
@@ -100,7 +120,18 @@ async def _persist_pull_request(
         payload=repo_payload,
     )
     pr_id, pr_payload = _map_pr(gh_pr, repo_id, name)
-    diff_files = await engine.parse_diff(patch)
+    if commit_count is not None:
+        pr_payload["commits"] = commit_count
+    if gh_files is None:
+        gh_files, commits_n = await _fetch_pr_files_and_commits(
+            owner, name, gh_pr["number"], installation_id=installation_id
+        )
+        pr_payload["commits"] = commits_n
+    mapped_files = [pr_files_repo.map_github_file(f) for f in gh_files]
+    pr_files_repo.replace_files(session, pr_id, mapped_files)
+    diff_files = pr_files_repo.to_diff_view_rows(mapped_files)
+    if not diff_files:
+        diff_files = await engine.parse_diff(patch)
     pr_repo.upsert_pull_request(
         session,
         pr_id=pr_id,
@@ -128,6 +159,9 @@ async def sync_single_pull_request(
     client = GitHubClient(installation_id)
     gh_pr = await client.get_pull_request(owner, repo, number)
     patch = await client.get_pull_diff_patch(owner, repo, number)
+    gh_files, commit_count = await _fetch_pr_files_and_commits(
+        owner, repo, number, installation_id=installation_id
+    )
     gh_repos = await client.list_repos()
     gh_repo = next((r for r in gh_repos if r.get("full_name") == f"{owner}/{repo}"), None)
     if gh_repo is None:
@@ -144,6 +178,8 @@ async def sync_single_pull_request(
         name=repo,
         installation_id=installation_id,
         patch=patch,
+        gh_files=gh_files,
+        commit_count=commit_count,
     )
 
 
@@ -156,6 +192,9 @@ async def sync_single_pull_request_public(
     gh_repo = await public_client.get_repo(owner, repo)
     gh_pr = await public_client.get_pull_request(owner, repo, number)
     patch = await public_client.get_pull_diff_patch(owner, repo, number)
+    gh_files, commit_count = await _fetch_pr_files_and_commits(
+        owner, repo, number, installation_id=None
+    )
     return await _persist_pull_request(
         session,
         gh_pr=gh_pr,
@@ -164,6 +203,8 @@ async def sync_single_pull_request_public(
         name=repo,
         installation_id=None,
         patch=patch,
+        gh_files=gh_files,
+        commit_count=commit_count,
     )
 
 
@@ -201,7 +242,15 @@ async def sync_installation(session: Session, installation_id: str) -> dict[str,
         for gh_pr in prs:
             pr_id, pr_payload = _map_pr(gh_pr, repo_id, name)
             patch = await client.get_pull_diff_patch(owner, name, gh_pr["number"])
-            diff_files = await engine.parse_diff(patch)
+            gh_files, commit_count = await _fetch_pr_files_and_commits(
+                owner, name, gh_pr["number"], installation_id=installation_id
+            )
+            pr_payload["commits"] = commit_count
+            mapped_files = [pr_files_repo.map_github_file(f) for f in gh_files]
+            pr_files_repo.replace_files(session, pr_id, mapped_files)
+            diff_files = pr_files_repo.to_diff_view_rows(mapped_files)
+            if not diff_files:
+                diff_files = await engine.parse_diff(patch)
             pr_repo.upsert_pull_request(
                 session,
                 pr_id=pr_id,
