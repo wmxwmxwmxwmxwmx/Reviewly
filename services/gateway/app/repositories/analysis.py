@@ -89,6 +89,10 @@ def update_job(session: Session, job_id: str, **fields: object) -> None:
 
 
 def save_findings(session: Session, job_id: str, findings: list[dict]) -> None:
+    job = session.get(AnalysisJob, job_id)
+    pr_id = job.pull_request_id if job else None
+    security_logged = False
+
     for i, f in enumerate(findings):
         raw_id = f.get("id") or f"finding-{i}"
         fid = raw_id if str(raw_id).startswith(f"{job_id}:") else f"{job_id}:{raw_id}"
@@ -106,6 +110,25 @@ def save_findings(session: Session, job_id: str, findings: list[dict]) -> None:
                 payload=payload,
             )
         )
+        if (
+            not security_logged
+            and f.get("type") == "security"
+            and pr_id
+        ):
+            from app.services.activity_helpers import pr_context
+            from app.services.activity_log import record_activity
+
+            repo_label, _, _ = pr_context(session, pr_id)
+            record_activity(
+                session,
+                event_type="security_finding",
+                actor="AI",
+                action=f"发现安全问题：{f.get('title', 'Security finding')}",
+                repo=repo_label,
+                pull_request_id=pr_id,
+                payload={"findingId": fid, "severity": f.get("severity")},
+            )
+            security_logged = True
     session.commit()
 
 

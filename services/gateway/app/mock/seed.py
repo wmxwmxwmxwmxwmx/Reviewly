@@ -18,17 +18,23 @@ _REPOS: list[dict[str, Any]] = [
     {
         "id": "repo-payment",
         "fullName": "acme-corp/backend",
+        "name": "backend",
+        "owner": "acme-corp",
         "defaultBranch": "main",
         "openPrCount": 12,
         "healthScore": 78,
+        "lastSyncTime": "2025-05-28T10:00:00Z",
         "aiReviewEnabled": True,
     },
     {
         "id": "repo-auth",
         "fullName": "acme-corp/auth-service",
+        "name": "auth-service",
+        "owner": "acme-corp",
         "defaultBranch": "main",
         "openPrCount": 4,
         "healthScore": 88,
+        "lastSyncTime": "2025-05-27T09:00:00Z",
         "aiReviewEnabled": True,
     },
 ]

@@ -16,4 +16,9 @@ def test_health(client: TestClient) -> None:
 def test_dashboard(client: TestClient) -> None:
     r = client.get("/api/dashboard")
     assert r.status_code == 200
-    assert "pendingPrs" in r.json()
+    data = r.json()
+    assert "pendingPrs" in data
+    assert "summary" in data
+    assert "riskDistribution" in data
+    assert "analysisTiming" in data
+    assert "activities" in data

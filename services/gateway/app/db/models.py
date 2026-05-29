@@ -136,3 +136,18 @@ class AuditLog(Base):
     actor_id: Mapped[str | None] = mapped_column(String(64))
     payload: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ActivityEvent(Base):
+    __tablename__ = "activity_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    type: Mapped[str] = mapped_column(String(64))
+    actor: Mapped[str] = mapped_column(String(128))
+    action: Mapped[str] = mapped_column(String(512))
+    repo: Mapped[str] = mapped_column(String(256))
+    pull_request_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("pull_requests.id"), nullable=True
+    )
+    payload: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

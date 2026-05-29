@@ -1,47 +1,99 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { BookOpen, GitBranch, Star, Clock, Settings } from "lucide-react"
+import { BookOpen, GitBranch, Star, Clock, Settings, Loader2, BrainCircuit } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useReposStore } from "@/features/prism/contexts/repos-context"
+import { SummaryMarkdown } from "@/features/prism/components/summary-markdown"
 
-import { useRepos } from "@/hooks/use-repos"
+function formatSyncTime(iso: string) {
+  if (!iso) return "未同步"
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const diffMs = Date.now() - d.getTime()
+  const mins = Math.floor(diffMs / 60000)
+  if (mins < 1) return "刚刚"
+  if (mins < 60) return `${mins} 分钟前`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours} 小时前`
+  const days = Math.floor(hours / 24)
+  return `${days} 天前`
+}
 
 export function ReposView() {
-  const { repos, loading, error } = useRepos()
+  const {
+    repos,
+    loading,
+    syncing,
+    error,
+    syncError,
+    analyzingRepoId,
+    analyzedRepoId,
+    analysisText,
+    analysisError,
+    sync,
+    analyzeRepository,
+  } = useReposStore()
 
   return (
     <div className="p-5 space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-foreground">仓库管理</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">已连接的代码仓库</p>
+          <p className="text-sm text-muted-foreground mt-0.5">已连接的 GitHub 仓库（REST 元数据，不 clone）</p>
         </div>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-ai-blue rounded-md hover:bg-[oklch(0.55_0.19_240)] transition-colors">
-          <BookOpen className="w-3.5 h-3.5" />
-          添加仓库
+        <button
+          type="button"
+          onClick={() => void sync()}
+          disabled={syncing}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-ai-blue rounded-md hover:bg-[oklch(0.55_0.19_240)] transition-colors disabled:opacity-60"
+        >
+          {syncing ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <BookOpen className="w-3.5 h-3.5" />
+          )}
+          {syncing ? "同步中…" : "同步仓库"}
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {error && <p className="text-sm text-risk-high col-span-2">{error}</p>}
+      {(error || syncError) && (
+        <p className="text-sm text-risk-high">{error ?? syncError}</p>
+      )}
 
+      {loading && (
+        <p className="text-sm text-muted-foreground flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          加载仓库…
+        </p>
+      )}
+
+      {!loading && repos.length === 0 && (
+        <p className="text-sm text-muted-foreground">暂无仓库，请点击「同步仓库」从 GitHub 拉取。</p>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
         {!loading &&
           repos.map((repo, idx) => {
             const health = repo.healthScore
+            const isAnalyzing = analyzingRepoId === repo.id
+            const isAnalyzedCard = analyzedRepoId === repo.id || isAnalyzing
+            const showAnalysis = isAnalyzedCard && Boolean(analysisText)
+
             return (
               <motion.div
                 key={repo.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.05 }}
-                className="p-4 rounded-lg bg-surface-2 border border-border hover:border-ai-blue/50 transition-colors cursor-pointer"
+                className="p-4 rounded-lg bg-surface-2 border border-border hover:border-ai-blue/50 transition-colors"
               >
                 <div className="flex items-start justify-between">
                   <div>
                     <span className="text-sm font-medium text-foreground font-mono">
-                      {repo.fullName.split("/").slice(-2).join("/")}
+                      {repo.owner}/{repo.name}
                     </span>
-                    <div className="mt-1 flex items-center gap-2">
+                    <div className="mt-1 flex items-center gap-2 flex-wrap">
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-3 text-muted-foreground">
                         默认分支：{repo.defaultBranch}
                       </span>
@@ -52,7 +104,11 @@ export function ReposView() {
                       )}
                     </div>
                   </div>
-                  <button className="p-1 hover:bg-surface-3 rounded transition-colors" type="button">
+                  <button
+                    type="button"
+                    className="p-1 hover:bg-surface-3 rounded transition-colors"
+                    aria-label="设置"
+                  >
                     <Settings className="w-4 h-4 text-muted-foreground" />
                   </button>
                 </div>
@@ -68,7 +124,7 @@ export function ReposView() {
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />
-                    —
+                    {formatSyncTime(repo.lastSyncTime)}
                   </span>
                 </div>
 
@@ -96,6 +152,38 @@ export function ReposView() {
                     />
                   </div>
                 </div>
+
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void analyzeRepository(repo.id)}
+                    disabled={Boolean(analyzingRepoId)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-ai-blue/15 text-ai-blue hover:bg-ai-blue/25 disabled:opacity-50"
+                  >
+                    {isAnalyzing ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <BrainCircuit className="w-3.5 h-3.5" />
+                    )}
+                    {isAnalyzing ? "分析中…" : "Analyze Repository"}
+                  </button>
+                </div>
+
+                {(isAnalyzedCard && (isAnalyzing || showAnalysis || analysisError)) && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    {analysisError && isAnalyzedCard && (
+                      <p className="text-xs text-risk-high mb-2">{analysisError}</p>
+                    )}
+                    {isAnalyzing && !analysisText && (
+                      <p className="text-xs text-muted-foreground">正在生成仓库分析…</p>
+                    )}
+                    {showAnalysis && (
+                      <div className="text-xs max-h-64 overflow-y-auto">
+                        <SummaryMarkdown content={analysisText} />
+                      </div>
+                    )}
+                  </div>
+                )}
               </motion.div>
             )
           })}

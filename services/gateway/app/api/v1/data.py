@@ -8,9 +8,11 @@ from app.db.deps import get_db
 from app.repositories import analysis as analysis_repo
 from app.repositories import dashboard as dashboard_repo
 from app.repositories import pull_requests as pr_repo
+from app.github import public_client
 from app.repositories import repos as repos_repo
 from app.repositories import settings as settings_repo
 from app.services import analysis_jobs
+from app.services import dashboard_summary
 
 router = APIRouter(prefix="/api", tags=["data"])
 
@@ -30,9 +32,44 @@ def dashboard(db: Session = Depends(get_db)) -> dict:
     return dashboard_repo.get_dashboard(db)
 
 
+@router.post("/dashboard/weekly-summary")
+async def dashboard_weekly_summary(db: Session = Depends(get_db)) -> dict:
+    return await dashboard_summary.generate_weekly_summary(db)
+
+
 @router.get("/repos")
 def repos(db: Session = Depends(get_db)) -> list:
     return repos_repo.list_repos(db)
+
+
+@router.get("/repos/{repo_id}/analyze-context")
+async def repo_analyze_context(repo_id: str, db: Session = Depends(get_db)) -> dict:
+    repo = repos_repo.get_repo(db, repo_id)
+    if not repo:
+        raise api_error("仓库不存在", 404)
+
+    owner = repo.get("owner", "")
+    name = repo.get("name", "")
+    readme = ""
+    if owner and name:
+        try:
+            readme = await public_client.get_readme(owner, name)
+        except Exception:
+            readme = ""
+
+    findings = repos_repo.list_recent_findings_for_repo(db, repo_id, limit=20)
+    return {
+        "repository": repo,
+        "recentFindings": findings,
+        "readme": readme[:8000] if readme else "",
+    }
+
+
+@router.post("/repos/{repo_id}/clone")
+def repo_clone_placeholder(repo_id: str, db: Session = Depends(get_db)) -> dict:
+    if repos_repo.get_repo_row(db, repo_id) is None:
+        raise api_error("仓库不存在", 404)
+    raise api_error("仓库 clone 尚未实现，将用于架构分析与全仓扫描", 501)
 
 
 @router.get("/pull-requests")

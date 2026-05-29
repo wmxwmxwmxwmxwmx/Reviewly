@@ -15,12 +15,21 @@ paths:
   /api/dashboard:
     get:
       summary: Dashboard stats
+  /api/dashboard/weekly-summary:
+    post:
+      summary: Generate weekly AI dashboard summary (on demand)
   /api/repos:
     get:
       summary: List repositories
   /api/repos/sync:
     post:
-      summary: Sync repositories from GitHub
+      summary: Sync repository metadata from GitHub (no clone, no PR diffs)
+  /api/repos/{repoId}/analyze-context:
+    get:
+      summary: Context for on-demand repository AI analysis
+  /api/repos/{repoId}/clone:
+    post:
+      summary: Clone repository (reserved, not implemented)
   /api/pull-requests:
     get:
       summary: List pull requests

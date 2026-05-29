@@ -84,6 +84,35 @@ async def run_job(session: Session, job_id: str) -> None:
         completedAt=True,
     )
 
+    from app.db.models import AnalysisJob
+    from app.services.activity_helpers import pr_context
+    from app.services.activity_log import record_activity
+
+    job_row = session.get(AnalysisJob, job_id)
+    repo_label, title, _ = pr_context(session, pr_id)
+    duration_ms = 0
+    if job_row and job_row.created_at and job_row.completed_at:
+        duration_ms = int((job_row.completed_at - job_row.created_at).total_seconds() * 1000)
+    record_activity(
+        session,
+        event_type="analysis_completed",
+        actor="AI",
+        action=f"完成了 PR 分析：{title}",
+        repo=repo_label,
+        pull_request_id=pr_id,
+        payload={"jobId": job_id, "durationMs": duration_ms, "findingCount": len(findings_list)},
+    )
+    record_activity(
+        session,
+        event_type="review_completed",
+        actor="AI",
+        action=f"PR Review 已完成：{title}",
+        repo=repo_label,
+        pull_request_id=pr_id,
+        payload={"jobId": job_id},
+    )
+    session.commit()
+
 
 def create_job(session: Session, pull_request_id: str) -> dict[str, Any]:
     if pr_repo.get_pull_request(session, pull_request_id) is None:
