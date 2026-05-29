@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.errors import api_error
 from app.db.models import Setting
 from app.repositories.ai_persisted import extract_ai_persisted
 from app.services import settings_crypto
@@ -14,22 +15,31 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _default_settings() -> dict:
+    return {
+        "ai": {
+            "provider": "openai",
+            "model": "",
+            "temperature": 0.2,
+            "maxTokens": 4096,
+        },
+        "github": {"connected": False},
+        "notifications": {"email": True, "slack": False},
+        "dashboard": {},
+    }
+
+
 def get_settings(session: Session) -> dict:
     row = session.get(Setting, "default")
     if row is None:
-        from app.mock import seed
-
-        return seed.get_settings()
+        return _default_settings()
     return _public_settings(row)
 
 
 def patch_settings(session: Session, patch: dict) -> dict:
     row = session.get(Setting, "default")
     if row is None:
-        from app.mock import seed
-
-        data = seed.get_settings()
-        row = Setting(id="default", data=data, encrypted_secrets=None)
+        row = Setting(id="default", data=_default_settings(), encrypted_secrets=None)
         session.add(row)
 
     data = deepcopy(row.data)
@@ -49,6 +59,9 @@ def patch_settings(session: Session, patch: dict) -> dict:
             data[key] = value
 
     row.data = data
+
+    if secrets_patch and not settings_crypto.is_configured():
+        raise api_error("请先配置 SETTINGS_ENCRYPTION_KEY 以保存 API 密钥", 501)
 
     if secrets_patch and settings_crypto.is_configured():
         existing = _decrypt_secrets(row.encrypted_secrets) if row.encrypted_secrets else {}
@@ -108,10 +121,7 @@ def save_dashboard_weekly_summary(
 ) -> dict:
     row = session.get(Setting, "default")
     if row is None:
-        from app.mock import seed
-
-        data = seed.get_settings()
-        row = Setting(id="default", data=data, encrypted_secrets=None)
+        row = Setting(id="default", data=_default_settings(), encrypted_secrets=None)
         session.add(row)
 
     data = deepcopy(row.data)

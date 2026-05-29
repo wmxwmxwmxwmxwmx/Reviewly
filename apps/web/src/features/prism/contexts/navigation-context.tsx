@@ -11,8 +11,10 @@ import { useRouter, useSearchParams } from "next/navigation"
 import type { NavView } from "@/features/prism/components/sidebar"
 import { useAIReviewSession } from "@/features/prism/contexts/ai-review-session-context"
 
-export const DEFAULT_PR_ID = "pr-2847"
-const DEFAULT_VIEW: NavView = "ai-review"
+/** Legacy demo PR id — never use as default navigation target. */
+export const LEGACY_DEMO_PR_ID = "pr-2847"
+
+const DEFAULT_VIEW: NavView = "dashboard"
 
 const NAV_VIEWS: NavView[] = [
   "dashboard",
@@ -29,6 +31,10 @@ const NAV_VIEWS: NavView[] = [
 
 function isNavView(value: string | null): value is NavView {
   return value !== null && (NAV_VIEWS as string[]).includes(value)
+}
+
+function isLegacyDemoPrId(prId: string | null | undefined): boolean {
+  return prId === LEGACY_DEMO_PR_ID
 }
 
 export type NavParams = {
@@ -48,26 +54,27 @@ const NavigationContext = createContext<NavigationContextValue | null>(null)
 function resolvePrId(
   view: NavView,
   params: NavParams | undefined,
-  currentPrId: string | null,
   lastReviewedPrId: string | null,
 ): string | null {
-  if (params?.prId) return params.prId
-  if (currentPrId) return currentPrId
-  if (lastReviewedPrId) return lastReviewedPrId
-  if (view === "ai-review") return DEFAULT_PR_ID
-  return null
+  if (view !== "ai-review") {
+    return null
+  }
+  const candidate = params?.prId ?? lastReviewedPrId ?? null
+  if (isLegacyDemoPrId(candidate)) {
+    return null
+  }
+  return candidate
 }
 
 function buildQuery(
   view: NavView,
   params: NavParams | undefined,
-  currentPrId: string | null,
   lastReviewedPrId: string | null,
 ) {
   const qs = new URLSearchParams()
   qs.set("view", view)
 
-  const prId = resolvePrId(view, params, currentPrId, lastReviewedPrId)
+  const prId = resolvePrId(view, params, lastReviewedPrId)
   if (prId) {
     qs.set("prId", prId)
   }
@@ -81,30 +88,46 @@ function buildQuery(
 export function NavigationProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { lastReviewedPrId } = useAIReviewSession()
+  const { lastReviewedPrId, clearLastReviewedPrIdIfLegacy } = useAIReviewSession()
 
   const viewParam = searchParams.get("view")
   const activeView = isNavView(viewParam) ? viewParam : DEFAULT_VIEW
   const urlPrId = searchParams.get("prId")
+
   const prId =
-    urlPrId ??
-    lastReviewedPrId ??
-    (activeView === "ai-review" ? DEFAULT_PR_ID : null)
+    activeView === "ai-review"
+      ? isLegacyDemoPrId(urlPrId)
+        ? null
+        : urlPrId ?? (isLegacyDemoPrId(lastReviewedPrId) ? null : lastReviewedPrId)
+      : null
 
   useEffect(() => {
-    if (!searchParams.get("view")) {
-      router.replace(
-        `/?${buildQuery(DEFAULT_VIEW, { prId: DEFAULT_PR_ID }, null, lastReviewedPrId)}`,
-      )
+    clearLastReviewedPrIdIfLegacy()
+  }, [clearLastReviewedPrIdIfLegacy])
+
+  useEffect(() => {
+    const hasView = Boolean(searchParams.get("view"))
+    const rawPrId = searchParams.get("prId")
+    const needsPrStrip =
+      rawPrId && (activeView !== "ai-review" || isLegacyDemoPrId(rawPrId))
+    const needsDefaultView = !hasView
+
+    if (needsDefaultView || needsPrStrip) {
+      const view = hasView && isNavView(viewParam) ? viewParam! : DEFAULT_VIEW
+      const params: NavParams | undefined =
+        view === "ai-review" && rawPrId && !isLegacyDemoPrId(rawPrId)
+          ? { prId: rawPrId }
+          : undefined
+      router.replace(`/?${buildQuery(view, params, lastReviewedPrId)}`)
     }
-  }, [router, searchParams, lastReviewedPrId])
+  }, [router, searchParams, activeView, viewParam, lastReviewedPrId])
 
   const navigate = useCallback(
     (view: NavView, params?: NavParams) => {
-      const query = buildQuery(view, params, urlPrId ?? prId, lastReviewedPrId)
+      const query = buildQuery(view, params, lastReviewedPrId)
       router.replace(`/?${query}`)
     },
-    [router, urlPrId, prId, lastReviewedPrId],
+    [router, lastReviewedPrId],
   )
 
   return (

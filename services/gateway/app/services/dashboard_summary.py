@@ -10,29 +10,25 @@ from sqlalchemy.orm import Session
 
 from app.ai.anthropic import call_anthropic
 from app.ai.openai_compatible import call_openai_compatible
-from app.ai.providers import VALID_PROVIDERS, get_endpoint
-from app.core.errors import api_error
+from app.ai.providers import get_endpoint
 from app.db.models import AnalysisFinding, AnalysisJob
-from app.repositories import settings as settings_repo
 from app.repositories.analysis import _finding_to_api
 from app.repositories.dashboard import get_dashboard
+from app.repositories import settings as settings_repo
+from app.services.ai_config import resolve_ai_config
 
 
-async def generate_weekly_summary(session: Session) -> dict[str, Any]:
+async def generate_weekly_summary(
+    session: Session,
+    *,
+    api_key_override: str | None = None,
+) -> dict[str, Any]:
     cfg = settings_repo.get_settings(session)
     ai = cfg.get("ai", {})
-    provider = str(ai.get("provider", "openai"))
-    model = str(ai.get("model", "")).strip()
-    secrets = settings_repo.get_decrypted_secrets(session)
-    api_key = secrets.get(provider) or secrets.get("apiKey", "")
-    custom_endpoint = ai.get("customEndpoint")
-
-    if provider not in VALID_PROVIDERS:
-        raise api_error("请在系统设置中选择有效的模型供应商", 400)
-    if not model:
-        raise api_error("请先在系统设置中填写模型名称", 400)
-    if not api_key.strip():
-        raise api_error("请先在系统设置中配置 API Key", 400)
+    provider, model, api_key, custom_endpoint = resolve_ai_config(
+        session,
+        api_key_override=api_key_override,
+    )
 
     since = datetime.now(timezone.utc) - timedelta(days=7)
     findings_rows = session.scalars(select(AnalysisFinding)).all()

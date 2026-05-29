@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from app.db.models import PullRequestDiff
 from app.grpc_client.engine import get_engine_client
-from app.mock import seed
 from app.repositories import analysis as analysis_repo
 from app.repositories import pull_request_files as pr_files_repo
 from app.repositories import pull_requests as pr_repo
@@ -73,9 +72,6 @@ async def run_job(session: Session, job_id: str) -> None:
     except Exception as exc:  # noqa: BLE001
         analysis_repo.update_job(session, job_id, status="failed", error=str(exc))
         return
-
-    if not findings_list and seed.is_demo_pr(pr_id):
-        findings_list = seed.list_findings(pr_id)
 
     analysis_repo.save_findings(session, job_id, findings_list)
 

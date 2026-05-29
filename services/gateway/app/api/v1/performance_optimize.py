@@ -30,7 +30,9 @@ async def optimize_finding(
     ctx = performance_repo.get_finding_with_context(db, finding_id)
     if not ctx:
         raise api_error("性能发现不存在", 404)
-    performance_optimize._resolve_ai_config(db)
+    from app.services.ai_config import resolve_ai_config
+
+    resolve_ai_config(db)
 
     async def event_stream():
         try:

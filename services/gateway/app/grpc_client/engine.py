@@ -8,7 +8,6 @@ from typing import Any, AsyncIterator
 from app.core.config import settings
 from app.engine.analyzer import analyze_patch, iter_chunk_progress
 from app.grpc_client.diff_parser import parse_unified_diff
-from app.mock import seed
 
 
 class StubEngineClient:
@@ -16,9 +15,9 @@ class StubEngineClient:
         return {"status": "ok", "version": "python-engine"}
 
     async def parse_diff(self, patch: str) -> list[dict[str, Any]]:
-        if patch.strip():
-            return parse_unified_diff(patch)
-        return seed.get_diff(seed.DEFAULT_PR_ID)
+        if not patch.strip():
+            return []
+        return parse_unified_diff(patch)
 
     async def run_analysis(
         self,
@@ -30,8 +29,6 @@ class StubEngineClient:
     ) -> AsyncIterator[dict[str, Any]]:
         _ = job_id, pull_request_id
         findings, chunks = analyze_patch(patch, file_paths)
-        if not findings and seed.is_demo_pr(pull_request_id):
-            findings = seed.list_findings(pull_request_id)
 
         for progress in iter_chunk_progress(chunks, findings):
             await asyncio.sleep(0.15)

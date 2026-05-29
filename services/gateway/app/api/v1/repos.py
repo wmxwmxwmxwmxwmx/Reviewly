@@ -30,8 +30,12 @@ async def import_repository(
 
 
 @router.post("/sync")
-async def sync_repositories_admin(db: Session = Depends(get_db)) -> dict:
-    """Legacy PAT-based sync (no user context)."""
+async def sync_repositories_admin(
+    user: AuthUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Legacy PAT-based sync; requires authenticated user (or PRISM_AUTH_BYPASS dev user)."""
+    _ = user
     return await repo_sync.sync_github_repositories(db)
 
 

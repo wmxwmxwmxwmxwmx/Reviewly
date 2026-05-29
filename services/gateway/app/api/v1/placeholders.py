@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.errors import api_error
 from app.db.deps import get_db
-from app.mock import seed
 from app.repositories import settings as settings_repo
 from app.services import settings_crypto
 from app.services.integration_test import run_integration_test

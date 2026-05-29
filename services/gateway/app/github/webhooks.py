@@ -34,12 +34,26 @@ async def handle_event(session: Session, event: str, payload: dict[str, Any]) ->
                 account.get("login", "unknown"),
             )
             if _github_configured():
-                await sync.sync_installation(session, inst_str)
+                try:
+                    await sync.sync_installation(session, inst_str)
+                except Exception:
+                    logger.exception(
+                        "Webhook installation sync failed installation_id=%s action=%s",
+                        inst_str,
+                        action,
+                    )
             return
         if action == "deleted":
             return
         if _github_configured():
-            await sync.sync_installation(session, inst_str)
+            try:
+                await sync.sync_installation(session, inst_str)
+            except Exception:
+                logger.exception(
+                    "Webhook installation sync failed installation_id=%s action=%s",
+                    inst_str,
+                    action,
+                )
         return
 
     if event == "installation_repositories":
@@ -77,7 +91,14 @@ async def handle_event(session: Session, event: str, payload: dict[str, Any]) ->
             return
 
         if installation_id and _github_configured():
-            await sync.sync_installation(session, inst_str)
+            try:
+                await sync.sync_installation(session, inst_str)
+            except Exception:
+                logger.exception(
+                    "Webhook pull_request resync failed installation_id=%s action=%s",
+                    inst_str,
+                    action,
+                )
         return
 
     if event == "push":
@@ -98,5 +119,12 @@ async def handle_event(session: Session, event: str, payload: dict[str, Any]) ->
         if action in ("created", "edited", "renamed", "transferred") and _github_configured():
             installation_id = payload.get("installation", {}).get("id")
             if installation_id:
-                await sync.sync_installation(session, str(installation_id))
+                try:
+                    await sync.sync_installation(session, str(installation_id))
+                except Exception:
+                    logger.exception(
+                        "Webhook repository sync failed installation_id=%s action=%s",
+                        installation_id,
+                        action,
+                    )
         return

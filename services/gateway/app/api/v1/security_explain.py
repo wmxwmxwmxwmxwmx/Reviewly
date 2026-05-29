@@ -31,7 +31,9 @@ async def explain_finding(
         from app.core.errors import api_error
 
         raise api_error("安全发现不存在", 404)
-    security_explain._resolve_ai_config(db)
+    from app.services.ai_config import resolve_ai_config
+
+    resolve_ai_config(db)
 
     async def event_stream():
         try:

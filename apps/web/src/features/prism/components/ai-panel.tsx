@@ -27,19 +27,32 @@ import type { AnalysisFinding, AnalysisJob, AnalysisSummary } from "@reviewly/sh
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
-import type { RiskItem } from "@/features/prism/data/mock-data"
+import type { RiskItem } from "@reviewly/shared"
 import type { AIReviewPanelTab } from "@/features/prism/contexts/ai-review-session-context"
 import { usePrGovernance } from "@/hooks/use-pr-governance"
 
 type PanelTab = AIReviewPanelTab
 
-function buildTabs(findingsCount: number): { key: PanelTab; label: string; icon: React.ElementType; badge?: string }[] {
+function buildTabs(findingsCount: number): {
+  key: PanelTab
+  label: string
+  icon: React.ElementType
+  badge?: string
+  disabled?: boolean
+  title?: string
+}[] {
   return [
     { key: "stream", label: "AI 流", icon: BrainCircuit },
     { key: "risks", label: "风险", icon: Shield, badge: findingsCount > 0 ? String(findingsCount) : undefined },
     { key: "merge", label: "合并", icon: GitMerge },
     { key: "governance", label: "治理", icon: ScrollText },
-    { key: "incidents", label: "事故", icon: Flame },
+    {
+      key: "incidents",
+      label: "事故",
+      icon: Flame,
+      disabled: true,
+      title: "即将推出",
+    },
   ]
 }
 
@@ -551,9 +564,15 @@ export function AIPanel({
         {tabs.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            type="button"
+            disabled={tab.disabled}
+            title={tab.title}
+            onClick={() => {
+              if (!tab.disabled) setActiveTab(tab.key)
+            }}
             className={cn(
               "relative flex items-center gap-1.5 px-2.5 py-2.5 text-[11px] font-medium whitespace-nowrap transition-colors",
+              tab.disabled && "opacity-40 cursor-not-allowed",
               activeTab === tab.key
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground"

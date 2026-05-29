@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { fetchSettings } from "@/lib/api/settings"
 import { zh } from "@/lib/i18n/zh"
 
 export type AIProvider = "anthropic" | "openai" | "google" | "deepseek" | "openrouter" | "custom"
@@ -161,10 +162,16 @@ export function estimateCostCny(provider: AIProvider, totalTokens: number) {
   return (totalTokens / 1_000_000) * pricePerMillionTokens[provider]
 }
 
+type ServerSettingsPayload = {
+  ai?: { provider?: string; model?: string; temperature?: number }
+  secrets?: Record<string, string>
+}
+
 export function AISettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AISettings>(DEFAULT_SETTINGS)
   const [usageRecords, setUsageRecords] = useState<AIUsageRecord[]>([])
   const [settingsHydrated, setSettingsHydrated] = useState(false)
+  const [serverSecretConfigured, setServerSecretConfigured] = useState(false)
 
   useEffect(() => {
     try {
@@ -185,6 +192,51 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
       setSettingsHydrated(true)
     }
   }, [])
+
+  useEffect(() => {
+    if (!settingsHydrated) return
+
+    let cancelled = false
+
+    void fetchSettings()
+      .then((data) => {
+        if (cancelled) return
+        const payload = data as ServerSettingsPayload & typeof data
+        let resolvedProvider: AIProvider = DEFAULT_SETTINGS.provider
+        setSettings((current) => {
+          const provider = isProvider(payload.ai?.provider)
+            ? payload.ai.provider
+            : current.provider
+          resolvedProvider = provider
+          const fallbackModel =
+            AI_PROVIDER_OPTIONS.find((option) => option.value === provider)?.defaultModel ??
+            DEFAULT_SETTINGS.model
+          return normalizeSettings({
+            ...current,
+            provider,
+            model:
+              typeof payload.ai?.model === "string" && payload.ai.model.trim()
+                ? payload.ai.model
+                : current.model || fallbackModel,
+          })
+        })
+        const secrets = payload.secrets ?? {}
+        const hasServer =
+          Boolean(secrets[resolvedProvider]) ||
+          Boolean(secrets.apiKey) ||
+          Object.values(secrets).some((value) => typeof value === "string" && value.length > 0)
+        setServerSecretConfigured(hasServer)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setServerSecretConfigured(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [settingsHydrated])
 
   useEffect(() => {
     if (!settingsHydrated) return
@@ -231,7 +283,9 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
       settings: resolvedSettings,
       settingsHydrated,
       providerLabel,
-      hasApiKey: settingsHydrated && settings.apiKey.trim().length > 0,
+      hasApiKey:
+        settingsHydrated &&
+        (settings.apiKey.trim().length > 0 || serverSecretConfigured),
       maskedApiKey: maskApiKey(settingsHydrated ? settings.apiKey : ""),
       usageRecords: resolvedUsageRecords,
       monthlyUsage: {
@@ -244,7 +298,16 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
       recordUsage,
       clearUsage,
     }
-  }, [settings, settingsHydrated, usageRecords, updateSettings, updateSetting, recordUsage, clearUsage])
+  }, [
+    settings,
+    settingsHydrated,
+    serverSecretConfigured,
+    usageRecords,
+    updateSettings,
+    updateSetting,
+    recordUsage,
+    clearUsage,
+  ])
 
   return <AISettingsContext.Provider value={value}>{children}</AISettingsContext.Provider>
 }

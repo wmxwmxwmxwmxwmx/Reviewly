@@ -6,6 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import PullRequest, PullRequestDiff, Repository
+from app.repositories.seed_filter import (
+    LEGACY_SEED_PULL_REQUEST_IDS,
+    exclude_seed_repositories,
+    is_seed_pull_request,
+    is_seed_repository,
+)
 
 
 def list_pull_requests(
@@ -16,7 +22,24 @@ def list_pull_requests(
     author: str | None = None,
     state: str | None = None,
 ) -> list[dict]:
-    rows = session.scalars(select(PullRequest)).all()
+    stmt = exclude_seed_repositories(
+        select(PullRequest).join(Repository, PullRequest.repository_id == Repository.id)
+    )
+    rows = session.scalars(stmt).all()
+    if rows:
+        repo_map = {
+            r.id: r
+            for r in session.scalars(
+                select(Repository).where(
+                    Repository.id.in_({row.repository_id for row in rows})
+                )
+            ).all()
+        }
+        rows = [
+            r
+            for r in rows
+            if not is_seed_pull_request(r, repo=repo_map.get(r.repository_id))
+        ]
     items = [_pr_dict(r) for r in rows]
     if repo:
         items = [p for p in items if repo in p.get("repo", "")]
@@ -32,11 +55,22 @@ def list_pull_requests(
 def find_by_repo_number(session: Session, owner: str, repo: str, number: int) -> str | None:
     full_name = f"{owner}/{repo}"
     row = session.scalar(
-        select(PullRequest.id)
-        .join(Repository, PullRequest.repository_id == Repository.id)
-        .where(Repository.full_name == full_name, PullRequest.number == number)
-        .limit(1)
+        exclude_seed_repositories(
+            select(PullRequest.id)
+            .join(Repository, PullRequest.repository_id == Repository.id)
+            .where(Repository.full_name == full_name, PullRequest.number == number)
+        ).limit(1)
     )
+    if row is None:
+        return None
+    pr_row = session.get(PullRequest, row)
+    if pr_row is None:
+        return None
+    if pr_row.id in LEGACY_SEED_PULL_REQUEST_IDS:
+        return None
+    repo_row = session.get(Repository, pr_row.repository_id)
+    if repo_row is not None and is_seed_pull_request(pr_row, repo=repo_row):
+        return None
     return row
 
 
@@ -44,10 +78,19 @@ def get_pull_request(session: Session, pr_id: str) -> dict | None:
     row = session.get(PullRequest, pr_id)
     if row is None:
         return None
+    repo = session.get(Repository, row.repository_id)
+    if repo is not None and (is_seed_repository(repo) or is_seed_pull_request(row, repo=repo)):
+        return None
     return _pr_dict(row)
 
 
 def get_diff(session: Session, pr_id: str) -> list[dict]:
+    row = session.get(PullRequest, pr_id)
+    if row is None:
+        return []
+    repo = session.get(Repository, row.repository_id)
+    if repo is not None and (is_seed_repository(repo) or is_seed_pull_request(row, repo=repo)):
+        return []
     diff_row = session.get(PullRequestDiff, pr_id)
     if diff_row is None:
         return []

@@ -8,8 +8,12 @@ from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import AnalysisFinding, AnalysisJob, PullRequest, PullRequestDiff, Repository
-from app.mock import seed
 from app.repositories.ai_persisted import extract_from_payload
+from app.repositories.seed_filter import (
+    exclude_seed_findings,
+    is_seed_pull_request,
+    is_seed_repository,
+)
 
 RULE_LABELS: dict[str, str] = {
     "sql-injection": "SQL Injection",
@@ -82,40 +86,6 @@ def _to_security_center_finding(
     }
 
 
-def _seed_to_center_items() -> list[dict[str, Any]]:
-    pr = seed.get_pull_request(seed.DEFAULT_PR_ID) or {}
-    repo_name = str(pr.get("repo", "acme-corp/backend"))
-    pr_number = int(pr.get("number", 0))
-    pr_id = seed.DEFAULT_PR_ID
-    items: list[dict[str, Any]] = []
-    for f in seed.list_security_findings():
-        payload = deepcopy(f)
-        rule_id = str(payload.get("ruleId") or payload.get("id", ""))
-        if rule_id == "r2":
-            payload["ruleId"] = "sql-injection"
-        elif rule_id == "r1":
-            payload["ruleId"] = "r1"
-        elif rule_id == "r3":
-            payload["ruleId"] = "r3"
-        items.append(
-            {
-                "id": str(f.get("id", "")),
-                "repo": repo_name,
-                "prNumber": pr_number,
-                "pullRequestId": pr_id,
-                "file": f.get("file", ""),
-                "line": int(f.get("line", 0)),
-                "severity": f.get("severity", "medium"),
-                "rule": resolve_rule_label(payload, str(f.get("title", ""))),
-                "description": str(f.get("description", "")),
-                "suggestion": str(f.get("fixSuggestion", "")),
-                "status": f.get("status", "open"),
-                "title": f.get("title", ""),
-            }
-        )
-    return items
-
-
 def _apply_filters(
     items: list[dict[str, Any]],
     *,
@@ -174,19 +144,13 @@ def list_security_findings_filtered(
             )
         )
 
+    base = exclude_seed_findings(base)
+
     count_stmt = select(func.count()).select_from(base.subquery())
     total = session.scalar(count_stmt) or 0
 
     if total == 0:
-        seed_items = _apply_filters(
-            _seed_to_center_items(),
-            severities=severities,
-            repo=repo,
-            q=q,
-        )
-        total = len(seed_items)
-        start = (page - 1) * page_size
-        return seed_items[start : start + page_size], total
+        return [], 0
 
     rows = session.execute(
         base.order_by(AnalysisFinding.severity, AnalysisFinding.id)
@@ -239,6 +203,8 @@ def get_finding_with_context(session: Session, finding_id: str) -> dict[str, Any
     pr = session.get(PullRequest, job.pull_request_id)
     repo_row = session.get(Repository, pr.repository_id) if pr else None
     if pr is None or repo_row is None:
+        return None
+    if is_seed_repository(repo_row) or is_seed_pull_request(pr, repo=repo_row):
         return None
 
     center = _to_security_center_finding(row, pr, repo_row)

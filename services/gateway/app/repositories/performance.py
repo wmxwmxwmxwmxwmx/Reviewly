@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import AnalysisFinding, AnalysisJob
-from app.mock import seed
 from app.repositories.analysis import _finding_to_api
 from app.repositories.performance_center import (
     get_finding_with_context,
@@ -17,12 +16,18 @@ from app.repositories.performance_center import (
 
 
 def list_performance_findings(session: Session) -> list[dict[str, Any]]:
-    rows = session.scalars(
-        select(AnalysisFinding).where(AnalysisFinding.type == "performance")
-    ).all()
-    if rows:
-        return [_finding_to_api(r) for r in rows]
-    return [f for f in seed.list_findings(seed.DEFAULT_PR_ID) if f.get("type") == "performance"]
+    from app.db.models import PullRequest, Repository
+    from app.repositories.seed_filter import exclude_seed_findings
+
+    stmt = exclude_seed_findings(
+        select(AnalysisFinding)
+        .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
+        .join(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
+        .join(Repository, PullRequest.repository_id == Repository.id)
+        .where(AnalysisFinding.type == "performance")
+    )
+    rows = session.scalars(stmt).all()
+    return [_finding_to_api(r) for r in rows]
 
 
 def get_performance_stats(session: Session) -> dict[str, Any]:

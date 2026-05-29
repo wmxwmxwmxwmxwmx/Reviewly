@@ -119,6 +119,10 @@ async def sync_repositories_for_user(session: Session, user: AuthUser) -> dict[s
         else:
             updated += 1
 
+    claimed = repos_repo.claim_orphan_repositories(session, user.id)
+    if claimed:
+        logger.info("User %s claimed %s orphan repositories", user.username, claimed)
+
     session.commit()
     record_activity(
         session,

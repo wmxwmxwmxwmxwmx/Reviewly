@@ -34,13 +34,66 @@ def test_parse_github_pr_url_missing_number() -> None:
     assert exc.value.status_code == 400
 
 
-def test_import_pull_request_cache_hit(client: TestClient) -> None:
+def test_import_pull_request_ignores_demo_seed_cache(client: TestClient) -> None:
+    """Demo PR rows must not be returned as import cache hits."""
     url = "https://github.com/acme-corp/backend/pull/2847"
     r = client.post("/api/pull-requests/import", json={"url": url})
-    assert r.status_code == 200
-    data = r.json()
-    assert data["source"] == "cache"
-    assert data["prId"] == DEFAULT_PR_ID
+    if r.status_code == 200:
+        assert r.json().get("prId") != DEFAULT_PR_ID or r.json().get("source") != "cache"
+    else:
+        assert r.status_code in (500, 501, 502, 503)
+
+
+def test_import_pull_request_cache_hit(client: TestClient) -> None:
+    mock_pr = {
+        "id": 999003,
+        "number": 7,
+        "title": "cache test",
+        "state": "open",
+        "user": {"login": "dev"},
+        "updated_at": "2025-01-01T00:00:00Z",
+        "created_at": "2025-01-01T00:00:00Z",
+        "head": {"ref": "feat"},
+        "base": {"ref": "main", "repo": {"id": 887}},
+        "additions": 1,
+        "deletions": 0,
+        "changed_files": 1,
+        "html_url": "https://github.com/octocat/cache-repo/pull/7",
+    }
+    mock_repo = {"id": 887, "full_name": "octocat/cache-repo", "default_branch": "main"}
+    url = "https://github.com/octocat/cache-repo/pull/7"
+
+    with (
+        patch(
+            "app.github.import_pr.get_installation_id_for_repo",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "app.github.public_client.get_repo",
+            new_callable=AsyncMock,
+            return_value=mock_repo,
+        ),
+        patch(
+            "app.github.public_client.get_pull_request",
+            new_callable=AsyncMock,
+            return_value=mock_pr,
+        ),
+        patch(
+            "app.github.public_client.get_pull_diff_patch",
+            new_callable=AsyncMock,
+            return_value="",
+        ),
+    ):
+        first = client.post("/api/pull-requests/import", json={"url": url})
+        assert first.status_code == 200
+        assert first.json()["source"] == "github_public"
+        pr_id = first.json()["prId"]
+
+        second = client.post("/api/pull-requests/import", json={"url": url})
+        assert second.status_code == 200
+        assert second.json()["source"] == "cache"
+        assert second.json()["prId"] == pr_id
 
 
 def test_import_pull_request_public_api(client: TestClient) -> None:

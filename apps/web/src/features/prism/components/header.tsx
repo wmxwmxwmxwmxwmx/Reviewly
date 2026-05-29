@@ -8,7 +8,6 @@ import {
   Loader2,
   CheckCircle2,
   Zap,
-  ChevronDown,
   Menu,
   PanelRight,
 } from "lucide-react"
@@ -26,16 +25,12 @@ interface HeaderProps {
   importing?: boolean
   importError?: string | null
   syncLabel?: string
+  diffLoading?: boolean
+  prLoading?: boolean
   onMenuClick?: () => void
   aiPanelOpen?: boolean
   onToggleAIPanel?: () => void
 }
-
-const reviewers = [
-  { initials: "LM", color: "from-ai-blue to-ai-purple" },
-  { initials: "XH", color: "from-risk-low to-risk-info" },
-  { initials: "WP", color: "from-risk-high to-risk-critical" },
-]
 
 export function Header({
   prData,
@@ -45,7 +40,9 @@ export function Header({
   onImportUrl,
   importing = false,
   importError = null,
-  syncLabel = "同步完成",
+  syncLabel,
+  diffLoading = false,
+  prLoading = false,
   onMenuClick,
   aiPanelOpen,
   onToggleAIPanel,
@@ -197,22 +194,17 @@ export function Header({
             )}
           </AnimatePresence>
 
-          <div className="hidden sm:flex items-center">
-            {reviewers.map((r, i) => (
-              <div
-                key={r.initials}
-                title={`${zh.pr.reviewer} ${r.initials}`}
-                className={cn(
-                  "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold text-white bg-gradient-to-br border border-background",
-                  r.color,
-                )}
-                style={{ marginLeft: i > 0 ? "-6px" : 0 }}
-              >
-                {r.initials}
+          {prData.author ? (
+            <div
+              className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground"
+              title={`${zh.pr.reviewer} ${prData.author}`}
+            >
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-semibold text-white bg-gradient-to-br from-ai-blue to-ai-purple border border-background">
+                {prData.author.slice(0, 2).toUpperCase()}
               </div>
-            ))}
-            <ChevronDown className="w-3 h-3 text-muted-foreground ml-1" />
-          </div>
+              <span className="max-w-[5rem] truncate">{prData.author}</span>
+            </div>
+          ) : null}
 
           {onToggleAIPanel && (
             <button
@@ -230,15 +222,15 @@ export function Header({
 
           <motion.button
             onClick={onAnalyze}
-            disabled={analyzing || importing}
+            disabled={analyzing || importing || diffLoading || prLoading}
             className={cn(
               "relative flex items-center gap-2 px-4 h-8 rounded-md text-sm font-medium text-white transition-all duration-200 overflow-hidden",
-              analyzing || importing
+              analyzing || importing || diffLoading || prLoading
                 ? "bg-ai-blue-dim cursor-not-allowed"
                 : "bg-ai-blue hover:bg-sky-300 text-primary-foreground shadow-[0_0_0_0_rgba(56,189,248,0.3)] hover:shadow-[0_0_18px_2px_rgba(56,189,248,0.32)]",
             )}
-            whileHover={!analyzing && !importing ? { scale: 1.02 } : {}}
-            whileTap={!analyzing && !importing ? { scale: 0.97 } : {}}
+            whileHover={!analyzing && !importing && !diffLoading && !prLoading ? { scale: 1.02 } : {}}
+            whileTap={!analyzing && !importing && !diffLoading && !prLoading ? { scale: 0.97 } : {}}
           >
             {!analyzing && !importing && (
               <motion.div

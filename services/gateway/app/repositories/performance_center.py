@@ -9,9 +9,13 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AnalysisFinding, AnalysisJob, PullRequest, PullRequestDiff, Repository
 from app.engine.rules import PERF_TYPE_LABELS
-from app.mock import seed
 from app.repositories.ai_persisted import extract_from_payload
 from app.repositories.security_center import extract_file_context
+from app.repositories.seed_filter import (
+    exclude_seed_findings,
+    is_seed_pull_request,
+    is_seed_repository,
+)
 
 
 def resolve_perf_type(payload: dict[str, Any], title: str = "") -> str:
@@ -66,67 +70,6 @@ def _to_performance_center_finding(
         "ruleId": payload.get("ruleId", ""),
         "aiOptimization": extract_from_payload(payload, "aiOptimization"),
     }
-
-
-def _seed_performance_items() -> list[dict[str, Any]]:
-    pr = seed.get_pull_request(seed.DEFAULT_PR_ID) or {}
-    repo_name = str(pr.get("repo", "acme-corp/backend"))
-    pr_number = int(pr.get("number", 0))
-    pr_id = seed.DEFAULT_PR_ID
-    items: list[dict[str, Any]] = []
-    for f in seed.list_findings(seed.DEFAULT_PR_ID):
-        if f.get("type") != "performance" and not f.get("perfType"):
-            continue
-        payload = deepcopy(f)
-        perf_type = resolve_perf_type(payload, str(f.get("title", "")))
-        items.append(
-            {
-                "id": str(f.get("id", "")),
-                "file": f.get("file", ""),
-                "line": int(f.get("line", 0)),
-                "type": perf_type,
-                "severity": f.get("severity", "medium"),
-                "description": str(f.get("description", "")),
-                "suggestion": str(f.get("fixSuggestion", "")),
-                "repo": repo_name,
-                "prNumber": pr_number,
-                "pullRequestId": pr_id,
-                "title": f.get("title", ""),
-                "ruleId": payload.get("ruleId", ""),
-            }
-        )
-    if not items:
-        items = [
-            {
-                "id": "perf-seed-blocking",
-                "file": "internal/gateway/client.go",
-                "line": 88,
-                "type": "Blocking IO",
-                "severity": "medium",
-                "description": "time.Sleep 出现在热路径。",
-                "suggestion": "使用 context 超时或异步调度。",
-                "repo": repo_name,
-                "prNumber": pr_number,
-                "pullRequestId": pr_id,
-                "title": "同步 sleep 可能阻塞",
-                "ruleId": "blocking-io",
-            },
-            {
-                "id": "perf-seed-n1",
-                "file": "internal/db/query_builder.go",
-                "line": 120,
-                "type": "N+1 Query",
-                "severity": "high",
-                "description": "循环内 Query。",
-                "suggestion": "批量预取或 JOIN。",
-                "repo": repo_name,
-                "prNumber": pr_number,
-                "pullRequestId": pr_id,
-                "title": "潜在 N+1 查询",
-                "ruleId": "n-plus-one-query",
-            },
-        ]
-    return items
 
 
 def _apply_filters(
@@ -194,20 +137,13 @@ def list_performance_findings_filtered(
     if perf_type:
         base = base.where(cast(AnalysisFinding.payload, String).ilike(f"%{perf_type}%"))
 
+    base = exclude_seed_findings(base)
+
     count_stmt = select(func.count()).select_from(base.subquery())
     total = session.scalar(count_stmt) or 0
 
     if total == 0:
-        seed_items = _apply_filters(
-            _seed_performance_items(),
-            severities=severities,
-            perf_type=perf_type,
-            repo=repo,
-            q=q,
-        )
-        total = len(seed_items)
-        start = (page - 1) * page_size
-        return seed_items[start : start + page_size], total
+        return [], 0
 
     rows = session.execute(
         base.order_by(AnalysisFinding.severity, AnalysisFinding.id)
@@ -231,6 +167,8 @@ def get_finding_with_context(session: Session, finding_id: str) -> dict[str, Any
     pr = session.get(PullRequest, job.pull_request_id)
     repo_row = session.get(Repository, pr.repository_id) if pr else None
     if pr is None or repo_row is None:
+        return None
+    if is_seed_repository(repo_row) or is_seed_pull_request(pr, repo=repo_row):
         return None
 
     center = _to_performance_center_finding(row, pr, repo_row)

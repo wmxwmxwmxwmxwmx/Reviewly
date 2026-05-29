@@ -2,7 +2,7 @@ import os
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -17,7 +17,7 @@ os.environ["JWT_SECRET"] = "test-jwt-secret-for-pytest-only"
 
 from app.db import session as db_session  # noqa: E402
 from app.db.deps import get_db  # noqa: E402
-from app.db.models import Base  # noqa: E402
+from app.db.models import Base, Repository, User  # noqa: E402
 from app.db.seed_loader import load_seed_if_empty  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -39,7 +39,13 @@ def client() -> TestClient:
 
     db = TestingSession()
     try:
-        load_seed_if_empty(db)
+        if load_seed_if_empty(db):
+            for repo in db.scalars(select(Repository)).all():
+                repo.source = "test"
+            for user in db.scalars(select(User)).all():
+                if user.email.endswith("@acme.local"):
+                    user.email = f"{user.id}@pytest.local"
+            db.commit()
     finally:
         db.close()
 
