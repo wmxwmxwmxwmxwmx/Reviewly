@@ -17,6 +17,7 @@ import {
   Cpu,
   Zap,
 } from "lucide-react"
+import { useAISettings } from "@/components/prism/ai-settings-context"
 import { cn } from "@/lib/utils"
 
 export type NavView = 
@@ -53,6 +54,14 @@ interface SidebarProps {
 }
 
 export function Sidebar({ className, activeView, onViewChange, mobile, onClose }: SidebarProps) {
+  const { settings, providerLabel, hasApiKey, monthlyUsage } = useAISettings()
+  const modelUsagePercent = hasApiKey ? 67 : 8
+  const monthlyTokens = monthlyUsage.totalTokens >= 1_000_000
+    ? `${(monthlyUsage.totalTokens / 1_000_000).toFixed(1)}M`
+    : monthlyUsage.totalTokens >= 1_000
+      ? `${(monthlyUsage.totalTokens / 1_000).toFixed(1)}K`
+      : monthlyUsage.totalTokens.toLocaleString()
+
   return (
     <aside
       className={cn(
@@ -148,30 +157,52 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
         </div>
 
         {/* AI Model */}
-        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-surface-2">
-          <Cpu className="w-3.5 h-3.5 text-ai-blue shrink-0" />
+        <button
+          type="button"
+          onClick={() => onViewChange("settings")}
+          className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-surface-2 hover:bg-surface-3 transition-colors text-left w-full group"
+        >
+          <Cpu className={cn(
+            "w-3.5 h-3.5 shrink-0",
+            hasApiKey ? "text-ai-blue" : "text-risk-medium"
+          )} />
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-medium text-foreground">claude-opus-4.6</div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[11px] font-medium text-foreground truncate">{settings.model || "未选择模型"}</div>
+              <span className={cn(
+                "text-[9px] shrink-0",
+                hasApiKey ? "text-risk-low" : "text-risk-medium"
+              )}>
+                {hasApiKey ? "已配置" : "未配置"}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 mt-1">
               <div className="flex-1 h-1 rounded-full bg-surface-4 overflow-hidden">
                 <motion.div
-                  className="h-full rounded-full bg-ai-blue"
+                  className={cn(
+                    "h-full rounded-full",
+                    hasApiKey ? "bg-ai-blue" : "bg-risk-medium"
+                  )}
                   initial={{ width: 0 }}
-                  animate={{ width: "67%" }}
+                  animate={{ width: `${modelUsagePercent}%` }}
                   transition={{ duration: 1.2, ease: "easeOut" }}
                 />
               </div>
-              <span className="text-[9px] text-muted-foreground shrink-0">67K / 100K</span>
+              <span className="text-[9px] text-muted-foreground shrink-0">
+                {hasApiKey ? "67K / 100K" : providerLabel}
+              </span>
             </div>
           </div>
-        </div>
+        </button>
 
         {/* Token Usage */}
         <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-surface-2">
           <Zap className="w-3.5 h-3.5 text-risk-medium shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-[11px] font-medium text-foreground">本月用量</div>
-            <div className="text-[10px] text-muted-foreground">2.4M tokens · ¥18.20</div>
+            <div className="text-[10px] text-muted-foreground">
+              {monthlyTokens} tokens · ¥{monthlyUsage.costCny.toFixed(2)} · {monthlyUsage.calls} 次
+            </div>
           </div>
         </div>
 

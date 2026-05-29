@@ -25,6 +25,7 @@ import {
   Building2,
   ExternalLink,
 } from "lucide-react"
+import { useAISettings } from "@/components/prism/ai-settings-context"
 import { cn } from "@/lib/utils"
 import { mockRisks, mockGovernanceRules, mockIncidents, type RiskItem } from "@/components/prism/mock-data"
 
@@ -60,15 +61,18 @@ const streamLines = [
 ]
 
 function AIStreamPanel({ analyzing }: { analyzing: boolean }) {
+  const { settings, monthlyUsage, usageRecords } = useAISettings()
+  const latestUsage = usageRecords[0]
+
   return (
     <div className="space-y-3">
       {/* Model Info */}
       <div className="grid grid-cols-2 gap-2">
         {[
-          { label: "模型", value: "claude-opus-4.6", icon: Cpu },
-          { label: "延迟", value: "1.24s", icon: Zap },
-          { label: "Token 用量", value: "67,432", icon: BrainCircuit },
-          { label: "成本", value: "¥0.82", icon: Info },
+          { label: "模型", value: settings.model, icon: Cpu },
+          { label: "延迟", value: latestUsage ? `${(latestUsage.latencyMs / 1000).toFixed(2)}s` : "--", icon: Zap },
+          { label: "Token 用量", value: latestUsage ? latestUsage.totalTokens.toLocaleString() : "0", icon: BrainCircuit },
+          { label: "本月成本", value: `¥${monthlyUsage.costCny.toFixed(2)}`, icon: Info },
         ].map((item) => (
           <div key={item.label} className="flex items-center gap-2 px-2.5 py-2 rounded-md bg-surface-2 border border-border">
             <item.icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />

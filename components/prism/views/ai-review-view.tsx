@@ -6,7 +6,8 @@ import { PROverview } from "@/components/prism/pr-overview"
 import { AISummary } from "@/components/prism/ai-summary"
 import { DiffViewer } from "@/components/prism/diff-viewer"
 import { AIPanel } from "@/components/prism/ai-panel"
-import { mockPRData } from "@/components/prism/mock-data"
+import { estimateCostCny, useAISettings } from "@/components/prism/ai-settings-context"
+import { mockDiffFiles, mockPRData } from "@/components/prism/mock-data"
 import { cn } from "@/lib/utils"
 
 interface AIReviewViewProps {
@@ -20,27 +21,78 @@ export function AIReviewView({
   aiPanelOpen = true,
   onToggleAIPanel,
 }: AIReviewViewProps) {
+  const { settings, hasApiKey, recordUsage } = useAISettings()
   const [analyzing, setAnalyzing] = useState(false)
   const [chunkProgress, setChunkProgress] = useState({ current: 48, total: 48 })
+  const [generatedSummary, setGeneratedSummary] = useState<string | undefined>()
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
     if (analyzing) return
-    setAnalyzing(true)
-    setChunkProgress({ current: 0, total: 48 })
 
-    let current = 0
-    const interval = setInterval(() => {
-      current += Math.floor(Math.random() * 4) + 1
-      if (current >= 48) {
-        current = 48
-        clearInterval(interval)
-        setTimeout(() => {
-          setAnalyzing(false)
-          setChunkProgress({ current: 48, total: 48 })
-        }, 700)
+    if (!hasApiKey) {
+      setAnalysisError("请先在系统设置中填写 API Key，再启动真实 AI 分析。")
+      return
+    }
+
+    setAnalyzing(true)
+    setAnalysisError(null)
+    setChunkProgress({ current: 0, total: mockDiffFiles.length })
+
+    try {
+      const diffContext = mockDiffFiles.slice(0, 4).map((file) => {
+        const lines = file.chunks.flatMap((chunk) => [
+          chunk.header,
+          ...chunk.lines.map((line) => `${line.type === "add" ? "+" : line.type === "delete" ? "-" : " "}${line.content}`),
+        ])
+
+        return `文件：${file.path}\n语言：${file.language}\n风险等级：${file.riskLevel}\n${lines.join("\n")}`
+      }).join("\n\n---\n\n")
+
+      const response = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: settings.provider,
+          model: settings.model,
+          apiKey: settings.apiKey,
+          messages: [
+            {
+              role: "system",
+              content: "你是 PRism 的资深代码评审 AI。请用中文输出结构化 PR 评审摘要，重点关注安全、性能、架构、Breaking Change 和是否建议合并。输出应简洁、可行动。",
+            },
+            {
+              role: "user",
+              content: `请评审这个 Pull Request。\n\nPR 标题：${mockPRData.title}\n仓库：${mockPRData.repo}\n分支：${mockPRData.sourceBranch} -> ${mockPRData.targetBranch}\n变更规模：${mockPRData.filesChanged} 文件，+${mockPRData.additions} -${mockPRData.deletions}\n\nDiff 摘要：\n${diffContext}`,
+            },
+          ],
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "AI 分析失败")
       }
-      setChunkProgress({ current, total: 48 })
-    }, 130)
+
+      const totalTokens = Number(data?.usage?.totalTokens) || 0
+      setGeneratedSummary(data?.content || "模型未返回内容。")
+      setChunkProgress({ current: mockDiffFiles.length, total: mockDiffFiles.length })
+
+      recordUsage({
+        provider: settings.provider,
+        model: settings.model,
+        promptTokens: Number(data?.usage?.promptTokens) || 0,
+        completionTokens: Number(data?.usage?.completionTokens) || 0,
+        totalTokens,
+        costCny: estimateCostCny(settings.provider, totalTokens),
+        latencyMs: Number(data?.latencyMs) || 0,
+      })
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "AI 分析失败")
+    } finally {
+      setAnalyzing(false)
+    }
   }
 
   return (
@@ -58,7 +110,12 @@ export function AIReviewView({
 
           <div className="p-5 space-y-4">
             <PROverview prData={mockPRData} />
-            <AISummary streaming={analyzing} />
+            <AISummary
+              streaming={analyzing}
+              model={settings.model}
+              generatedSummary={generatedSummary}
+              error={analysisError}
+            />
 
             <div className="flex items-center justify-between pt-1">
               <h3 className="text-sm font-semibold text-foreground">文件变更</h3>

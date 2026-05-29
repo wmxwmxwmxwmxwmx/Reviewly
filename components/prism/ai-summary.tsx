@@ -166,10 +166,13 @@ function SectionItem({ section, streaming, defaultOpen = false }: SectionItemPro
 
 interface AISummaryProps {
   streaming: boolean
+  model?: string
+  generatedSummary?: string
+  error?: string | null
 }
 
-export function AISummary({ streaming }: AISummaryProps) {
-  const [fullOpen, setFullOpen] = useState(false)
+export function AISummary({ streaming, model = "claude-opus-4.6", generatedSummary, error }: AISummaryProps) {
+  const [fullOpen, setFullOpen] = useState(Boolean(generatedSummary || error))
 
   return (
     <motion.div
@@ -203,7 +206,7 @@ export function AISummary({ streaming }: AISummaryProps) {
             </div>
           )}
         </div>
-        <span className="text-[10px] text-muted-foreground shrink-0">claude-opus-4.6</span>
+        <span className="text-[10px] text-muted-foreground shrink-0">{model}</span>
         {fullOpen ? <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />}
       </button>
 
@@ -217,7 +220,14 @@ export function AISummary({ streaming }: AISummaryProps) {
             className="overflow-hidden"
           >
             <div className="px-5 pb-4 pt-1 border-t border-border">
-              <StreamingText text={mockAISummary} streaming={streaming} />
+              {error ? (
+                <div className="flex items-start gap-2 px-3 py-2 rounded bg-risk-critical/10 border border-risk-critical/25 text-[11px] text-risk-critical">
+                  <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              ) : (
+                <StreamingText text={generatedSummary || mockAISummary} streaming={streaming} />
+              )}
             </div>
           </motion.div>
         )}

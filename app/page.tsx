@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Menu } from "lucide-react"
 import { Sidebar, type NavView } from "@/components/prism/sidebar"
+import { AISettingsProvider } from "@/components/prism/ai-settings-context"
 import { NavigationProvider } from "@/components/prism/navigation-context"
 import { AIReviewView } from "@/components/prism/views/ai-review-view"
 import { StandardView } from "@/components/prism/view-registry"
@@ -26,14 +27,15 @@ export default function PRismPage() {
   }, [])
 
   return (
-    <NavigationProvider activeView={activeView} navigate={handleViewChange}>
-      <div className="flex h-screen overflow-hidden bg-background text-foreground">
-        {/* Desktop sidebar */}
-        <Sidebar
-          activeView={activeView}
-          onViewChange={handleViewChange}
-          className="hidden lg:flex"
-        />
+    <AISettingsProvider>
+      <NavigationProvider activeView={activeView} navigate={handleViewChange}>
+        <div className="flex h-screen overflow-hidden bg-background text-foreground">
+          {/* Desktop sidebar */}
+          <Sidebar
+            activeView={activeView}
+            onViewChange={handleViewChange}
+            className="hidden lg:flex"
+          />
 
         {/* Mobile sidebar drawer */}
         {sidebarOpen && (
@@ -80,14 +82,15 @@ export default function PRismPage() {
           )}
         </div>
 
-        {/* Mobile AI panel backdrop */}
-        {activeView === "ai-review" && aiPanelOpen && (
-          <div
-            className="fixed inset-0 z-30 bg-black/40 xl:hidden"
-            onClick={() => setAiPanelOpen(false)}
-          />
-        )}
-      </div>
-    </NavigationProvider>
+          {/* Mobile AI panel backdrop */}
+          {activeView === "ai-review" && aiPanelOpen && (
+            <div
+              className="fixed inset-0 z-30 bg-black/40 xl:hidden"
+              onClick={() => setAiPanelOpen(false)}
+            />
+          )}
+        </div>
+      </NavigationProvider>
+    </AISettingsProvider>
   )
 }

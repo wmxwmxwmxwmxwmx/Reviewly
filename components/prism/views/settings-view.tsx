@@ -1,8 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { User, Bell, Shield, Save, Check } from "lucide-react"
+import { Bot, User, Bell, Shield, Save, Check, KeyRound } from "lucide-react"
+import {
+  AI_PROVIDER_OPTIONS,
+  type AIProvider,
+  useAISettings,
+} from "@/components/prism/ai-settings-context"
 import { cn } from "@/lib/utils"
 
 type SettingItem =
@@ -39,20 +44,37 @@ const initialSections: { icon: typeof User; title: string; items: SettingItem[] 
 ]
 
 export function SettingsView() {
+  const { settings, providerLabel, hasApiKey, maskedApiKey, monthlyUsage, clearUsage, updateSettings } = useAISettings()
   const [toggles, setToggles] = useState<Record<string, boolean>>({
     "pr-notify": true,
     "security-notify": true,
     "daily-digest": false,
     "2fa": true,
   })
+  const [aiForm, setAiForm] = useState(settings)
   const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    setAiForm(settings)
+  }, [settings])
 
   const handleToggle = (key: string) => {
     setToggles((prev) => ({ ...prev, [key]: !prev[key] }))
     setSaved(false)
   }
 
+  const handleProviderChange = (provider: AIProvider) => {
+    const option = AI_PROVIDER_OPTIONS.find((item) => item.value === provider)
+    setAiForm((current) => ({
+      ...current,
+      provider,
+      model: option?.defaultModel ?? current.model,
+    }))
+    setSaved(false)
+  }
+
   const handleSave = () => {
+    updateSettings(aiForm)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -64,12 +86,92 @@ export function SettingsView() {
         <p className="text-sm text-muted-foreground mt-0.5">管理您的账户和应用偏好</p>
       </div>
 
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-lg border border-border overflow-hidden bg-panel/40"
+      >
+        <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
+          <Bot className="w-4 h-4 text-ai-blue" />
+          <span className="text-sm font-medium text-foreground">AI 模型设置</span>
+          <span className={cn(
+            "ml-auto text-[11px] px-2 py-0.5 rounded-full border",
+            hasApiKey
+              ? "text-risk-low border-risk-low/30 bg-risk-low/10"
+              : "text-risk-medium border-risk-medium/30 bg-risk-medium/10"
+          )}>
+            {hasApiKey ? `已配置 ${maskedApiKey}` : "未配置 API Key"}
+          </span>
+        </div>
+        <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <label className="space-y-2">
+            <span className="text-xs font-medium text-muted-foreground">模型供应商</span>
+            <select
+              value={aiForm.provider}
+              onChange={(event) => handleProviderChange(event.target.value as AIProvider)}
+              className="w-full h-10 rounded-md border border-border bg-surface-2 px-3 text-sm text-foreground outline-none transition-colors focus:border-ai-blue focus:ring-2 focus:ring-ai-blue/20"
+            >
+              {AI_PROVIDER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value} className="bg-panel text-foreground">
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-xs font-medium text-muted-foreground">模型名称</span>
+            <input
+              value={aiForm.model}
+              onChange={(event) => {
+                setAiForm((current) => ({ ...current, model: event.target.value }))
+                setSaved(false)
+              }}
+              placeholder="例如 claude-opus-4.6"
+              className="w-full h-10 rounded-md border border-border bg-surface-2 px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ai-blue focus:ring-2 focus:ring-ai-blue/20"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-xs font-medium text-muted-foreground">API Key</span>
+            <div className="relative">
+              <KeyRound className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="password"
+                value={aiForm.apiKey}
+                onChange={(event) => {
+                  setAiForm((current) => ({ ...current, apiKey: event.target.value }))
+                  setSaved(false)
+                }}
+                placeholder="输入供应商 API Key"
+                className="w-full h-10 rounded-md border border-border bg-surface-2 pl-9 pr-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ai-blue focus:ring-2 focus:ring-ai-blue/20"
+              />
+            </div>
+          </label>
+        </div>
+        <div className="px-4 pb-4 flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            当前侧边栏左下角会同步显示：<span className="text-foreground">{providerLabel}</span> · <span className="font-mono text-ai-blue">{aiForm.model || "未选择模型"}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span>本月 {monthlyUsage.totalTokens.toLocaleString()} tokens · ¥{monthlyUsage.costCny.toFixed(2)}</span>
+            <button
+              type="button"
+              onClick={clearUsage}
+              className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:border-risk-medium/40 hover:text-risk-medium"
+            >
+              清空用量
+            </button>
+          </div>
+        </div>
+      </motion.div>
+
       {initialSections.map((section, idx) => (
         <motion.div
           key={section.title}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: idx * 0.05 }}
+          transition={{ delay: (idx + 1) * 0.05 }}
           className="rounded-lg border border-border overflow-hidden"
         >
           <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
@@ -113,7 +215,7 @@ export function SettingsView() {
       <button
         type="button"
         onClick={handleSave}
-        className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-ai-blue rounded-md hover:bg-[oklch(0.55_0.19_240)] transition-colors"
+        className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-ai-blue rounded-md hover:bg-sky-300 transition-colors"
       >
         {saved ? (
           <>
