@@ -10,6 +10,7 @@ from app.repositories import dashboard as dashboard_repo
 from app.repositories import pull_requests as pr_repo
 from app.github import public_client
 from app.repositories import repos as repos_repo
+from app.repositories import governance as governance_repo
 from app.repositories import settings as settings_repo
 from app.services import analysis_jobs
 from app.services import dashboard_summary
@@ -158,6 +159,13 @@ def pr_findings(pr_id: str, db: Session = Depends(get_db)) -> list:
     if pr_repo.get_pull_request(db, pr_id) is None:
         raise api_error("合并请求不存在", 404)
     return analysis_jobs.get_findings(db, pr_id)
+
+
+@router.get("/pull-requests/{pr_id}/governance")
+def pr_governance(pr_id: str, db: Session = Depends(get_db)) -> list:
+    if pr_repo.get_pull_request(db, pr_id) is None:
+        raise api_error("合并请求不存在", 404)
+    return governance_repo.list_rules_for_pr(db, pr_id)
 
 
 @router.get("/analysis/jobs/{job_id}")

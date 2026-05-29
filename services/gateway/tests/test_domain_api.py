@@ -25,6 +25,17 @@ def test_security_crud(client: TestClient) -> None:
     assert deleted.status_code == 200
 
 
+def test_pr_governance_checks(client: TestClient) -> None:
+    from app.mock.seed import DEFAULT_PR_ID
+
+    r = client.get(f"/api/pull-requests/{DEFAULT_PR_ID}/governance")
+    assert r.status_code == 200
+    rules = r.json()
+    assert isinstance(rules, list)
+    assert len(rules) >= 1
+    assert any(item.get("violated") for item in rules)
+
+
 def test_governance_rules_crud(client: TestClient) -> None:
     created = client.post(
         "/api/governance/rules",
@@ -33,7 +44,7 @@ def test_governance_rules_crud(client: TestClient) -> None:
     assert created.status_code == 200
     rid = created.json()["id"]
 
-    client.patch(f"/api/governance/rules/{rid}", json={"violated": True})
+    client.patch(f"/api/governance/rules/{rid}", json={"severity": "high"})
     assert client.delete(f"/api/governance/rules/{rid}").status_code == 200
 
 

@@ -7,7 +7,7 @@ import { fetchDashboard } from "@/lib/api/dashboard"
 import { fetchPerformanceStats } from "@/lib/api/performance"
 import { fetchPullRequests } from "@/lib/api/pull-requests"
 import { fetchSecurityStats } from "@/lib/api/security"
-import { fetchGovernanceRules } from "@/lib/api/governance"
+import { fetchGovernanceViolations } from "@/lib/api/governance"
 
 export interface SidebarBadgeState {
   pullRequests: string | null
@@ -37,8 +37,8 @@ export function useSidebarBadges() {
         const summary = dash.summary
         let governance: string | null = null
         try {
-          const rules = await fetchGovernanceRules(ac.signal)
-          const violations = rules.filter((rule) => rule.violated).length
+          const violationsList = await fetchGovernanceViolations(ac.signal)
+          const violations = violationsList.length
           governance = violations > 0 ? String(violations) : null
         } catch {
           /* optional */
@@ -66,13 +66,13 @@ export function useSidebarBadges() {
           fetchPullRequests({ state: "open" }, ac.signal),
           fetchSecurityStats(ac.signal),
           fetchPerformanceStats(ac.signal),
-          fetchGovernanceRules(ac.signal),
+          fetchGovernanceViolations(ac.signal),
         ])
-          .then(([prs, security, performance, rules]) => {
+          .then(([prs, security, performance, violationsList]) => {
             const reviewBacklog = prs.items.filter(
               (pr) => pr.riskLevel === "high" || pr.riskLevel === "critical"
             ).length
-            const violations = rules.filter((rule) => rule.violated).length
+            const violations = violationsList.length
 
             setBadges({
               pullRequests: prs.items.length > 0 ? String(prs.items.length) : null,

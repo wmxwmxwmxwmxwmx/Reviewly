@@ -29,6 +29,7 @@ import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import type { RiskItem } from "@/features/prism/data/mock-data"
 import type { AIReviewPanelTab } from "@/features/prism/contexts/ai-review-session-context"
+import { usePrGovernance } from "@/hooks/use-pr-governance"
 
 type PanelTab = AIReviewPanelTab
 
@@ -370,11 +371,113 @@ function MergePanel({
 }
 
 // ── Governance Panel ──────────────────────────────────────────────────────────
-function GovernancePanel() {
+function governanceRuleStatus(rule: {
+  violated?: boolean
+  severity: string
+}) {
+  if (rule.violated) return "fail"
+  if (rule.severity === "critical" || rule.severity === "high") return "warn"
+  return "pass"
+}
+
+function GovernancePanel({
+  prId,
+  refreshKey,
+}: {
+  prId: string
+  refreshKey: number
+}) {
+  const { rules, loading, error } = usePrGovernance(prId, refreshKey)
+  const violated = rules.filter((r) => r.violated)
+  const passed = rules.length - violated.length
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-8 text-[11px] text-muted-foreground">
+        <Loader2 className="w-4 h-4 animate-spin text-ai-blue" />
+        加载治理规则…
+      </div>
+    )
+  }
+
+  if (error) {
+    return <p className="text-[11px] text-risk-high py-4 text-center">{error}</p>
+  }
+
+  if (rules.length === 0) {
+    return (
+      <p className="text-[11px] text-muted-foreground py-6 text-center">
+        暂无治理规则。可在侧栏「工程治理」配置规则。
+      </p>
+    )
+  }
+
   return (
-    <p className="text-[11px] text-muted-foreground py-6 text-center">
-      治理规则检查尚未接入 API。完成分析后可在「风险」标签查看规则扫描结果。
-    </p>
+    <div className="space-y-3">
+      <div
+        className={cn(
+          "flex items-center gap-2 px-3 py-2 rounded-lg border text-[11px]",
+          violated.length > 0
+            ? "bg-[oklch(0.55_0.22_27/0.08)] border-[oklch(0.55_0.22_27/0.3)] text-risk-high"
+            : "bg-[oklch(0.62_0.17_148/0.08)] border-[oklch(0.62_0.17_148/0.3)] text-risk-low",
+        )}
+      >
+        {violated.length > 0 ? (
+          <XCircle className="w-3.5 h-3.5 shrink-0" />
+        ) : (
+          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+        )}
+        <span className="font-medium">
+          {violated.length > 0
+            ? `${violated.length} 条规则未通过`
+            : `全部 ${rules.length} 条规则通过`}
+        </span>
+        <span className="text-muted-foreground ml-auto">{passed}/{rules.length}</span>
+      </div>
+
+      <div className="space-y-1.5">
+        {rules.map((rule) => {
+          const status = governanceRuleStatus(rule)
+          const icon =
+            status === "fail" ? (
+              <XCircle className="w-3.5 h-3.5 text-risk-critical shrink-0" />
+            ) : status === "warn" ? (
+              <AlertTriangle className="w-3.5 h-3.5 text-risk-medium shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-3.5 h-3.5 text-risk-low shrink-0" />
+            )
+          return (
+            <div
+              key={rule.id}
+              className="flex items-start gap-2 px-2.5 py-2 rounded-md bg-surface-2 border border-border"
+            >
+              {icon}
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-medium text-foreground leading-snug">{rule.rule}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  {rule.severity}
+                  {rule.file ? ` · ${rule.file}` : ""}
+                </div>
+                {rule.feedback && (
+                  <p
+                    className={cn(
+                      "text-[10px] mt-1 leading-snug",
+                      rule.violated ? "text-risk-high" : "text-risk-low",
+                    )}
+                  >
+                    {rule.feedback}
+                  </p>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <p className="text-[10px] text-muted-foreground leading-snug px-0.5">
+        完成「启动分析」后会自动对照 Diff 与 findings 重新评估。侧栏「工程治理」可增删改规则。
+      </p>
+    </div>
   )
 }
 
@@ -389,6 +492,8 @@ function IncidentsPanel() {
 
 // ── Main Panel ────────────────────────────────────────────────────────────────
 interface AIPanelProps {
+  prId: string
+  governanceRefreshKey?: number
   analyzing: boolean
   findings?: AnalysisFinding[]
   job?: AnalysisJob
@@ -399,6 +504,8 @@ interface AIPanelProps {
 }
 
 export function AIPanel({
+  prId,
+  governanceRefreshKey = 0,
   analyzing,
   findings = [],
   job,
@@ -490,7 +597,9 @@ export function AIPanel({
             {activeTab === "merge" && (
               <MergePanel mergeRecommendation={mergeRecommendation} criticalCount={criticalCount} />
             )}
-            {activeTab === "governance" && <GovernancePanel />}
+            {activeTab === "governance" && (
+              <GovernancePanel prId={prId} refreshKey={governanceRefreshKey} />
+            )}
             {activeTab === "incidents" && <IncidentsPanel />}
           </motion.div>
         </AnimatePresence>

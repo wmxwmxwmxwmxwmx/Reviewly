@@ -103,6 +103,7 @@ export function AIReviewView({
   const [activePanelTab, setActivePanelTab] = useState<AIReviewPanelTab>(
     cached.activePanelTab ?? "risks",
   )
+  const [governanceRefreshKey, setGovernanceRefreshKey] = useState(0)
 
   useEffect(() => {
     setLastReviewedPrId(prId)
@@ -199,11 +200,6 @@ export function AIReviewView({
   const handleAnalyze = async () => {
     if (analyzing || !pr) return
 
-    if (!hasApiKey) {
-      setAnalysisError("请先在系统设置中填写 API 密钥，再启动真实 AI 分析。")
-      return
-    }
-
     setAnalyzing(true)
     setAnalysisError(null)
     setChunkProgress({ current: 0, total: diffTotal })
@@ -234,6 +230,21 @@ export function AIReviewView({
     }
 
     let nextGeneratedSummary = generatedSummary
+
+    setGovernanceRefreshKey((k) => k + 1)
+
+    if (!hasApiKey) {
+      if (jobSummary) {
+        setGeneratedSummary(jobSummary)
+      }
+      if (errors.length > 0) {
+        setAnalysisError(errors.join("；"))
+      } else if (!hasApiKey) {
+        setAnalysisError("规则扫描与治理检查已完成。填写 API 密钥后可生成 AI 摘要。")
+      }
+      setAnalyzing(false)
+      return
+    }
 
     try {
       const diffContext = buildDiffContext(diffFiles)
@@ -307,6 +318,7 @@ ${diffContext || "（无 diff 内容）"}`,
     }
 
     setAnalyzing(false)
+    setGovernanceRefreshKey((k) => k + 1)
   }
 
   const analysisScores = latest
@@ -416,6 +428,8 @@ ${diffContext || "（无 diff 内容）"}`,
       >
         {aiPanelOpen && (
           <AIPanel
+            prId={prId}
+            governanceRefreshKey={governanceRefreshKey}
             analyzing={analyzing}
             findings={findings}
             job={job ?? undefined}

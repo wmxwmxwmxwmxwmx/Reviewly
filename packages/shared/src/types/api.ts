@@ -197,13 +197,39 @@ export interface ArchitectureGraph {
   cachePath?: string
 }
 
+export type GovernanceMatchType = "keyword" | "file_pattern" | "finding" | "any"
+
 export interface GovernanceRule {
   id: string
   rule: string
-  violated: boolean
-  file: string | null
-  severity: "critical" | "high" | "medium"
+  severity: "critical" | "high" | "medium" | "low"
+  enabled?: boolean
+  description?: string | null
+  matchType?: GovernanceMatchType
+  keywords?: string[]
+  filePatterns?: string[]
+  findingTypes?: Array<AnalysisFinding["type"]>
+  findingSeverities?: Array<AnalysisFinding["severity"]>
+  /** Per-PR evaluation (GET .../pull-requests/:id/governance) */
+  violated?: boolean
+  file?: string | null
+  feedback?: string | null
+  evidence?: string[]
+  evaluatedAt?: string | null
 }
+
+export type GovernanceRuleInput = Pick<
+  GovernanceRule,
+  | "rule"
+  | "severity"
+  | "enabled"
+  | "description"
+  | "matchType"
+  | "keywords"
+  | "filePatterns"
+  | "findingTypes"
+  | "findingSeverities"
+>
 
 export interface TeamMember {
   id: string
