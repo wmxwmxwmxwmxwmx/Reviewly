@@ -2,7 +2,7 @@
 
 **PRism** 是企业级 AI Pull Request 智能评审平台（Reviewly 仓库）。采用暗色 DevTools 风格 UI，覆盖 PR 评审、安全分析、性能评估、架构洞察与工程治理等维度。
 
-> 当前阶段：前端演示 + Mock 数据 + 真实 AI 分析（配置 API Key 后可用）。
+> 当前阶段：Monorepo 前后端分离架构；前端演示 + Mock 数据 + 真实 AI 分析（配置 API Key 后可用）。
 
 ## 功能模块
 
@@ -21,39 +21,43 @@
 
 ## 技术栈
 
-- **框架**：Next.js 16、React 19、TypeScript
-- **样式**：Tailwind CSS 4
-- **UI**：Radix UI + shadcn/ui、Framer Motion、Recharts
-- **AI 代理**：`app/api/ai/chat/route.ts`，支持 Anthropic、OpenAI、Google Gemini、DeepSeek、OpenRouter、Custom
+- **Monorepo**：npm workspaces（`apps/web` + `apps/api` + `packages/shared`）
+- **前端**：Next.js 16、React 19、TypeScript、Tailwind CSS 4、Radix UI + shadcn/ui
+- **后端**：Next.js API 应用（`apps/api`，端口 3001）
+- **共享包**：`@reviewly/shared`（类型与常量）
+- **AI 代理**：`POST /api/ai/chat`，支持 Anthropic、OpenAI、Google Gemini、DeepSeek、OpenRouter、Custom
 
 ## 环境要求
 
 - Node.js 18+（推荐 20+）
-- npm
+- npm 9+
 
 ## 快速开始
 
 ```bash
-# 方式 1：npm 一键启动（推荐）
+# 在仓库根目录安装所有 workspace 依赖
+npm install
+
+# 同时启动 Web（:3000）与 API（:3001）
+npm run dev
+
+# 或一键启动（自动打开浏览器）
 npm run start:app
 
-# 方式 2：Windows 双击
+# Windows 也可双击
 start-dev.bat
-
-# 方式 3：手动
-npm install
-npm run dev
 ```
 
-启动成功后访问 [http://localhost:3000](http://localhost:3000)。
+- **Web 前端**：http://localhost:3000
+- **API 后端**：http://localhost:3001
 
 ## AI 配置
 
-1. 进入 **系统设置** → **AI 模型设置**
+1. 打开 Web 应用，进入 **系统设置** → **AI 模型设置**
 2. 选择 Provider，填写 Model 与 API Key 并保存
-3. 在 **AI 评审** 页点击分析，即可调用 `/api/ai/chat`
+3. 在 **AI 评审** 页点击分析
 
-支持的 Provider：Anthropic、OpenAI、Google Gemini、DeepSeek、OpenRouter、Custom。
+Web 通过 rewrite 将 `/api/*` 转发至 API 服务，前端仍使用 `fetch("/api/ai/chat")`。
 
 API Key 仅保存在浏览器 localStorage（`prism.ai-settings`），不会上传至服务端持久化。
 
@@ -61,43 +65,61 @@ API Key 仅保存在浏览器 localStorage（`prism.ai-settings`），不会上�
 
 ```
 Reviewly/
-├── app/                    # Next.js App Router
-│   ├── page.tsx            # 主入口（PRism 布局）
-│   └── api/ai/chat/        # AI 聊天代理
-├── components/
-│   ├── prism/              # PRism 业务组件与视图
-│   └── ui/                 # shadcn/ui 基础组件
-├── start.ps1               # 统一一键启动脚本
-├── start-dev.bat           # Windows 双击入口
-├── plan.md                 # 功能路线图（P0–P10）
-└── package.json
+├── apps/
+│   ├── web/                          # 前端 Next.js（仅 UI）
+│   │   ├── public/
+│   │   └── src/
+│   │       ├── app/                  # App Router 页面
+│   │       ├── components/ui/        # shadcn/ui 基础组件
+│   │       ├── features/prism/       # PRism 业务域
+│   │       │   ├── components/       # header, sidebar, diff-viewer...
+│   │       │   ├── views/            # 各功能页面
+│   │       │   ├── contexts/         # AI 设置、导航上下文
+│   │       │   └── data/             # mock-data.ts
+│   │       ├── hooks/
+│   │       └── lib/
+│   └── api/                          # 后端 Next.js API
+│       └── src/
+│           ├── app/api/ai/chat/      # AI 聊天代理
+│           └── lib/ai/               # 模型调用逻辑
+├── packages/
+│   └── shared/                       # 共享类型 @reviewly/shared
+│       └── src/types/
+├── scripts/
+│   ├── start.ps1                     # 一键启动
+│   ├── start-dev.ps1
+│   └── start-dev.bat
+├── docs/
+│   └── plan.md                       # 功能路线图 P0–P10
+├── package.json                      # workspaces 根配置
+├── start-dev.bat                     # 根目录快捷入口
+└── README.md
 ```
 
 ## 开发命令
 
 | 命令 | 说明 |
 |------|------|
-| `npm run dev` | 开发服务器 |
-| `npm run build` | 生产构建 |
-| `npm run start` | 生产模式启动 |
-| `npm run lint` | ESLint 检查 |
-| `npm run start:app` | 一键安装依赖 + 启动 + 打开浏览器 |
+| `npm run dev` | 同时启动 Web + API |
+| `npm run build` | 构建所有 workspace |
+| `npm run start:app` | 一键安装依赖、启动、打开浏览器 |
+| `npm run dev -w @reviewly/web` | 仅启动前端 |
+| `npm run dev -w @reviewly/api` | 仅启动 API |
+| `npm run build -w @reviewly/web` | 仅构建前端 |
+
+## 环境变量
+
+| 变量 | 应用 | 说明 |
+|------|------|------|
+| `API_URL` | `apps/web` | API 服务地址，默认 `http://localhost:3001` |
 
 ## 路线图
 
-详细实施计划见 [plan.md](plan.md)，按 P0–P10 分阶段推进：
+详细计划见 [docs/plan.md](docs/plan.md)。
 
-1. **P0**：前端 API 化与 URL 导航
-2. **P1**：PR 评审核心闭环
-3. **P2**：数据库持久化
-4. **P3**：仓库管理与 GitHub 集成
-5. **P4**：AI 分析引擎真实化
-6. **P5–P9**：安全、性能、架构、治理、团队分析
-7. **P10**：系统设置与集成
-
-**MVP 目标**：完成 P0 + P1，形成可用的 PR 评审工作流。
+**MVP 目标**：P0（API 化 + URL 导航）+ P1（PR 评审核心闭环）。
 
 ## 注意事项
 
-- 当前为演示 / Mock 阶段，PR 数据非真实 GitHub 同步
-- `.next/`、`node_modules/` 不应提交（见 `.gitignore`）
+- 当前 PR 数据为 Mock，非真实 GitHub 同步
+- `.next/`、`node_modules/`、`.npm-cache/` 不应提交
