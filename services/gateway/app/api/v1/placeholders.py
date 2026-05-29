@@ -21,9 +21,19 @@ router = APIRouter(prefix="/api", tags=["placeholders"])
 @router.get("/integrations/github/install-url")
 def github_install_url() -> dict:
     slug = settings.github_app_slug
+    app_configured = bool((settings.github_app_id or "").strip())
+    pat_configured = bool((settings.github_pat or "").strip())
+    connected = app_configured or pat_configured
+    host_label: str | None = None
+    if app_configured and slug:
+        host_label = f"github.com/apps/{slug}"
+    elif pat_configured:
+        host_label = "api.github.com"
     return {
         "url": f"https://github.com/apps/{slug}/installations/new",
-        "status": "ok" if settings.github_app_id else "placeholder",
+        "status": "ok" if app_configured else "placeholder",
+        "connected": connected,
+        "hostLabel": host_label,
     }
 
 

@@ -12,12 +12,10 @@ import {
   BookOpen,
   Users,
   Settings,
-  CheckCircle2,
   ChevronRight,
-  Cpu,
-  Zap,
 } from "lucide-react"
-import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
+import { SidebarFooter } from "@/features/prism/components/sidebar-footer"
+import { useHydrated } from "@/hooks/use-hydrated"
 import { useSidebarBadges } from "@/hooks/use-sidebar-badges"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
@@ -56,17 +54,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ className, activeView, onViewChange, mobile, onClose }: SidebarProps) {
-  const { settings, settingsHydrated, providerLabel, hasApiKey, monthlyUsage } = useAISettings()
+  const hydrated = useHydrated()
   const { badges } = useSidebarBadges()
-
-  const configured = settingsHydrated && hasApiKey
-  const displayModel = settings.model || "未选择模型"
-  const modelUsagePercent = configured ? 67 : 8
-  const monthlyTokens = monthlyUsage.totalTokens >= 1_000_000
-    ? `${(monthlyUsage.totalTokens / 1_000_000).toFixed(1)}M`
-    : monthlyUsage.totalTokens >= 1_000
-      ? `${(monthlyUsage.totalTokens / 1_000).toFixed(1)}K`
-      : monthlyUsage.totalTokens.toLocaleString()
 
   return (
     <aside
@@ -144,7 +133,7 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
                     )}
                   />
                   <span className="flex-1 truncate">{item.label}</span>
-                  {badge && (
+                  {hydrated && badge && (
                     <span
                       className={cn(
                         "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
@@ -163,91 +152,7 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
         </ul>
       </nav>
 
-      {/* Status Footer */}
-      <div className="border-t border-border p-3 space-y-2">
-        {/* GitHub Status */}
-        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-surface-2">
-          <CheckCircle2 className="w-3.5 h-3.5 text-risk-low shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-medium text-foreground">GitHub 已连接</div>
-            <div className="text-[10px] text-muted-foreground truncate">enterprise.github.com</div>
-          </div>
-        </div>
-
-        {/* AI Model */}
-        <button
-          type="button"
-          onClick={() => onViewChange("settings")}
-          className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-surface-2 hover:bg-surface-3 transition-colors text-left w-full group"
-        >
-          <Cpu
-            suppressHydrationWarning
-            className={cn(
-              "w-3.5 h-3.5 shrink-0",
-              configured ? "text-ai-blue" : "text-risk-medium",
-            )}
-          />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <div
-                suppressHydrationWarning
-                className="text-[11px] font-medium text-foreground truncate"
-              >
-                {displayModel}
-              </div>
-              <span
-                suppressHydrationWarning
-                className={cn(
-                  "text-[9px] shrink-0",
-                  configured ? "text-risk-low" : "text-risk-medium",
-                )}
-              >
-                {configured ? "已配置" : "未配置"}
-              </span>
-            </div>
-            <div className="flex items-center gap-1 mt-1">
-              <div className="flex-1 h-1 rounded-full bg-surface-4 overflow-hidden">
-                <motion.div
-                  className={cn(
-                    "h-full rounded-full",
-                    configured ? "bg-ai-blue" : "bg-risk-medium",
-                  )}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${modelUsagePercent}%` }}
-                  transition={{ duration: 1.2, ease: "easeOut" }}
-                />
-              </div>
-              <span suppressHydrationWarning className="text-[9px] text-muted-foreground shrink-0">
-                {configured ? "67K / 100K" : providerLabel}
-              </span>
-            </div>
-          </div>
-        </button>
-
-        {/* Token Usage */}
-        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-surface-2">
-          <Zap className="w-3.5 h-3.5 text-risk-medium shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-medium text-foreground">本月用量</div>
-            <div className="text-[10px] text-muted-foreground">
-              {monthlyTokens} {zh.settings.tokensUnit} · ¥{monthlyUsage.costCny.toFixed(2)} · {monthlyUsage.calls}{" "}
-              {zh.settings.callsUnit}
-            </div>
-          </div>
-        </div>
-
-        {/* User Info */}
-        <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-accent transition-colors cursor-pointer">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-ai-blue to-ai-purple flex items-center justify-center text-[11px] font-semibold text-white shrink-0 shadow-[0_0_18px_rgba(139,92,246,0.22)]">
-            ZW
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-medium text-foreground truncate">张维</div>
-            <div className="text-[10px] text-muted-foreground truncate">infra-platform · 高级工程师</div>
-          </div>
-          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-        </div>
-      </div>
+      <SidebarFooter onOpenSettings={() => onViewChange("settings")} />
     </aside>
   )
 }

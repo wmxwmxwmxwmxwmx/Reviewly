@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   title: 'PRism — AI 智能代码评审平台',
   description: '企业级 AI 合并请求智能评审平台，深度代码安全分析、风险评估与架构洞察',
   generator: 'PRism',
+}
+
+export const viewport: Viewport = {
   themeColor: '#09090B',
 }
 
