@@ -32,6 +32,17 @@ def test_settings_patch(client: TestClient) -> None:
     assert r.json()["ai"]["temperature"] == 0.3
 
 
+def test_settings_security_patch(client: TestClient) -> None:
+    r = client.patch(
+        "/api/settings",
+        json={"security": {"twoFactorEnabled": True, "sessionTimeoutMinutes": 60}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["security"]["twoFactorEnabled"] is True
+    assert body["security"]["sessionTimeoutMinutes"] == 60
+
+
 def test_security_stats(client: TestClient) -> None:
     r = client.get("/api/security/stats")
     assert r.status_code == 200
