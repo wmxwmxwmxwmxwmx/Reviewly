@@ -28,8 +28,9 @@ import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import type { RiskItem } from "@/features/prism/data/mock-data"
+import type { AIReviewPanelTab } from "@/features/prism/contexts/ai-review-session-context"
 
-type PanelTab = "stream" | "risks" | "merge" | "governance" | "incidents"
+type PanelTab = AIReviewPanelTab
 
 function buildTabs(findingsCount: number): { key: PanelTab; label: string; icon: React.ElementType; badge?: string }[] {
   return [
@@ -393,6 +394,8 @@ interface AIPanelProps {
   job?: AnalysisJob
   mergeRecommendation?: AnalysisSummary["mergeRecommendation"]
   filesChanged?: number
+  activeTab?: PanelTab
+  onActiveTabChange?: (tab: PanelTab) => void
 }
 
 export function AIPanel({
@@ -401,8 +404,17 @@ export function AIPanel({
   job,
   mergeRecommendation,
   filesChanged = 0,
+  activeTab: activeTabProp,
+  onActiveTabChange,
 }: AIPanelProps) {
-  const [activeTab, setActiveTab] = useState<PanelTab>("risks")
+  const [internalTab, setInternalTab] = useState<PanelTab>("risks")
+  const activeTab = activeTabProp ?? internalTab
+  const setActiveTab = (tab: PanelTab) => {
+    onActiveTabChange?.(tab)
+    if (activeTabProp === undefined) {
+      setInternalTab(tab)
+    }
+  }
   const tabs = buildTabs(findings.length)
   const criticalCount = findings.filter((f) => f.severity === "critical").length
 

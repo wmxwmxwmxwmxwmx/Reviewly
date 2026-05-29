@@ -5,6 +5,10 @@ import type { AnalysisFinding } from "@reviewly/shared"
 import { Loader2 } from "lucide-react"
 import { Header } from "@/features/prism/components/header"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import {
+  useAIReviewSession,
+  type AIReviewPanelTab,
+} from "@/features/prism/contexts/ai-review-session-context"
 import { PROverview } from "@/features/prism/components/pr-overview"
 import { AISummary } from "@/features/prism/components/ai-summary"
 import { DiffViewer } from "@/features/prism/components/diff-viewer"
@@ -60,27 +64,76 @@ export function AIReviewView({
 }: AIReviewViewProps) {
   const { navigate } = useNavigation()
   const { settings, hasApiKey, recordUsage } = useAISettings()
+  const {
+    getSession,
+    patchSession,
+    hasCachedSession,
+    setLastReviewedPrId,
+  } = useAIReviewSession()
+
+  const cached = getSession(prId)
   const { data: pr, loading: prLoading, error: prError } = usePullRequest(prId)
   const { files: diffFiles, loading: diffLoading, error: diffError } = usePullRequestDiff(prId)
-  const { findings, latest, job, loadPersisted, runAnalysis, reset } = usePrAnalysis(prId)
+  const {
+    findings,
+    latest,
+    job,
+    loadingPersisted,
+    loadPersisted,
+    runAnalysis,
+    setJob,
+  } = usePrAnalysis(prId, {
+    findings: cached.findings,
+    latest: cached.latest,
+    job: cached.job,
+  })
 
   const [analyzing, setAnalyzing] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
-  const [syncLabel, setSyncLabel] = useState("同步完成")
+  const [syncLabel, setSyncLabel] = useState(cached.syncLabel ?? "同步完成")
   const [chunkProgress, setChunkProgress] = useState({ current: 0, total: 1 })
-  const [generatedSummary, setGeneratedSummary] = useState<string | undefined>()
-  const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [generatedSummary, setGeneratedSummary] = useState<string | undefined>(
+    cached.generatedSummary,
+  )
+  const [analysisError, setAnalysisError] = useState<string | null>(
+    cached.analysisError ?? null,
+  )
+  const [activePanelTab, setActivePanelTab] = useState<AIReviewPanelTab>(
+    cached.activePanelTab ?? "risks",
+  )
 
   useEffect(() => {
-    reset()
-    setGeneratedSummary(undefined)
-    setAnalysisError(null)
+    setLastReviewedPrId(prId)
+  }, [prId, setLastReviewedPrId])
 
+  useEffect(() => {
     const controller = new AbortController()
     void loadPersisted(controller.signal)
     return () => controller.abort()
-  }, [prId, reset, loadPersisted])
+  }, [prId, loadPersisted])
+
+  useEffect(() => {
+    patchSession(prId, {
+      findings,
+      latest,
+      job,
+      generatedSummary,
+      analysisError,
+      syncLabel,
+      activePanelTab,
+    })
+  }, [
+    prId,
+    findings,
+    latest,
+    job,
+    generatedSummary,
+    analysisError,
+    syncLabel,
+    activePanelTab,
+    patchSession,
+  ])
 
   const handleImportUrl = useCallback(
     async (url: string) => {
@@ -114,7 +167,18 @@ export function AIReviewView({
   )
 
   const diffTotal = useMemo(() => Math.max(diffFiles.length, 1), [diffFiles.length])
-  const hasAnalysis = findings.length > 0 || Boolean(generatedSummary) || Boolean(latest?.summary)
+  const sessionHasData = hasCachedSession(prId)
+  const hasAnalysis =
+    findings.length > 0 ||
+    Boolean(generatedSummary) ||
+    Boolean(latest?.summary) ||
+    sessionHasData
+  const restoring =
+    loadingPersisted &&
+    !sessionHasData &&
+    !generatedSummary &&
+    !latest?.summary &&
+    findings.length === 0
 
   const handleAnalyze = async () => {
     if (analyzing || !pr) return
@@ -135,6 +199,7 @@ export function AIReviewView({
     try {
       const result = await runAnalysis({
         onProgress: (activeJob) => {
+          setJob(activeJob)
           setChunkProgress({
             current: Math.max(activeJob.chunkIndex, 0),
             total: Math.max(activeJob.chunkTotal, diffTotal),
@@ -143,6 +208,7 @@ export function AIReviewView({
       })
       jobFindings = result.findings
       jobSummary = result.latest.summary
+      setJob(result.job)
       setChunkProgress({
         current: result.job.chunkTotal || diffTotal,
         total: Math.max(result.job.chunkTotal, diffTotal),
@@ -150,6 +216,8 @@ export function AIReviewView({
     } catch (error) {
       errors.push(error instanceof Error ? error.message : "规则扫描任务失败")
     }
+
+    let nextGeneratedSummary = generatedSummary
 
     try {
       const diffContext = buildDiffContext(diffFiles)
@@ -198,7 +266,8 @@ ${diffContext || "（无 diff 内容）"}`,
       }
 
       const totalTokens = Number(data?.usage?.totalTokens) || 0
-      setGeneratedSummary(data?.content || jobSummary || "模型未返回内容。")
+      nextGeneratedSummary = data?.content || jobSummary || "模型未返回内容。"
+      setGeneratedSummary(nextGeneratedSummary)
 
       recordUsage({
         provider: settings.provider,
@@ -212,17 +281,13 @@ ${diffContext || "（无 diff 内容）"}`,
     } catch (error) {
       errors.push(error instanceof Error ? error.message : "AI 摘要生成失败")
       if (jobSummary) {
+        nextGeneratedSummary = jobSummary
         setGeneratedSummary(jobSummary)
       }
     }
 
     if (errors.length > 0) {
-      const partial = jobFindings.length > 0 || Boolean(jobSummary) || Boolean(generatedSummary)
-      if (!partial) {
-        setAnalysisError(errors.join("；"))
-      } else {
-        setAnalysisError(errors.join("；"))
-      }
+      setAnalysisError(errors.join("；"))
     }
 
     setAnalyzing(false)
@@ -279,6 +344,7 @@ ${diffContext || "（无 diff 内容）"}`,
               generatedSummary={generatedSummary}
               jobSummary={latest?.summary}
               hasAnalysis={hasAnalysis}
+              restoring={restoring}
               error={analysisError}
             />
 
@@ -320,6 +386,8 @@ ${diffContext || "（无 diff 内容）"}`,
             job={job ?? undefined}
             mergeRecommendation={latest?.mergeRecommendation}
             filesChanged={pr.filesChanged}
+            activeTab={activePanelTab}
+            onActiveTabChange={setActivePanelTab}
           />
         )}
       </div>

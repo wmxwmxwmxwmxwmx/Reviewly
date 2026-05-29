@@ -8,10 +8,23 @@ import {
   runPullRequestAnalysis,
 } from "@/lib/api/analysis"
 
-export function usePrAnalysis(prId: string) {
-  const [findings, setFindings] = useState<AnalysisFinding[]>([])
-  const [latest, setLatest] = useState<AnalysisSummary | null>(null)
-  const [job, setJob] = useState<AnalysisJob | null>(null)
+export type PrAnalysisInitialState = {
+  findings?: AnalysisFinding[]
+  latest?: AnalysisSummary | null
+  job?: AnalysisJob | null
+}
+
+export function usePrAnalysis(
+  prId: string,
+  initial?: PrAnalysisInitialState,
+) {
+  const [findings, setFindings] = useState<AnalysisFinding[]>(
+    initial?.findings ?? [],
+  )
+  const [latest, setLatest] = useState<AnalysisSummary | null>(
+    initial?.latest ?? null,
+  )
+  const [job, setJob] = useState<AnalysisJob | null>(initial?.job ?? null)
   const [loadingPersisted, setLoadingPersisted] = useState(false)
 
   const loadPersisted = useCallback(
@@ -22,9 +35,6 @@ export function usePrAnalysis(prId: string) {
         if (result) {
           setLatest(result.latest)
           setFindings(result.findings)
-        } else {
-          setLatest(null)
-          setFindings([])
         }
         return result
       } finally {
