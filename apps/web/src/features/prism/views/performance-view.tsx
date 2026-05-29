@@ -11,20 +11,11 @@ import { PerformanceOptimizePanel } from "@/features/prism/components/performanc
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { usePerformanceCenter } from "@/hooks/use-performance-center"
 import { useRepos } from "@/hooks/use-repos"
+import { zh } from "@/lib/i18n/zh"
+import { formatPerfType, PERF_TYPE_FILTER_OPTIONS } from "@/lib/perf-type-labels"
 import { cn } from "@/lib/utils"
 
 const SEVERITY_OPTIONS = ["", "critical", "high", "medium", "low"] as const
-
-const TYPE_OPTIONS = [
-  "",
-  "Blocking IO",
-  "Large Object Copy",
-  "Duplicate DB Query",
-  "High Complexity Loop",
-  "Unnecessary String Copy",
-  "Unused Move",
-  "N+1 Query",
-] as const
 
 export function PerformanceView() {
   const { navigate } = useNavigation()
@@ -60,9 +51,9 @@ export function PerformanceView() {
 
   const metrics = useMemo(
     () => [
-      { label: "开放发现", value: stats ? String(stats.openFindings) : "—" },
+      { label: zh.performance.openFindings, value: stats ? String(stats.openFindings) : "—" },
       {
-        label: "平均影响",
+        label: zh.performance.avgImpact,
         value: stats?.avgImpact ?? "—",
         impactClass:
           stats?.avgImpact === "high"
@@ -71,7 +62,7 @@ export function PerformanceView() {
               ? "text-risk-medium"
               : "text-risk-low",
       },
-      { label: "状态", value: stats?.status ?? "—" },
+      { label: zh.performance.status, value: stats?.status ?? "—" },
     ],
     [stats],
   )
@@ -92,9 +83,7 @@ export function PerformanceView() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">性能分析</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            基于 PR Diff 的规则扫描（不 clone 仓库）
-          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">{zh.performance.subtitle}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
@@ -112,7 +101,7 @@ export function PerformanceView() {
             onClick={() => setFiltersOpen((v) => !v)}
             className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-surface-2 rounded-md hover:bg-surface-3"
           >
-            {filtersOpen ? "收起筛选" : "筛选"}
+            {filtersOpen ? zh.common.collapseFilters : zh.common.filter}
           </button>
           <button
             type="button"
@@ -120,7 +109,7 @@ export function PerformanceView() {
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-ai-blue rounded-md hover:opacity-90"
           >
             <Gauge className="w-3.5 h-3.5" />
-            去 PR 列表分析
+            {zh.actions.goToPrList}
           </button>
         </div>
       </div>
@@ -128,7 +117,7 @@ export function PerformanceView() {
       {filtersOpen && (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">严重度</span>
+            <span className="text-xs text-muted-foreground">{zh.common.severity}</span>
             {SEVERITY_OPTIONS.map((s) => (
               <button
                 key={s || "all-sev"}
@@ -141,13 +130,13 @@ export function PerformanceView() {
                     : "border-border text-muted-foreground hover:bg-surface-2",
                 )}
               >
-                {s ? perfSeverityConfig[s as keyof typeof perfSeverityConfig]?.label ?? s : "全部"}
+                {s ? perfSeverityConfig[s as keyof typeof perfSeverityConfig]?.label ?? s : zh.common.all}
               </button>
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">类型</span>
-            {TYPE_OPTIONS.map((t) => (
+            <span className="text-xs text-muted-foreground">{zh.common.type}</span>
+            {PERF_TYPE_FILTER_OPTIONS.map((t) => (
               <button
                 key={t || "all-type"}
                 type="button"
@@ -159,7 +148,7 @@ export function PerformanceView() {
                     : "border-border text-muted-foreground hover:bg-surface-2",
                 )}
               >
-                {t || "全部"}
+                {t ? formatPerfType(t) : zh.common.all}
               </button>
             ))}
             <select
@@ -167,7 +156,7 @@ export function PerformanceView() {
               onChange={(e) => setRepoFilter(e.target.value)}
               className="ml-2 h-7 text-xs bg-surface-2 border border-border rounded-md px-2 text-foreground"
             >
-              <option value="">全部仓库</option>
+              <option value="">{zh.common.allRepos}</option>
               {repos.map((r) => (
                 <option key={r.id} value={r.fullName}>
                   {r.fullName}
@@ -177,10 +166,10 @@ export function PerformanceView() {
           </div>
           {groupedByType.size > 0 && (
             <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
-              <span>当前页分类：</span>
+              <span>{zh.performance.currentPageTypes}</span>
               {[...groupedByType.entries()].map(([type, count]) => (
                 <span key={type} className="px-1.5 py-0.5 rounded bg-surface-2 border border-border">
-                  {type} ({count})
+                  {formatPerfType(type)} ({count})
                 </span>
               ))}
             </div>
@@ -216,10 +205,8 @@ export function PerformanceView() {
         <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Zap className="w-4 h-4 text-risk-medium" />
-            <span className="text-sm font-medium text-foreground">性能发现</span>
-            <span className="text-xs text-muted-foreground">
-              ({total} 条{loading ? "，加载中…" : ""})
-            </span>
+            <span className="text-sm font-medium text-foreground">{zh.performance.findingsTitle}</span>
+            <span className="text-xs text-muted-foreground">{zh.common.recordsCount(total, loading)}</span>
           </div>
         </div>
 
@@ -233,9 +220,7 @@ export function PerformanceView() {
 
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-2">
-            <span className="text-xs text-muted-foreground">
-              第 {page} / {totalPages} 页
-            </span>
+            <span className="text-xs text-muted-foreground">{zh.common.pageOf(page, totalPages)}</span>
             <div className="flex items-center gap-1">
               <button
                 type="button"

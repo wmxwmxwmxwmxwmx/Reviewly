@@ -230,7 +230,8 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
           <div className="flex-1 min-w-0">
             <div className="text-[11px] font-medium text-foreground">本月用量</div>
             <div className="text-[10px] text-muted-foreground">
-              {monthlyTokens} tokens · ¥{monthlyUsage.costCny.toFixed(2)} · {monthlyUsage.calls} 次
+              {monthlyTokens} {zh.settings.tokensUnit} · ¥{monthlyUsage.costCny.toFixed(2)} · {monthlyUsage.calls}{" "}
+              {zh.settings.callsUnit}
             </div>
           </div>
         </div>

@@ -21,6 +21,7 @@ import {
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { useRepos } from "@/hooks/use-repos"
 import { useSecurityCenter } from "@/hooks/use-security-center"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
 const SEVERITY_OPTIONS = ["", "critical", "high", "medium", "low"] as const
@@ -84,9 +85,7 @@ export function SecurityView() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">安全中心</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            聚合 PR Diff 分析中的安全 findings（不 clone 仓库）
-          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">{zh.security.subtitle}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
@@ -104,7 +103,7 @@ export function SecurityView() {
             onClick={() => setFiltersOpen((v) => !v)}
             className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-surface-2 rounded-md hover:bg-surface-3"
           >
-            {filtersOpen ? "收起筛选" : "筛选"}
+            {filtersOpen ? zh.common.collapseFilters : zh.common.filter}
           </button>
           <button
             type="button"
@@ -112,14 +111,14 @@ export function SecurityView() {
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-ai-blue rounded-md hover:opacity-90"
           >
             <Shield className="w-3.5 h-3.5" />
-            去 PR 列表分析
+            {zh.actions.goToPrList}
           </button>
         </div>
       </div>
 
       {filtersOpen && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground">严重度</span>
+          <span className="text-xs text-muted-foreground">{zh.common.severity}</span>
           {SEVERITY_OPTIONS.map((s) => (
             <button
               key={s || "all"}
@@ -132,7 +131,7 @@ export function SecurityView() {
                   : "border-border text-muted-foreground hover:bg-surface-2",
               )}
             >
-              {s ? severityConfig[s as keyof typeof severityConfig]?.label ?? s : "全部"}
+              {s ? severityConfig[s as keyof typeof severityConfig]?.label ?? s : zh.common.all}
             </button>
           ))}
           <select
@@ -140,7 +139,7 @@ export function SecurityView() {
             onChange={(e) => setRepoFilter(e.target.value)}
             className="ml-2 h-7 text-xs bg-surface-2 border border-border rounded-md px-2 text-foreground"
           >
-            <option value="">全部仓库</option>
+            <option value="">{zh.common.allRepos}</option>
             {repos.map((r) => (
               <option key={r.id} value={r.fullName}>
                 {r.fullName}
@@ -174,9 +173,7 @@ export function SecurityView() {
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-risk-high" />
             <span className="text-sm font-medium text-foreground">漏洞列表</span>
-            <span className="text-xs text-muted-foreground">
-              ({total} 条{loading ? "，加载中…" : ""})
-            </span>
+            <span className="text-xs text-muted-foreground">{zh.common.recordsCount(total, loading)}</span>
           </div>
           {stats && (
             <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
@@ -206,9 +203,7 @@ export function SecurityView() {
 
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-2">
-            <span className="text-xs text-muted-foreground">
-              第 {page} / {totalPages} 页
-            </span>
+            <span className="text-xs text-muted-foreground">{zh.common.pageOf(page, totalPages)}</span>
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -234,11 +229,9 @@ export function SecurityView() {
       <div className="rounded-lg border border-border p-4">
         <div className="flex items-center gap-2 mb-2">
           <ShieldCheck className="w-4 h-4 text-ai-blue" />
-          <span className="text-sm font-medium text-foreground">说明</span>
+          <span className="text-sm font-medium text-foreground">{zh.common.explain}</span>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Findings 来自 PR Diff 规则扫描与 AI Review 持久化结果。点击「AI Explain」才会调用 LLM（需在后端设置中配置 API Key）。
-        </p>
+        <p className="text-xs text-muted-foreground">{zh.security.findingsNote}</p>
       </div>
 
       <SecurityExplainPanel
