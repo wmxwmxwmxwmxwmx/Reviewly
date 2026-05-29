@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.db.models import AnalysisFinding, AnalysisJob, PullRequest, PullRequestDiff, Repository
 from app.engine.rules import PERF_TYPE_LABELS
 from app.mock import seed
+from app.repositories.ai_persisted import extract_from_payload
 from app.repositories.security_center import extract_file_context
 
 
@@ -63,6 +64,7 @@ def _to_performance_center_finding(
         "pullRequestId": pr.id,
         "title": row.title,
         "ruleId": payload.get("ruleId", ""),
+        "aiOptimization": extract_from_payload(payload, "aiOptimization"),
     }
 
 

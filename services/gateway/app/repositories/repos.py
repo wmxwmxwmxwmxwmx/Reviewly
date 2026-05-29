@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import AnalysisFinding, AnalysisJob, PullRequest, Repository
+from app.repositories.ai_persisted import extract_from_settings
 from app.services.repo_health import compute_repo_health
 
 
@@ -15,6 +16,10 @@ def _split_full_name(full_name: str) -> tuple[str, str]:
         owner, name = full_name.split("/", 1)
         return owner, name
     return "", full_name
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _repo_to_api(session: Session, row: Repository) -> dict:
@@ -48,6 +53,8 @@ def _repo_to_api(session: Session, row: Repository) -> dict:
     if "healthScore" not in data or data.get("healthScore") == 80:
         data["healthScore"] = compute_repo_health(session, row.id, open_count)
 
+    data["aiAnalysis"] = extract_from_settings(row.settings, "aiAnalysis")
+    data["aiArchitectureAnalysis"] = extract_from_settings(row.settings, "aiArchitectureAnalysis")
     return data
 
 
@@ -65,6 +72,69 @@ def get_repo(session: Session, repo_id: str) -> dict | None:
 
 def get_repo_row(session: Session, repo_id: str) -> Repository | None:
     return session.get(Repository, repo_id)
+
+
+def _save_repo_settings_ai(
+    session: Session,
+    repo_id: str,
+    settings_key: str,
+    *,
+    content: str,
+    model: str | None = None,
+    provider: str | None = None,
+) -> dict | None:
+    row = session.get(Repository, repo_id)
+    if row is None:
+        return None
+    settings = dict(row.settings or {})
+    blob: dict = {
+        "content": content,
+        "analyzedAt": _now_iso(),
+    }
+    if model:
+        blob["model"] = model
+    if provider:
+        blob["provider"] = provider
+    settings[settings_key] = blob
+    row.settings = settings
+    session.flush()
+    return _repo_to_api(session, row)
+
+
+def save_repo_ai_analysis(
+    session: Session,
+    repo_id: str,
+    *,
+    content: str,
+    model: str | None = None,
+    provider: str | None = None,
+) -> dict | None:
+    return _save_repo_settings_ai(
+        session,
+        repo_id,
+        "aiAnalysis",
+        content=content,
+        model=model,
+        provider=provider,
+    )
+
+
+def save_repo_architecture_analysis(
+    session: Session,
+    repo_id: str,
+    *,
+    content: str,
+    model: str | None = None,
+    provider: str | None = None,
+) -> dict | None:
+    return _save_repo_settings_ai(
+        session,
+        repo_id,
+        "aiArchitectureAnalysis",
+        content=content,
+        model=model,
+        provider=provider,
+    )
 
 
 def upsert_repo(

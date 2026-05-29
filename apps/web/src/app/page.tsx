@@ -5,6 +5,7 @@ import { Menu } from "lucide-react"
 import { Sidebar } from "@/features/prism/components/sidebar"
 import { AISettingsProvider } from "@/features/prism/contexts/ai-settings-context"
 import { AIReviewSessionProvider } from "@/features/prism/contexts/ai-review-session-context"
+import { ReposProvider } from "@/features/prism/contexts/repos-context"
 import { NavigationProvider, useNavigation } from "@/features/prism/contexts/navigation-context"
 import { AIReviewView } from "@/features/prism/views/ai-review-view"
 import { StandardView } from "@/features/prism/components/view-registry"
@@ -106,9 +107,11 @@ export default function PRismPage() {
         }
       >
         <AIReviewSessionProvider>
-          <NavigationProvider>
-            <PRismPageContent />
-          </NavigationProvider>
+          <ReposProvider>
+            <NavigationProvider>
+              <PRismPageContent />
+            </NavigationProvider>
+          </ReposProvider>
         </AIReviewSessionProvider>
       </Suspense>
     </AISettingsProvider>

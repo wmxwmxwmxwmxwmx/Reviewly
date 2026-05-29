@@ -1,30 +1,42 @@
 "use client"
 
 import { Loader2, Network, BrainCircuit } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 
 import { Skeleton } from "@/components/ui/skeleton"
 import { ArchitectureGraphViewer } from "@/features/prism/components/architecture-graph-viewer"
+import { SummaryMarkdown } from "@/features/prism/components/summary-markdown"
 import { useArchitecture } from "@/hooks/use-architecture"
 import { useArchitectureAnalyze } from "@/hooks/use-architecture-analyze"
 import { useArchitectureSelection } from "@/hooks/use-architecture-selection"
-import { useRepos } from "@/hooks/use-repos"
+import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
+import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
 export function ArchitectureView() {
-  const { repos, loading: reposLoading, error: reposError } = useRepos()
-  const [repoId, setRepoId] = useState<string | null>(null)
+  const { repos, loading: reposLoading, error: reposError } = useReposStore()
+  const [archState, setArchState] = usePersistedViewState("architecture", {
+    repoId: null as string | null,
+    selectedNodeId: null as string | null,
+  })
+  const repoId = archState.repoId
+  const setRepoId = (id: string | null) => setArchState({ repoId: id })
+  const selectedNodeId = archState.selectedNodeId
+  const setSelectedNodeId = (id: string | null) => setArchState({ selectedNodeId: id })
 
   useEffect(() => {
     if (!repoId && repos.length > 0) {
       setRepoId(repos[0].id)
     }
-  }, [repoId, repos])
+  }, [repoId, repos, setRepoId])
 
   const { graph, metrics, loading, scanning, error, scan } = useArchitecture(repoId)
-  const { selectedNodeId, setSelectedNodeId, selectedNode, inbound, outbound } =
-    useArchitectureSelection(graph)
+  const { selectedNode, inbound, outbound } = useArchitectureSelection(
+    graph,
+    selectedNodeId,
+    setSelectedNodeId,
+  )
   const { content: aiContent, loading: aiLoading, error: aiError, analyze } =
     useArchitectureAnalyze(repoId)
 
@@ -199,13 +211,13 @@ export function ArchitectureView() {
             className="text-xs px-2.5 py-1 rounded-md bg-ai-blue/15 text-ai-blue hover:bg-ai-blue/25 disabled:opacity-50 flex items-center gap-1"
           >
             {aiLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-            {zh.actions.analyzeArchitecture}
+            {aiContent && !aiLoading ? zh.actions.regenerate : zh.actions.analyzeArchitecture}
           </button>
         </div>
         {aiError && <p className="px-4 py-2 text-xs text-risk-high">{aiError}</p>}
         {aiContent && (
-          <div className="px-4 py-3 text-sm text-muted-foreground whitespace-pre-wrap border-t border-border">
-            {aiContent}
+          <div className="px-4 py-3 text-sm border-t border-border max-h-96 overflow-y-auto">
+            <SummaryMarkdown content={aiContent} />
           </div>
         )}
         {!aiContent && !aiLoading && (

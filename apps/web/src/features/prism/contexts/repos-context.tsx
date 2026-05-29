@@ -9,14 +9,16 @@ import {
   type ReactNode,
 } from "react"
 
+import type { Repository } from "@reviewly/shared"
+
 import { useAISettings, estimateCostCny } from "@/features/prism/contexts/ai-settings-context"
 import { PrismApiError } from "@/lib/api/client"
 import {
   fetchRepoAnalyzeContext,
   fetchRepos,
+  saveRepoAiAnalysis,
   syncRepos,
 } from "@/lib/api/repos"
-import type { Repository } from "@reviewly/shared"
 
 interface ReposContextValue {
   repos: Repository[]
@@ -25,13 +27,11 @@ interface ReposContextValue {
   error: string | null
   syncError: string | null
   analyzingRepoId: string | null
-  analyzedRepoId: string | null
-  analysisText: string
-  analysisError: string | null
+  analysisErrorsByRepoId: Record<string, string>
   refresh: () => Promise<void>
   sync: () => Promise<void>
   analyzeRepository: (repoId: string) => Promise<void>
-  clearAnalysis: () => void
+  clearAnalysisError: (repoId: string) => void
 }
 
 const ReposContext = createContext<ReposContextValue | null>(null)
@@ -78,9 +78,7 @@ export function ReposProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [analyzingRepoId, setAnalyzingRepoId] = useState<string | null>(null)
-  const [analyzedRepoId, setAnalyzedRepoId] = useState<string | null>(null)
-  const [analysisText, setAnalysisText] = useState("")
-  const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [analysisErrorsByRepoId, setAnalysisErrorsByRepoId] = useState<Record<string, string>>({})
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -112,24 +110,32 @@ export function ReposProvider({ children }: { children: ReactNode }) {
     }
   }, [refresh])
 
-  const clearAnalysis = useCallback(() => {
-    setAnalysisText("")
-    setAnalysisError(null)
-    setAnalyzingRepoId(null)
-    setAnalyzedRepoId(null)
+  const clearAnalysisError = useCallback((repoId: string) => {
+    setAnalysisErrorsByRepoId((prev) => {
+      if (!prev[repoId]) return prev
+      const next = { ...prev }
+      delete next[repoId]
+      return next
+    })
   }, [])
 
   const analyzeRepository = useCallback(
     async (repoId: string) => {
       if (!hasApiKey) {
-        setAnalysisError("请先在系统设置中填写 API 密钥。")
-        setAnalyzedRepoId(repoId)
+        setAnalysisErrorsByRepoId((prev) => ({
+          ...prev,
+          [repoId]: "请先在系统设置中填写 API 密钥。",
+        }))
         return
       }
 
       setAnalyzingRepoId(repoId)
-      setAnalysisText("")
-      setAnalysisError(null)
+      setAnalysisErrorsByRepoId((prev) => {
+        if (!prev[repoId]) return prev
+        const next = { ...prev }
+        delete next[repoId]
+        return next
+      })
 
       try {
         const ctx = await fetchRepoAnalyzeContext(repoId)
@@ -166,8 +172,13 @@ export function ReposProvider({ children }: { children: ReactNode }) {
           throw new Error(errMsg)
         }
 
-        setAnalysisText(data?.content || "模型未返回内容。")
-        setAnalyzedRepoId(repoId)
+        const content = data?.content || "模型未返回内容。"
+        const updated = await saveRepoAiAnalysis(repoId, {
+          content,
+          model: settings.model,
+          provider: settings.provider,
+        })
+        setRepos((prev) => prev.map((r) => (r.id === repoId ? updated : r)))
 
         const totalTokens = Number(data?.usage?.totalTokens) || 0
         recordUsage({
@@ -180,7 +191,10 @@ export function ReposProvider({ children }: { children: ReactNode }) {
           latencyMs: Number(data?.latencyMs) || 0,
         })
       } catch (e: unknown) {
-        setAnalysisError(e instanceof Error ? e.message : "AI 分析失败")
+        setAnalysisErrorsByRepoId((prev) => ({
+          ...prev,
+          [repoId]: e instanceof Error ? e.message : "AI 分析失败",
+        }))
       } finally {
         setAnalyzingRepoId(null)
       }
@@ -197,13 +211,11 @@ export function ReposProvider({ children }: { children: ReactNode }) {
         error,
         syncError,
         analyzingRepoId,
-        analyzedRepoId,
-        analysisText,
-        analysisError,
+        analysisErrorsByRepoId,
         refresh,
         sync,
         analyzeRepository,
-        clearAnalysis,
+        clearAnalysisError,
       }}
     >
       {children}

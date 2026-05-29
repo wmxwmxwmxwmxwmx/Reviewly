@@ -1,6 +1,12 @@
-import type { SecurityCenterFinding, SecurityFindingsPage } from "@reviewly/shared"
+import type { AiPersistedContent, SecurityCenterFinding, SecurityFindingsPage } from "@reviewly/shared"
 
 import { apiFetch } from "./client"
+
+export type SaveFindingAiPayload = {
+  content: string
+  model?: string
+  provider?: string
+}
 
 export interface SecurityStats {
   openFindings: number
@@ -38,6 +44,21 @@ export function fetchSecurityFindings(params: SecurityFindingsQuery = {}) {
 
 export function fetchSecurityStats(signal?: AbortSignal) {
   return apiFetch<SecurityStats>("/api/security/stats", { signal })
+}
+
+export function patchSecurityFinding(
+  findingId: string,
+  body: { aiInsight: AiPersistedContent },
+  signal?: AbortSignal,
+) {
+  return apiFetch<SecurityCenterFinding & { aiInsight?: AiPersistedContent }>(
+    `/api/security/findings/${findingId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      signal,
+    },
+  )
 }
 
 export async function explainSecurityFinding(

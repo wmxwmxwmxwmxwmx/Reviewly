@@ -44,16 +44,18 @@ export function SecurityView() {
     setRepoFilter,
     searchInput,
     setSearchInput,
+    filtersOpen,
+    setFiltersOpen,
     explainingId,
     explainText,
     explainError,
+    prepareExplain,
     explainFinding,
     cancelExplain,
   } = useSecurityCenter()
 
   const [explainOpen, setExplainOpen] = useState(false)
   const [activeFinding, setActiveFinding] = useState<SecurityCenterFinding | null>(null)
-  const [filtersOpen, setFiltersOpen] = useState(true)
 
   const securityMetrics = useMemo(
     () => [
@@ -71,6 +73,7 @@ export function SecurityView() {
 
   const openExplain = (finding: SecurityCenterFinding) => {
     setActiveFinding(finding)
+    prepareExplain(finding)
     setExplainOpen(true)
   }
 

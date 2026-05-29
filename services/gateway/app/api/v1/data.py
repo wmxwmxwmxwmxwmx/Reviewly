@@ -28,6 +28,12 @@ class ImportPrBody(BaseModel):
         return (self.pr_url or self.url).strip()
 
 
+class RepoAiAnalysisBody(BaseModel):
+    content: str = Field(min_length=1)
+    model: str | None = None
+    provider: str | None = None
+
+
 @router.get("/dashboard")
 def dashboard(db: Session = Depends(get_db)) -> dict:
     return dashboard_repo.get_dashboard(db)
@@ -64,6 +70,44 @@ async def repo_analyze_context(repo_id: str, db: Session = Depends(get_db)) -> d
         "recentFindings": findings,
         "readme": readme[:8000] if readme else "",
     }
+
+
+@router.put("/repos/{repo_id}/ai-analysis")
+def repo_save_ai_analysis(
+    repo_id: str,
+    body: RepoAiAnalysisBody,
+    db: Session = Depends(get_db),
+) -> dict:
+    repo = repos_repo.save_repo_ai_analysis(
+        db,
+        repo_id,
+        content=body.content,
+        model=body.model,
+        provider=body.provider,
+    )
+    if not repo:
+        raise api_error("仓库不存在", 404)
+    db.commit()
+    return repo
+
+
+@router.put("/repos/{repo_id}/architecture-analysis")
+def repo_save_architecture_analysis(
+    repo_id: str,
+    body: RepoAiAnalysisBody,
+    db: Session = Depends(get_db),
+) -> dict:
+    repo = repos_repo.save_repo_architecture_analysis(
+        db,
+        repo_id,
+        content=body.content,
+        model=body.model,
+        provider=body.provider,
+    )
+    if not repo:
+        raise api_error("仓库不存在", 404)
+    db.commit()
+    return repo
 
 
 @router.post("/repos/{repo_id}/clone")

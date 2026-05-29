@@ -11,6 +11,16 @@ export interface PaginatedResponse<T> {
   hasMore: boolean
 }
 
+export interface AiPersistedContent {
+  content: string
+  analyzedAt: string
+  model?: string
+  provider?: string
+}
+
+/** @deprecated Use AiPersistedContent */
+export type RepositoryAiAnalysis = AiPersistedContent
+
 export interface Repository {
   id: string
   fullName: string
@@ -21,6 +31,8 @@ export interface Repository {
   healthScore: number
   lastSyncTime: string
   aiReviewEnabled: boolean
+  aiAnalysis?: AiPersistedContent | null
+  aiArchitectureAnalysis?: AiPersistedContent | null
 }
 
 export interface RepoAnalyzeContext {
@@ -116,6 +128,7 @@ export interface SecurityCenterFinding {
   status?: "open" | "ignored" | "resolved"
   pullRequestId?: string
   title?: string
+  aiInsight?: AiPersistedContent | null
 }
 
 export interface SecurityFindingsPage {
@@ -143,6 +156,7 @@ export interface PerformanceCenterFinding {
   pullRequestId?: string
   title?: string
   ruleId?: string
+  aiOptimization?: AiPersistedContent | null
 }
 
 export interface PerformanceFindingsPage {
@@ -293,6 +307,7 @@ export interface DashboardStats {
       completedAt: string
     }[]
   }
+  weeklySummary?: AiPersistedContent | null
 }
 
 export interface WeeklySummaryResponse {

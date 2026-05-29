@@ -7,7 +7,6 @@ import { SecurityView } from "@/features/prism/views/security-view"
 import { PerformanceView } from "@/features/prism/views/performance-view"
 import { ArchitectureView } from "@/features/prism/views/architecture-view"
 import { GovernanceView } from "@/features/prism/views/governance-view"
-import { ReposProvider } from "@/features/prism/contexts/repos-context"
 import { ReposView } from "@/features/prism/views/repos-view"
 import { TeamView } from "@/features/prism/views/team-view"
 import { SettingsView } from "@/features/prism/views/settings-view"
@@ -27,11 +26,7 @@ export function StandardView({ view }: { view: Exclude<NavView, "ai-review"> }) 
     case "governance":
       return <GovernanceView />
     case "repos":
-      return (
-        <ReposProvider>
-          <ReposView />
-        </ReposProvider>
-      )
+      return <ReposView />
     case "team":
       return <TeamView />
     case "settings":

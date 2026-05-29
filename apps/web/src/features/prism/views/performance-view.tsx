@@ -37,17 +37,19 @@ export function PerformanceView() {
     setRepoFilter,
     searchInput,
     setSearchInput,
+    filtersOpen,
+    setFiltersOpen,
     groupedByType,
     optimizingId,
     optimizeText,
     optimizeError,
+    prepareOptimize,
     optimizeFinding,
     cancelOptimize,
   } = usePerformanceCenter()
 
   const [optimizeOpen, setOptimizeOpen] = useState(false)
   const [activeFinding, setActiveFinding] = useState<PerformanceCenterFinding | null>(null)
-  const [filtersOpen, setFiltersOpen] = useState(true)
 
   const metrics = useMemo(
     () => [
@@ -69,6 +71,7 @@ export function PerformanceView() {
 
   const openOptimize = (finding: PerformanceCenterFinding) => {
     setActiveFinding(finding)
+    prepareOptimize(finding)
     setOptimizeOpen(true)
   }
 

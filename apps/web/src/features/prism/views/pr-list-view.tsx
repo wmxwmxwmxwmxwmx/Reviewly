@@ -14,14 +14,21 @@ import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { usePullRequests } from "@/hooks/use-pull-requests"
+import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
 
 type FilterTab = "all" | "open" | "closed"
 
 export function PRListView() {
   const { items: apiPrs, loading, error } = usePullRequests()
   const { navigate } = useNavigation()
-  const [search, setSearch] = useState("")
-  const [filterTab, setFilterTab] = useState<FilterTab>("open")
+  const [listState, setListState] = usePersistedViewState<{ search: string; filterTab: FilterTab }>(
+    "pull-requests",
+    { search: "", filterTab: "open" },
+  )
+  const search = listState.search
+  const filterTab = listState.filterTab
+  const setSearch = (search: string) => setListState({ search })
+  const setFilterTab = (filterTab: FilterTab) => setListState({ filterTab })
 
   const filteredPRs = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase()

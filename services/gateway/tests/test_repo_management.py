@@ -50,6 +50,46 @@ def test_analyze_context_not_found(client: TestClient) -> None:
     assert r.status_code == 404
 
 
+def test_save_and_list_repo_ai_analysis(client: TestClient) -> None:
+    repos = client.get("/api/repos").json()
+    if not repos:
+        pytest.skip("no repos in db")
+    repo_id = repos[0]["id"]
+    content = "## 项目复杂度分析\n\n测试持久化内容。"
+
+    save = client.put(
+        f"/api/repos/{repo_id}/ai-analysis",
+        json={"content": content, "model": "deepseek-chat", "provider": "deepseek"},
+    )
+    assert save.status_code == 200
+    body = save.json()
+    assert body["id"] == repo_id
+    assert body["aiAnalysis"]["content"] == content
+    assert body["aiAnalysis"]["analyzedAt"]
+    assert body["aiAnalysis"]["model"] == "deepseek-chat"
+
+    listed = client.get("/api/repos").json()
+    match = next((x for x in listed if x["id"] == repo_id), None)
+    assert match is not None
+    assert match["aiAnalysis"]["content"] == content
+
+
+def test_save_architecture_analysis_not_found(client: TestClient) -> None:
+    r = client.put(
+        "/api/repos/repo-does-not-exist/architecture-analysis",
+        json={"content": "test"},
+    )
+    assert r.status_code == 404
+
+
+def test_save_ai_analysis_not_found(client: TestClient) -> None:
+    r = client.put(
+        "/api/repos/repo-does-not-exist/ai-analysis",
+        json={"content": "test"},
+    )
+    assert r.status_code == 404
+
+
 @patch("app.api.v1.placeholders.settings")
 @patch("app.services.repo_sync.settings")
 @patch("app.services.repo_sync.public_client.list_user_repos", new_callable=AsyncMock)

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AnalysisFinding, AnalysisJob, PullRequest, PullRequestDiff, Repository
 from app.mock import seed
+from app.repositories.ai_persisted import extract_from_payload
 
 RULE_LABELS: dict[str, str] = {
     "sql-injection": "SQL Injection",
@@ -77,6 +78,7 @@ def _to_security_center_finding(
         "suggestion": suggestion,
         "status": payload.get("status", "open"),
         "title": row.title,
+        "aiInsight": extract_from_payload(payload, "aiInsight"),
     }
 
 

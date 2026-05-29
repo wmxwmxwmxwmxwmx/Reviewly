@@ -2,19 +2,32 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import type { SecurityCenterFinding } from "@reviewly/shared"
+import type { AiPersistedContent, SecurityCenterFinding } from "@reviewly/shared"
 
+import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { PrismApiError } from "@/lib/api/client"
 import {
   explainSecurityFinding,
   fetchSecurityFindings,
   fetchSecurityStats,
+  patchSecurityFinding,
   type SecurityStats,
 } from "@/lib/api/security"
+import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
 
 const PAGE_SIZE = 10
 
+function buildAiInsight(content: string, model: string, provider: string): AiPersistedContent {
+  return {
+    content,
+    analyzedAt: new Date().toISOString(),
+    model,
+    provider,
+  }
+}
+
 export function useSecurityCenter() {
+  const { settings } = useAISettings()
   const [items, setItems] = useState<SecurityCenterFinding[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -22,9 +35,20 @@ export function useSecurityCenter() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [severityFilter, setSeverityFilter] = useState<string>("")
-  const [repoFilter, setRepoFilter] = useState<string>("")
-  const [searchInput, setSearchInput] = useState("")
+  const [viewState, setViewState] = usePersistedViewState("security", {
+    severityFilter: "",
+    repoFilter: "",
+    searchInput: "",
+    filtersOpen: true,
+  })
+  const severityFilter = viewState.severityFilter
+  const repoFilter = viewState.repoFilter
+  const searchInput = viewState.searchInput
+  const filtersOpen = viewState.filtersOpen
+  const setSeverityFilter = (severityFilter: string) => setViewState({ severityFilter })
+  const setRepoFilter = (repoFilter: string) => setViewState({ repoFilter })
+  const setSearchInput = (searchInput: string) => setViewState({ searchInput })
+  const setFiltersOpen = (filtersOpen: boolean) => setViewState({ filtersOpen })
   const [searchQuery, setSearchQuery] = useState("")
 
   const [explainingId, setExplainingId] = useState<string | null>(null)
@@ -78,21 +102,54 @@ export function useSecurityCenter() {
     [total],
   )
 
-  const explainFinding = useCallback(async (findingId: string) => {
-    explainAbort.current?.abort()
-    const ac = new AbortController()
-    explainAbort.current = ac
-    setExplainingId(findingId)
-    setExplainText("")
+  const prepareExplain = useCallback((finding: SecurityCenterFinding) => {
+    setExplainText(finding.aiInsight?.content ?? "")
     setExplainError(null)
-
-    await explainSecurityFinding(findingId, {
-      signal: ac.signal,
-      onDelta: (delta) => setExplainText((prev) => prev + delta),
-      onError: (msg) => setExplainError(msg),
-      onDone: () => setExplainingId((id) => (id === findingId ? null : id)),
-    })
   }, [])
+
+  const explainFinding = useCallback(
+    async (findingId: string) => {
+      explainAbort.current?.abort()
+      const ac = new AbortController()
+      explainAbort.current = ac
+      setExplainingId(findingId)
+      setExplainText("")
+      setExplainError(null)
+
+      let accumulated = ""
+
+      await explainSecurityFinding(findingId, {
+        signal: ac.signal,
+        onDelta: (delta) => {
+          accumulated += delta
+          setExplainText((prev) => prev + delta)
+        },
+        onError: (msg) => setExplainError(msg),
+        onDone: async () => {
+          setExplainingId((id) => (id === findingId ? null : id))
+          if (!accumulated.trim()) return
+          try {
+            const insight = buildAiInsight(
+              accumulated,
+              settings.model,
+              settings.provider,
+            )
+            await patchSecurityFinding(findingId, { aiInsight: insight })
+            setItems((prev) =>
+              prev.map((item) =>
+                item.id === findingId ? { ...item, aiInsight: insight } : item,
+              ),
+            )
+          } catch (e: unknown) {
+            setExplainError(
+              e instanceof PrismApiError ? e.message : "保存解读失败",
+            )
+          }
+        },
+      })
+    },
+    [settings.model, settings.provider],
+  )
 
   const cancelExplain = useCallback(() => {
     explainAbort.current?.abort()
@@ -115,9 +172,12 @@ export function useSecurityCenter() {
     setRepoFilter,
     searchInput,
     setSearchInput,
+    filtersOpen,
+    setFiltersOpen,
     explainingId,
     explainText,
     explainError,
+    prepareExplain,
     explainFinding,
     cancelExplain,
   }

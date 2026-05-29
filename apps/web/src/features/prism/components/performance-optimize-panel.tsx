@@ -65,7 +65,9 @@ export function PerformanceOptimizePanel({
                 className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-white bg-ai-blue rounded-md hover:opacity-90"
               >
                 <Zap className="w-3.5 h-3.5" />
-                {zh.actions.generateOptimize}
+                {finding.aiOptimization?.content
+                  ? zh.actions.regenerate
+                  : zh.actions.generateOptimize}
               </button>
             )}
 

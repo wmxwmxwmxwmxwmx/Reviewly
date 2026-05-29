@@ -29,9 +29,7 @@ export function ReposView() {
     error,
     syncError,
     analyzingRepoId,
-    analyzedRepoId,
-    analysisText,
-    analysisError,
+    analysisErrorsByRepoId,
     sync,
     analyzeRepository,
   } = useReposStore()
@@ -41,7 +39,7 @@ export function ReposView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-foreground">仓库管理</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">已连接的 GitHub 仓库（REST 元数据，不 clone）</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{zh.repos.subtitle}</p>
         </div>
         <button
           type="button"
@@ -54,7 +52,7 @@ export function ReposView() {
           ) : (
             <BookOpen className="w-3.5 h-3.5" />
           )}
-          {syncing ? "同步中…" : "同步仓库"}
+          {syncing ? "同步中…" : zh.repos.syncRepos}
         </button>
       </div>
 
@@ -78,8 +76,10 @@ export function ReposView() {
           repos.map((repo, idx) => {
             const health = repo.healthScore
             const isAnalyzing = analyzingRepoId === repo.id
-            const isAnalyzedCard = analyzedRepoId === repo.id || isAnalyzing
-            const showAnalysis = isAnalyzedCard && Boolean(analysisText)
+            const analysisError = analysisErrorsByRepoId[repo.id]
+            const analysisContent = repo.aiAnalysis?.content
+            const hasAnalysis = Boolean(analysisContent)
+            const showAnalysisPanel = isAnalyzing || hasAnalysis || Boolean(analysisError)
 
             return (
               <motion.div
@@ -96,11 +96,11 @@ export function ReposView() {
                     </span>
                     <div className="mt-1 flex items-center gap-2 flex-wrap">
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-3 text-muted-foreground">
-                        默认分支：{repo.defaultBranch}
+                        {zh.repos.defaultBranch}：{repo.defaultBranch}
                       </span>
                       {repo.aiReviewEnabled && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-ai-blue/20 text-ai-blue">
-                          AI 可用
+                          {zh.repos.aiAvailable}
                         </span>
                       )}
                     </div>
@@ -131,7 +131,7 @@ export function ReposView() {
 
                 <div className="mt-3">
                   <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-muted-foreground">健康度</span>
+                    <span className="text-muted-foreground">{zh.repos.health}</span>
                     <span
                       className={cn(
                         "font-medium",
@@ -166,21 +166,25 @@ export function ReposView() {
                     ) : (
                       <BrainCircuit className="w-3.5 h-3.5" />
                     )}
-                    {isAnalyzing ? zh.repos.analyzingRepo : zh.actions.analyzeRepo}
+                    {isAnalyzing
+                      ? zh.repos.analyzingRepo
+                      : hasAnalysis
+                        ? zh.actions.regenerate
+                        : zh.actions.analyzeRepo}
                   </button>
                 </div>
 
-                {(isAnalyzedCard && (isAnalyzing || showAnalysis || analysisError)) && (
+                {showAnalysisPanel && (
                   <div className="mt-3 pt-3 border-t border-border">
-                    {analysisError && isAnalyzedCard && (
+                    {analysisError && (
                       <p className="text-xs text-risk-high mb-2">{analysisError}</p>
                     )}
-                    {isAnalyzing && !analysisText && (
-                      <p className="text-xs text-muted-foreground">正在生成仓库分析…</p>
+                    {isAnalyzing && !analysisContent && (
+                      <p className="text-xs text-muted-foreground">{zh.repos.generatingAnalysis}</p>
                     )}
-                    {showAnalysis && (
+                    {analysisContent && (
                       <div className="text-xs max-h-64 overflow-y-auto">
-                        <SummaryMarkdown content={analysisText} />
+                        <SummaryMarkdown content={analysisContent} />
                       </div>
                     )}
                   </div>
