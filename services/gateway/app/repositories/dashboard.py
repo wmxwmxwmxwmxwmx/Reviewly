@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AnalysisFinding, AnalysisJob, PullRequest, Repository
 from app.repositories import settings as settings_repo
-from app.repositories.seed_filter import exclude_seed_repositories, is_seed_pull_request
+from app.repositories.seed_filter import (
+    exclude_seed_findings,
+    exclude_seed_repositories,
+    is_seed_pull_request,
+)
 from app.services.activity_log import list_recent
 
 
@@ -27,6 +31,18 @@ def _risk_level_from_pr(pr: PullRequest) -> str:
 
 def _is_high_risk(level: str) -> bool:
     return level in ("high", "critical")
+
+
+def _count_findings(session: Session, finding_type: str) -> int:
+    stmt = exclude_seed_findings(
+        select(func.count(AnalysisFinding.id))
+        .select_from(AnalysisFinding)
+        .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
+        .join(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
+        .join(Repository, PullRequest.repository_id == Repository.id)
+        .where(AnalysisFinding.type == finding_type)
+    )
+    return session.scalar(stmt) or 0
 
 
 def _scoped_repository_ids(
@@ -97,16 +113,8 @@ def _enrich_dashboard(
     if scoped_repo_ids is not None:
         open_prs = [pr for pr in open_prs if pr.repository_id in scoped_repo_ids]
 
-    security_count = session.scalar(
-        select(func.count())
-        .select_from(AnalysisFinding)
-        .where(AnalysisFinding.type == "security")
-    ) or 0
-    performance_count = session.scalar(
-        select(func.count())
-        .select_from(AnalysisFinding)
-        .where(AnalysisFinding.type == "performance")
-    ) or 0
+    security_count = _count_findings(session, "security")
+    performance_count = _count_findings(session, "performance")
 
     high_risk_count = sum(1 for pr in open_prs if _is_high_risk(_risk_level_from_pr(pr)))
     open_pr_count = len(open_prs)
@@ -191,11 +199,14 @@ def _enrich_dashboard(
         payload = repo.payload or {}
         repo_pr_count = sum(1 for pr in open_prs if pr.repository_id == repo.id)
         issue_count = session.scalar(
-            select(func.count())
-            .select_from(AnalysisFinding)
-            .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
-            .join(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
-            .where(PullRequest.repository_id == repo.id)
+            exclude_seed_findings(
+                select(func.count())
+                .select_from(AnalysisFinding)
+                .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
+                .join(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
+                .join(Repository, PullRequest.repository_id == Repository.id)
+                .where(PullRequest.repository_id == repo.id)
+            )
         ) or 0
         top_repos.append(
             {
@@ -249,20 +260,4 @@ def get_dashboard(
     user_id: str | None = None,
     team_ids: list[str] | None = None,
 ) -> dict:
-    team_ids = team_ids or []
-    open_prs_query = select(func.count()).select_from(PullRequest).where(PullRequest.state == "open")
-    open_prs: int | None = None
-    if user_id:
-        scoped = _scoped_repository_ids(session, user_id=user_id, team_ids=team_ids)
-        if scoped is not None:
-            if not scoped:
-                open_prs = 0
-            else:
-                open_prs_query = open_prs_query.where(PullRequest.repository_id.in_(scoped))
-    if open_prs is None:
-        open_prs = session.scalar(open_prs_query) or 0
-
-    if open_prs == 0:
-        return _empty_dashboard(session)
-
-    return _enrich_dashboard(session, user_id=user_id, team_ids=team_ids)
+    return _enrich_dashboard(session, user_id=user_id, team_ids=team_ids or [])

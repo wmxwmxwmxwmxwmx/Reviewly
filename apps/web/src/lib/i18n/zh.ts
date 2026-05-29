@@ -103,6 +103,8 @@ export const zh = {
     riskDistributionOpenPr: "风险分布（开放 PR）",
     repoPrCount: (count: number) => `${count} 个 PR`,
     aiInsightsEmpty: "完成 PR 分析后将显示活动洞察",
+    noReposHint: "暂无仓库数据。请前往仓库管理同步 GitHub 仓库。",
+    goToRepos: "前往仓库管理",
   },
   security: {
     findingsNote:

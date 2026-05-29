@@ -240,7 +240,16 @@ export function DashboardView() {
                 </div>
               ))
             ) : topRepos.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted-foreground text-center">暂无仓库数据</p>
+              <div className="px-4 py-6 text-center space-y-2">
+                <p className="text-sm text-muted-foreground">{zh.dashboard.noReposHint}</p>
+                <button
+                  type="button"
+                  onClick={() => navigate("repos")}
+                  className="text-xs text-ai-blue hover:underline"
+                >
+                  {zh.dashboard.goToRepos}
+                </button>
+              </div>
             ) : (
               topRepos.map((repo, idx) => (
                 <motion.div

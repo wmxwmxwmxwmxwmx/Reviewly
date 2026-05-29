@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -59,9 +59,19 @@ def dashboard_activities(
     return {"activities": list_recent(db, limit=limit)}
 
 
+class WeeklySummaryBody(BaseModel):
+    api_key: str | None = Field(default=None, validation_alias="apiKey")
+
+    model_config = {"populate_by_name": True}
+
+
 @router.post("/dashboard/weekly-summary")
-async def dashboard_weekly_summary(db: Session = Depends(get_db)) -> dict:
-    return await dashboard_summary.generate_weekly_summary(db)
+async def dashboard_weekly_summary(
+    db: Session = Depends(get_db),
+    body: WeeklySummaryBody | None = Body(None),
+) -> dict:
+    override = body.api_key if body and body.api_key else None
+    return await dashboard_summary.generate_weekly_summary(db, api_key_override=override)
 
 
 @router.get("/repos")

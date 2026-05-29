@@ -18,13 +18,21 @@ from app.repositories.analysis import _finding_to_api
 from app.repositories.dashboard import get_dashboard
 
 
-async def generate_weekly_summary(session: Session) -> dict[str, Any]:
+async def generate_weekly_summary(
+    session: Session,
+    *,
+    api_key_override: str | None = None,
+) -> dict[str, Any]:
     cfg = settings_repo.get_settings(session)
     ai = cfg.get("ai", {})
     provider = str(ai.get("provider", "openai"))
     model = str(ai.get("model", "")).strip()
     secrets = settings_repo.get_decrypted_secrets(session)
-    api_key = secrets.get(provider) or secrets.get("apiKey", "")
+    api_key = (
+        secrets.get(provider)
+        or secrets.get("apiKey", "")
+        or (api_key_override or "").strip()
+    )
     custom_endpoint = ai.get("customEndpoint")
 
     if provider not in VALID_PROVIDERS:

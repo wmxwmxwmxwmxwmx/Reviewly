@@ -13,6 +13,8 @@ import {
 import { useSecuritySettings } from "@/features/prism/contexts/security-settings-context"
 import { TwoFactorPinDialog } from "@/features/prism/components/two-factor-pin-dialog"
 import { SESSION_TIMEOUT_OPTIONS } from "@/features/prism/lib/security-settings"
+import { patchSettings } from "@/lib/api/settings"
+import { PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
@@ -63,6 +65,7 @@ export function SettingsView() {
   })
   const [aiForm, setAiForm] = useState(settings)
   const [saved, setSaved] = useState(false)
+  const [aiSaveError, setAiSaveError] = useState<string | null>(null)
   const [pinDialogOpen, setPinDialogOpen] = useState(false)
   const [pinDialogMode, setPinDialogMode] = useState<"setup" | "disable">("setup")
 
@@ -128,7 +131,21 @@ export function SettingsView() {
   }
 
   const handleSave = async () => {
+    setAiSaveError(null)
     updateSettings(aiForm)
+    try {
+      await patchSettings({
+        ai: {
+          provider: aiForm.provider,
+          model: aiForm.model,
+          temperature: 0.2,
+          apiKey: aiForm.apiKey,
+        },
+      } as Parameters<typeof patchSettings>[0])
+    } catch (e: unknown) {
+      setAiSaveError(e instanceof PrismApiError ? e.message : "AI 设置同步到服务端失败")
+      return
+    }
     const securityOk = await saveSecurity()
     if (securityOk) {
       setSaved(true)
@@ -345,6 +362,7 @@ export function SettingsView() {
         </div>
       </motion.div>
 
+      {aiSaveError && <p className="text-xs text-risk-high">{aiSaveError}</p>}
       {saveError && <p className="text-xs text-risk-high">{saveError}</p>}
 
       <button

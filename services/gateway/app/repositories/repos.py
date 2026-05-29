@@ -176,6 +176,18 @@ def _repo_to_api(session: Session, row: Repository) -> dict:
     return data
 
 
+def claim_orphan_repositories(session: Session, user_id: str) -> int:
+    """Assign unowned non-seed repositories to the current user after sync."""
+    rows = session.scalars(
+        exclude_seed_repositories(select(Repository)).where(Repository.owner_user_id.is_(None))
+    ).all()
+    for row in rows:
+        row.owner_user_id = user_id
+    if rows:
+        session.flush()
+    return len(rows)
+
+
 def list_repos(
     session: Session,
     *,
@@ -187,7 +199,10 @@ def list_repos(
     query = exclude_seed_repositories(select(Repository))
     if user_id:
         team_ids = team_ids or []
-        conditions = [Repository.owner_user_id == user_id]
+        conditions = [
+            Repository.owner_user_id == user_id,
+            Repository.owner_user_id.is_(None),
+        ]
         if team_ids:
             conditions.append(
                 (Repository.team_id.in_(team_ids)) & (Repository.visibility == "team")
@@ -201,7 +216,9 @@ def get_repo_row_for_user(session: Session, repo_id: str, user_id: str, team_ids
     row = session.get(Repository, repo_id)
     if row is None:
         return None
-    if row.owner_user_id == user_id:
+    if row.owner_user_id == user_id or row.owner_user_id is None:
+        if is_seed_repository(row):
+            return None
         return row
     if is_seed_repository(row):
         return None
