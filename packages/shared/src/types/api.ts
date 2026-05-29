@@ -63,6 +63,40 @@ export interface SyncRepositoriesResponse {
   syncedRepos?: number
 }
 
+export interface AuthUser {
+  id: string
+  githubId: string
+  username: string
+  email?: string | null
+  avatarUrl?: string | null
+  lastLoginAt?: string | null
+}
+
+export interface AuthLoginResponse {
+  url: string
+}
+
+export interface SyncPrsResponse {
+  synced: number
+  created: number
+  updated: number
+}
+
+export interface ActivityEvent {
+  type: string
+  user: string
+  action: string
+  repo: string
+  time: string
+  createdAt?: string
+  pullRequestId?: string | null
+  payload?: Record<string, unknown> | null
+}
+
+export interface DashboardActivitiesResponse {
+  activities: ActivityEvent[]
+}
+
 export interface RepoAnalyzeContext {
   repository: Repository
   recentFindings: AnalysisFinding[]

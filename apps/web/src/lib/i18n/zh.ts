@@ -225,6 +225,8 @@ export const zh = {
     monthlyUsage: "本月用量",
     noTeamMember: "暂无团队成员",
     demoDataHint: "使用种子数据或同步团队",
+    notLoggedIn: "未登录",
+    signInHint: "请登录以同步仓库",
   },
 } as const
 

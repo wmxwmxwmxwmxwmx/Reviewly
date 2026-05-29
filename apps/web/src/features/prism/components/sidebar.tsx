@@ -20,7 +20,7 @@ import { useSidebarBadges } from "@/hooks/use-sidebar-badges"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
-export type NavView = 
+export type NavView =
   | "dashboard"
   | "pull-requests"
   | "ai-review"
@@ -61,15 +61,20 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
     <aside
       className={cn(
         "flex flex-col w-[260px] shrink-0 h-screen bg-sidebar-surface border-r border-border overflow-hidden shadow-[20px_0_60px_rgba(0,0,0,0.28)]",
-        className
+        className,
       )}
     >
-      {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-gradient-to-r from-ai-blue/5 to-ai-purple/5">
         <div className="relative flex items-center justify-center w-8 h-8 shrink-0">
           <svg viewBox="0 0 32 32" fill="none" className="w-8 h-8 drop-shadow-[0_0_14px_rgba(56,189,248,0.22)]">
             <rect x="2" y="2" width="28" height="28" rx="6" fill="#0D1117" stroke="rgba(56,189,248,0.28)" />
-            <path d="M8 24L16 8L24 24" stroke="#38BDF8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d="M8 24L16 8L24 24"
+              stroke="#38BDF8"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
             <path d="M10.5 19h11" stroke="#8B5CF6" strokeWidth="2" strokeLinecap="round" opacity="0.85" />
             <circle cx="16" cy="8" r="2" fill="#E5E7EB" />
           </svg>
@@ -90,7 +95,6 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
         )}
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-3 px-2">
         <ul className="space-y-0.5">
           {navItems.map((item) => {
@@ -115,7 +119,7 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
                     "relative flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors group w-full text-left",
                     isActive
                       ? "bg-ai-blue/10 text-foreground ring-1 ring-ai-blue/20 shadow-[0_0_24px_rgba(56,189,248,0.08)]"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent",
                   )}
                   whileHover={{ x: 1 }}
                   transition={{ duration: 0.15 }}
@@ -129,7 +133,7 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
                   <item.icon
                     className={cn(
                       "w-4 h-4 shrink-0 transition-colors",
-                      isActive ? "text-ai-blue" : "text-muted-foreground group-hover:text-foreground"
+                      isActive ? "text-ai-blue" : "text-muted-foreground group-hover:text-foreground",
                     )}
                   />
                   <span className="flex-1 truncate">{item.label}</span>
@@ -137,9 +141,7 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
                     <span
                       className={cn(
                         "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
-                        isActive
-                          ? "bg-ai-blue/20 text-ai-blue"
-                          : "bg-surface-3 text-muted-foreground"
+                        isActive ? "bg-ai-blue/20 text-ai-blue" : "bg-surface-3 text-muted-foreground",
                       )}
                     >
                       {badge}

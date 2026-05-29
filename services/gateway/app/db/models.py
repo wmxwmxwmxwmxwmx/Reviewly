@@ -28,12 +28,42 @@ class User(Base):
     payload: Mapped[dict | None] = mapped_column(JSON)
 
 
+class AuthUser(Base):
+    """GitHub OAuth authenticated platform user."""
+
+    __tablename__ = "auth_users"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    github_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    username: Mapped[str] = mapped_column(String(255))
+    email: Mapped[str | None] = mapped_column(String(255))
+    avatar_url: Mapped[str | None] = mapped_column(String(512))
+    access_token_encrypted: Mapped[str | None] = mapped_column(Text)
+    refresh_token_encrypted: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TeamMembership(Base):
+    __tablename__ = "team_memberships"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("auth_users.id"), primary_key=True)
+    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), primary_key=True)
+    role: Mapped[str] = mapped_column(String(32), default="member")
+
+
 class Repository(Base):
     __tablename__ = "repositories"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), nullable=True)
     installation_id: Mapped[str | None] = mapped_column(String(64))
+    owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("auth_users.id"), index=True)
+    visibility: Mapped[str | None] = mapped_column(String(32), default="private")
+    source: Mapped[str | None] = mapped_column(String(32))
     full_name: Mapped[str] = mapped_column(String(512))
     github_id: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
     owner: Mapped[str | None] = mapped_column(String(255))

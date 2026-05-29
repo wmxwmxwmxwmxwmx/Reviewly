@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     prism_seed_db: bool = False
     github_app_slug: str = "prism-reviewly"
     github_pat: str = ""
+    github_oauth_client_id: str = ""
+    github_oauth_client_secret: str = ""
+    jwt_secret: str = ""
+    jwt_expire_minutes: int = 60 * 24 * 7
+    oauth_callback_url: str = "http://localhost:3001/api/auth/github/callback"
+    frontend_url: str = "http://localhost:3000"
+    prism_auth_bypass: bool = False
     prism_repo_cache_dir: str = "./data/repo-cache"
     architecture_scan_max_files: int = 2000
     repo_cache_ttl_hours: int = 24

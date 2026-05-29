@@ -59,6 +59,14 @@ def _apply_metadata_to_row(session: Session, row: Repository, metadata: dict[str
     row.last_synced_at = metadata.get("last_synced_at")
     if metadata.get("installation_id") is not None:
         row.installation_id = metadata.get("installation_id")
+    if metadata.get("owner_user_id") is not None:
+        row.owner_user_id = metadata.get("owner_user_id")
+    if metadata.get("visibility") is not None:
+        row.visibility = metadata.get("visibility")
+    if metadata.get("source") is not None:
+        row.source = metadata.get("source")
+    if metadata.get("team_id") is not None:
+        row.team_id = metadata.get("team_id")
 
     existing_payload = dict(row.payload or {})
     incoming_payload = dict(metadata.get("payload") or {})
@@ -167,9 +175,41 @@ def _repo_to_api(session: Session, row: Repository) -> dict:
     return data
 
 
-def list_repos(session: Session) -> list[dict]:
-    rows = session.scalars(select(Repository).order_by(Repository.full_name)).all()
+def list_repos(
+    session: Session,
+    *,
+    user_id: str | None = None,
+    team_ids: list[str] | None = None,
+    include_seed: bool = False,
+) -> list[dict]:
+    from sqlalchemy import or_
+
+    query = select(Repository)
+    if user_id:
+        team_ids = team_ids or []
+        conditions = [Repository.owner_user_id == user_id]
+        if team_ids:
+            conditions.append(
+                (Repository.team_id.in_(team_ids)) & (Repository.visibility == "team")
+            )
+        if include_seed:
+            conditions.append(Repository.source == "seed")
+        query = query.where(or_(*conditions))
+    rows = session.scalars(query.order_by(Repository.full_name)).all()
     return [_repo_to_api(session, r) for r in rows]
+
+
+def get_repo_row_for_user(session: Session, repo_id: str, user_id: str, team_ids: list[str]) -> Repository | None:
+    row = session.get(Repository, repo_id)
+    if row is None:
+        return None
+    if row.owner_user_id == user_id:
+        return row
+    if row.visibility == "team" and row.team_id and row.team_id in team_ids:
+        return row
+    if row.source == "seed":
+        return row
+    return None
 
 
 def get_repo(session: Session, repo_id: str) -> dict | None:
