@@ -1,0 +1,196 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* PRism Dark-Only Theme */
+  --background: oklch(0.11 0.004 264);
+  --foreground: oklch(0.93 0.008 264);
+  --card: oklch(0.14 0.005 264);
+  --card-foreground: oklch(0.93 0.008 264);
+  --popover: oklch(0.14 0.005 264);
+  --popover-foreground: oklch(0.93 0.008 264);
+  --primary: oklch(0.62 0.19 240);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.18 0.006 264);
+  --secondary-foreground: oklch(0.80 0.010 264);
+  --muted: oklch(0.17 0.005 264);
+  --muted-foreground: oklch(0.55 0.010 264);
+  --accent: oklch(0.20 0.008 264);
+  --accent-foreground: oklch(0.90 0.008 264);
+  --destructive: oklch(0.50 0.19 27);
+  --destructive-foreground: oklch(0.90 0.05 27);
+  --border: oklch(0.22 0.006 264);
+  --input: oklch(0.18 0.006 264);
+  --ring: oklch(0.62 0.19 240);
+
+  /* Custom DevTools tokens */
+  --surface-1: oklch(0.13 0.004 264);
+  --surface-2: oklch(0.16 0.005 264);
+  --surface-3: oklch(0.19 0.006 264);
+  --surface-4: oklch(0.22 0.007 264);
+
+  --risk-critical: oklch(0.55 0.22 27);
+  --risk-high: oklch(0.65 0.18 46);
+  --risk-medium: oklch(0.75 0.16 83);
+  --risk-low: oklch(0.62 0.17 148);
+
+  --ai-blue: oklch(0.62 0.19 240);
+  --ai-blue-dim: oklch(0.45 0.14 240);
+  --ai-blue-glow: oklch(0.62 0.19 240 / 0.25);
+
+  --diff-add: oklch(0.62 0.17 148 / 0.12);
+  --diff-add-border: oklch(0.62 0.17 148 / 0.40);
+  --diff-remove: oklch(0.55 0.22 27 / 0.12);
+  --diff-remove-border: oklch(0.55 0.22 27 / 0.40);
+
+  --chart-1: oklch(0.62 0.19 240);
+  --chart-2: oklch(0.62 0.17 148);
+  --chart-3: oklch(0.75 0.16 83);
+  --chart-4: oklch(0.65 0.18 46);
+  --chart-5: oklch(0.55 0.22 27);
+
+  --radius: 0.375rem;
+  --sidebar: oklch(0.13 0.004 264);
+  --sidebar-foreground: oklch(0.93 0.008 264);
+  --sidebar-primary: oklch(0.62 0.19 240);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.18 0.006 264);
+  --sidebar-accent-foreground: oklch(0.90 0.008 264);
+  --sidebar-border: oklch(0.20 0.006 264);
+  --sidebar-ring: oklch(0.62 0.19 240);
+}
+
+.dark {
+  --background: oklch(0.11 0.004 264);
+  --foreground: oklch(0.93 0.008 264);
+}
+
+@theme inline {
+  --font-sans: 'Inter', 'Inter Fallback', 'Geist', 'Geist Fallback';
+  --font-mono: 'JetBrains Mono', 'Geist Mono', 'Geist Mono Fallback';
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
+  --color-risk-critical: var(--risk-critical);
+  --color-risk-high: var(--risk-high);
+  --color-risk-medium: var(--risk-medium);
+  --color-risk-low: var(--risk-low);
+  --color-ai-blue: var(--ai-blue);
+  --color-ai-blue-dim: var(--ai-blue-dim);
+  --color-ai-blue-glow: var(--ai-blue-glow);
+  --color-diff-add: var(--diff-add);
+  --color-diff-add-border: var(--diff-add-border);
+  --color-diff-remove: var(--diff-remove);
+  --color-diff-remove-border: var(--diff-remove-border);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.28 0.006 264);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.36 0.008 264);
+  }
+
+  /* Code font */
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Geist Mono', monospace;
+    font-feature-settings: "liga" 1, "calt" 1;
+  }
+}
+
+/* Streaming cursor animation */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.streaming-cursor::after {
+  content: '▋';
+  animation: blink 1s step-end infinite;
+  color: var(--ai-blue);
+}
+
+/* Glow pulse */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px 2px oklch(0.62 0.19 240 / 0.2); }
+  50% { box-shadow: 0 0 16px 4px oklch(0.62 0.19 240 / 0.4); }
+}
+.glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* AI thinking dots */
+@keyframes thinking-dot {
+  0%, 80%, 100% { transform: scale(0.8); opacity: 0.4; }
+  40% { transform: scale(1.2); opacity: 1; }
+}
+.thinking-dot:nth-child(1) { animation: thinking-dot 1.4s ease-in-out infinite 0s; }
+.thinking-dot:nth-child(2) { animation: thinking-dot 1.4s ease-in-out infinite 0.2s; }
+.thinking-dot:nth-child(3) { animation: thinking-dot 1.4s ease-in-out infinite 0.4s; }
+
+/* Risk ring progress */
+@keyframes risk-ring {
+  from { stroke-dashoffset: 251; }
+  to { stroke-dashoffset: var(--dash-offset); }
+}
+.risk-ring-anim {
+  animation: risk-ring 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
