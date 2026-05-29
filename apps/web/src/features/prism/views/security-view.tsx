@@ -103,7 +103,7 @@ export function SecurityView() {
           </div>
           <button
             type="button"
-            onClick={() => setFiltersOpen((v) => !v)}
+            onClick={() => setFiltersOpen(!filtersOpen)}
             className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-surface-2 rounded-md hover:bg-surface-3"
           >
             {filtersOpen ? zh.common.collapseFilters : zh.common.filter}

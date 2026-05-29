@@ -106,6 +106,9 @@ export const zh = {
     status: "状态",
     findingsTitle: "性能发现",
     currentPageTypes: "当前页分类：",
+    generatingOptimize: "正在生成优化方案…",
+    optimizing: "优化中…",
+    collapseOptimize: "收起",
   },
   repos: {
     subtitle: "已连接的 GitHub 仓库（REST 元数据，不克隆）",

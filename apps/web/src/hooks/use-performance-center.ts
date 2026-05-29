@@ -45,17 +45,21 @@ export function usePerformanceCenter() {
     repoFilter: "",
     searchInput: "",
     filtersOpen: true,
+    expandedFindingId: null as string | null,
   })
   const severityFilter = viewState.severityFilter
   const typeFilter = viewState.typeFilter
   const repoFilter = viewState.repoFilter
   const searchInput = viewState.searchInput
   const filtersOpen = viewState.filtersOpen
+  const expandedFindingId = viewState.expandedFindingId
   const setSeverityFilter = (severityFilter: string) => setViewState({ severityFilter })
   const setTypeFilter = (typeFilter: string) => setViewState({ typeFilter })
   const setRepoFilter = (repoFilter: string) => setViewState({ repoFilter })
   const setSearchInput = (searchInput: string) => setViewState({ searchInput })
   const setFiltersOpen = (filtersOpen: boolean) => setViewState({ filtersOpen })
+  const setExpandedFindingId = (expandedFindingId: string | null) =>
+    setViewState({ expandedFindingId })
   const [searchQuery, setSearchQuery] = useState("")
 
   const [optimizingId, setOptimizingId] = useState<string | null>(null)
@@ -115,10 +119,9 @@ export function usePerformanceCenter() {
     return map
   }, [items])
 
-  const prepareOptimize = useCallback((finding: PerformanceCenterFinding) => {
-    setOptimizeText(finding.aiOptimization?.content ?? "")
-    setOptimizeError(null)
-  }, [])
+  const collapseOptimize = useCallback(() => {
+    setExpandedFindingId(null)
+  }, [setExpandedFindingId])
 
   const optimizeFinding = useCallback(
     async (findingId: string) => {
@@ -164,6 +167,35 @@ export function usePerformanceCenter() {
     [settings.model, settings.provider],
   )
 
+  const startOptimize = useCallback(
+    (finding: PerformanceCenterFinding) => {
+      if (expandedFindingId === finding.id && !optimizingId) {
+        collapseOptimize()
+        return
+      }
+
+      setExpandedFindingId(finding.id)
+      setOptimizeError(null)
+
+      const cached = finding.aiOptimization?.content
+      if (cached) {
+        setOptimizeText(cached)
+        return
+      }
+
+      void optimizeFinding(finding.id)
+    },
+    [expandedFindingId, optimizingId, collapseOptimize, setExpandedFindingId, optimizeFinding],
+  )
+
+  const regenerateOptimize = useCallback(
+    (finding: PerformanceCenterFinding) => {
+      setExpandedFindingId(finding.id)
+      void optimizeFinding(finding.id)
+    },
+    [setExpandedFindingId, optimizeFinding],
+  )
+
   const cancelOptimize = useCallback(() => {
     optimizeAbort.current?.abort()
     setOptimizingId(null)
@@ -190,11 +222,13 @@ export function usePerformanceCenter() {
     filtersOpen,
     setFiltersOpen,
     groupedByType,
+    expandedFindingId,
     optimizingId,
     optimizeText,
     optimizeError,
-    prepareOptimize,
-    optimizeFinding,
+    startOptimize,
+    regenerateOptimize,
+    collapseOptimize,
     cancelOptimize,
   }
 }
