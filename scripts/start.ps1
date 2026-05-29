@@ -1,8 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
-$WebUrl = 'http://localhost:3000'
-$GatewayUrl = 'http://localhost:3001/health'
+$AppUrl = 'http://localhost:3000'
 $ReadyTimeoutSec = 60
 $PollIntervalMs = 500
 
@@ -24,43 +23,27 @@ function Test-CommandExists([string]$Name) {
 
 Set-Location $ProjectRoot
 
-Write-Info 'Starting PRism development stack...'
+Write-Info '正在启动 PRism（Web + Python Gateway）...'
 
 if (-not (Test-CommandExists 'node')) {
-  Write-Err 'Node.js was not found. Please install Node.js 18+ and make sure it is in PATH.'
+  Write-Err '未检测到 Node.js，请先安装 Node.js 18+ 并加入 PATH。'
   exit 1
 }
 
 if (-not (Test-CommandExists 'npm')) {
-  Write-Err 'npm was not found. Please reinstall Node.js or check PATH.'
+  Write-Err '未检测到 npm，请确认 Node.js 安装完整。'
   exit 1
 }
 
 if (-not (Test-CommandExists 'python')) {
-  Write-Warn 'Python was not found. The gateway service will not start.'
-}
-
-Write-Info "Node: $(node -v)"
-
-if (-not (Test-Path -Path 'package.json')) {
-  Write-Err "package.json was not found in $ProjectRoot"
-  exit 1
+  Write-Warn '未检测到 Python，Gateway 可能无法启动。请安装 Python 3.11+。'
 }
 
 if (-not (Test-Path -Path 'node_modules')) {
-  Write-Warn 'node_modules was not found. Running npm install...'
+  Write-Warn '未找到 node_modules，正在执行 npm install...'
   npm install
   if ($LASTEXITCODE -ne 0) {
-    Write-Err 'npm install failed. Please check the npm output above.'
-    exit $LASTEXITCODE
-  }
-}
-
-if (-not (Test-Path -Path 'node_modules\.bin\concurrently.cmd')) {
-  Write-Warn 'concurrently was not found. Running npm install to restore workspace tools...'
-  npm install
-  if ($LASTEXITCODE -ne 0) {
-    Write-Err 'npm install failed. Please check the npm output above.'
+    Write-Err 'npm install 失败，请检查网络或依赖配置。'
     exit $LASTEXITCODE
   }
 }
@@ -68,45 +51,49 @@ if (-not (Test-Path -Path 'node_modules\.bin\concurrently.cmd')) {
 $openBrowserJob = Start-Job -ScriptBlock {
   param($Url, $TimeoutSec, $IntervalMs)
 
-  $deadline = (Get-Date).AddSeconds($TimeoutSec)
-  while ((Get-Date) -lt $deadline) {
-    try {
-      $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 2
-      if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
-        Start-Process $Url
-        return 'opened'
-      }
-    } catch {
+  function Wait-DevServerReady {
+    param([string]$Url, [int]$TimeoutSec, [int]$IntervalMs)
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $deadline) {
+      try {
+        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 2
+        if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+          return $true
+        }
+      } catch {}
+
       Start-Sleep -Milliseconds $IntervalMs
     }
+
+    return $false
+  }
+
+  if (Wait-DevServerReady -Url $Url -TimeoutSec $TimeoutSec -IntervalMs $IntervalMs) {
+    Start-Process $Url
+    return 'opened'
   }
 
   return 'timeout'
-} -ArgumentList $WebUrl, $ReadyTimeoutSec, $PollIntervalMs
+} -ArgumentList $AppUrl, $ReadyTimeoutSec, $PollIntervalMs
 
-Write-Info "Web: $WebUrl"
-Write-Info "Gateway health: $GatewayUrl"
-Write-Info 'Browser will open automatically when the web app is ready.'
-Write-Info 'Press Ctrl+C to stop the development stack.'
+Write-Info "Web 就绪后将自动打开 $AppUrl（API: http://localhost:3001）"
+Write-Info '按 Ctrl+C 可停止所有开发服务。'
 Write-Host ''
-
-$exitCode = 0
 
 try {
   npm run dev
   $exitCode = $LASTEXITCODE
 } finally {
-  if ($null -ne $openBrowserJob) {
-    if ($openBrowserJob.State -eq 'Running') {
-      Stop-Job $openBrowserJob -ErrorAction SilentlyContinue | Out-Null
-    }
+  if ($openBrowserJob.State -eq 'Running') {
+    Stop-Job $openBrowserJob -ErrorAction SilentlyContinue | Out-Null
+  }
 
-    $browserResult = Receive-Job $openBrowserJob -ErrorAction SilentlyContinue
-    Remove-Job $openBrowserJob -Force -ErrorAction SilentlyContinue | Out-Null
+  $browserResult = Receive-Job $openBrowserJob -ErrorAction SilentlyContinue
+  Remove-Job $openBrowserJob -Force -ErrorAction SilentlyContinue | Out-Null
 
-    if ($browserResult -eq 'timeout') {
-      Write-Warn "The web app was not ready after ${ReadyTimeoutSec}s. Open $WebUrl manually."
-    }
+  if ($browserResult -eq 'timeout') {
+    Write-Warn "Web 服务在 ${ReadyTimeoutSec}s 内未就绪，请手动访问 $AppUrl"
   }
 }
 
