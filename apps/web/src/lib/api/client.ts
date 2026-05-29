@@ -1,5 +1,7 @@
 import type { ApiError } from "@reviewly/shared"
 
+import { getAuthToken } from "@/lib/auth/storage"
+
 export class PrismApiError extends Error {
   constructor(
     message: string,
@@ -15,13 +17,23 @@ type RequestOptions = RequestInit & {
   signal?: AbortSignal
 }
 
+function buildHeaders(options: RequestOptions, token: string | null): HeadersInit {
+  const base: Record<string, string> = { "Content-Type": "application/json" }
+  const existing = new Headers(options.headers ?? undefined)
+  if (token && !existing.has("Authorization")) {
+    base.Authorization = `Bearer ${token}`
+  }
+  existing.forEach((value, key) => {
+    base[key] = value
+  })
+  return base
+}
+
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const token = getAuthToken()
   const res = await fetch(path, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
+    headers: buildHeaders(options, token),
   })
 
   if (!res.ok) {

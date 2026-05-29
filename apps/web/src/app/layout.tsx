@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+
+import { AuthProvider } from '@/features/prism/contexts/auth-context'
+import { AuthRouteGuard } from '@/components/auth-route-guard'
 import './globals.css'
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -20,7 +23,9 @@ export default function RootLayout({
   return (
     <html lang="zh" className={`${inter.variable} bg-background`}>
       <body className="font-sans antialiased">
-        {children}
+        <AuthProvider>
+          <AuthRouteGuard>{children}</AuthRouteGuard>
+        </AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

@@ -1,14 +1,18 @@
-"""GitHub webhook verification and dispatch (B3)."""
+"""GitHub webhook verification and dispatch."""
 from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.github import sync
+from app.services.pr_sync import sync_from_webhook_pr
+
+logger = logging.getLogger(__name__)
 
 
 def _github_configured() -> bool:
@@ -51,6 +55,49 @@ async def handle_event(session: Session, event: str, payload: dict[str, Any]) ->
         return
 
     if event == "pull_request":
+        action = payload.get("action", "")
         installation_id = payload.get("installation", {}).get("id")
+        inst_str = str(installation_id) if installation_id else None
+
+        if action in ("opened", "synchronize", "reopened"):
+            pr_id = await sync_from_webhook_pr(
+                session,
+                payload,
+                installation_id=inst_str,
+            )
+            if pr_id and action in ("opened", "synchronize"):
+                from app.services.analysis_orchestrator import (
+                    enqueue_analysis,
+                    schedule_analysis_background,
+                )
+
+                job_id = enqueue_analysis(pr_id)
+                if job_id:
+                    schedule_analysis_background(job_id)
+            logger.info("Webhook pull_request %s handled pr_id=%s", action, pr_id)
+            return
+
         if installation_id and _github_configured():
-            await sync.sync_installation(session, str(installation_id))
+            await sync.sync_installation(session, inst_str)
+        return
+
+    if event == "push":
+        repo = payload.get("repository") or {}
+        full_name = repo.get("full_name", "")
+        if full_name:
+            from app.repositories import repos as repos_repo
+            from datetime import datetime, timezone
+
+            row = repos_repo.get_repository_by_full_name(session, full_name)
+            if row:
+                row.last_synced_at = datetime.now(timezone.utc)
+                session.commit()
+        return
+
+    if event == "repository":
+        action = payload.get("action")
+        if action in ("created", "edited", "renamed", "transferred") and _github_configured():
+            installation_id = payload.get("installation", {}).get("id")
+            if installation_id:
+                await sync.sync_installation(session, str(installation_id))
+        return

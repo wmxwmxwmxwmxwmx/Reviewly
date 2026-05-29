@@ -12,6 +12,8 @@ os.environ["PRISM_STUB_ENGINE"] = "1"
 os.environ["GITHUB_APP_ID"] = ""
 os.environ["GITHUB_APP_PRIVATE_KEY"] = ""
 os.environ["GITHUB_WEBHOOK_SECRET"] = ""
+os.environ["PRISM_AUTH_BYPASS"] = "1"
+os.environ["JWT_SECRET"] = "test-jwt-secret-for-pytest-only"
 
 from app.db import session as db_session  # noqa: E402
 from app.db.deps import get_db  # noqa: E402

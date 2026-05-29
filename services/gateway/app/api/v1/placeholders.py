@@ -1,15 +1,12 @@
 """B3–B10 routes — GitHub, domain APIs, settings integration."""
 from __future__ import annotations
 
-import json
-
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.errors import api_error
 from app.db.deps import get_db
-from app.github import webhooks
 from app.mock import seed
 from app.repositories import settings as settings_repo
 from app.services import settings_crypto
@@ -25,23 +22,6 @@ def github_install_url() -> dict:
         "url": f"https://github.com/apps/{slug}/installations/new",
         "status": "ok" if settings.github_app_id else "placeholder",
     }
-
-
-@router.post("/webhooks/github")
-async def github_webhook(
-    request: Request,
-    db: Session = Depends(get_db),
-    x_hub_signature_256: str | None = Header(default=None, alias="X-Hub-Signature-256"),
-    x_github_event: str | None = Header(default=None, alias="X-GitHub-Event"),
-) -> dict:
-    body = await request.body()
-    if settings.github_webhook_secret and not webhooks.verify_signature(body, x_hub_signature_256):
-        raise api_error("Webhook 签名无效", 401)
-
-    payload = json.loads(body.decode("utf-8") or "{}")
-    event = x_github_event or "unknown"
-    await webhooks.handle_event(db, event, payload)
-    return {"ok": True, "event": event}
 
 
 @router.post("/settings/test-integration")

@@ -2,7 +2,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.errors import api_error
+from app.core.security import get_optional_user
+from app.db.models import AuthUser
+from app.repositories import auth_users as auth_users_repo
 from app.github.import_pr import import_pull_request_by_url
 from app.db.deps import get_db
 from app.repositories import analysis as analysis_repo
@@ -35,8 +39,24 @@ class RepoAiAnalysisBody(BaseModel):
 
 
 @router.get("/dashboard")
-def dashboard(db: Session = Depends(get_db)) -> dict:
+def dashboard(
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> dict:
+    if user and not settings.prism_auth_bypass:
+        team_ids = auth_users_repo.get_team_ids_for_user(db, user.id)
+        return dashboard_repo.get_dashboard(db, user_id=user.id, team_ids=team_ids)
     return dashboard_repo.get_dashboard(db)
+
+
+@router.get("/dashboard/activities")
+def dashboard_activities(
+    db: Session = Depends(get_db),
+    limit: int = Query(default=20, le=100),
+) -> dict:
+    from app.services.activity_log import list_recent
+
+    return {"activities": list_recent(db, limit=limit)}
 
 
 @router.post("/dashboard/weekly-summary")
@@ -45,8 +65,19 @@ async def dashboard_weekly_summary(db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/repos")
-def repos(db: Session = Depends(get_db)) -> list:
-    return repos_repo.list_repos(db)
+def repos(
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> list:
+    if user and not settings.prism_auth_bypass:
+        team_ids = auth_users_repo.get_team_ids_for_user(db, user.id)
+        return repos_repo.list_repos(
+            db,
+            user_id=user.id,
+            team_ids=team_ids,
+            include_seed=settings.debug,
+        )
+    return repos_repo.list_repos(db, include_seed=True)
 
 
 @router.get("/repos/{repo_id}/analyze-context")

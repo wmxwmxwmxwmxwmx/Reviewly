@@ -18,6 +18,7 @@ import {
   Zap,
 } from "lucide-react"
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
+import { useAuth } from "@/features/prism/contexts/auth-context"
 import { useSidebarBadges } from "@/hooks/use-sidebar-badges"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
@@ -57,6 +58,7 @@ interface SidebarProps {
 
 export function Sidebar({ className, activeView, onViewChange, mobile, onClose }: SidebarProps) {
   const { settings, settingsHydrated, providerLabel, hasApiKey, monthlyUsage } = useAISettings()
+  const { user, isAuthenticated } = useAuth()
   const { badges } = useSidebarBadges()
 
   const configured = settingsHydrated && hasApiKey
@@ -236,16 +238,34 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
           </div>
         </div>
 
-        {/* User Info */}
-        <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-accent transition-colors cursor-pointer">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-ai-blue to-ai-purple flex items-center justify-center text-[11px] font-semibold text-white shrink-0 shadow-[0_0_18px_rgba(139,92,246,0.22)]">
-            ZW
-          </div>
+        {/* GitHub user */}
+        <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-accent transition-colors">
+          {user?.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={user.avatarUrl}
+              alt=""
+              className="w-7 h-7 rounded-full shrink-0 border border-border"
+            />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-ai-blue to-ai-purple flex items-center justify-center text-[11px] font-semibold text-white shrink-0">
+              {(user?.username ?? "?").slice(0, 2).toUpperCase()}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-medium text-foreground truncate">张维</div>
-            <div className="text-[10px] text-muted-foreground truncate">infra-platform · 高级工程师</div>
+            <div className="text-[11px] font-medium text-foreground truncate">
+              {isAuthenticated ? user?.username ?? "GitHub" : "未登录"}
+            </div>
+            <div className="text-[10px] text-muted-foreground truncate">
+              {isAuthenticated ? "GitHub 已连接" : "请登录以同步仓库"}
+            </div>
           </div>
-          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <CheckCircle2
+            className={cn(
+              "w-3.5 h-3.5 shrink-0",
+              isAuthenticated ? "text-risk-low" : "text-muted-foreground",
+            )}
+          />
         </div>
       </div>
     </aside>

@@ -29,8 +29,39 @@ def _is_high_risk(level: str) -> bool:
     return level in ("high", "critical")
 
 
-def _enrich_dashboard(base: dict, session: Session) -> dict:
-    open_prs = session.scalars(select(PullRequest).where(PullRequest.state == "open")).all()
+def _scoped_repository_ids(
+    session: Session,
+    *,
+    user_id: str | None,
+    team_ids: list[str],
+) -> set[str] | None:
+    if not user_id:
+        return None
+    from app.repositories import repos as repos_repo
+
+    rows = repos_repo.list_repos(
+        session,
+        user_id=user_id,
+        team_ids=team_ids,
+        include_seed=False,
+    )
+    return {str(r["id"]) for r in rows}
+
+
+def _enrich_dashboard(
+    base: dict,
+    session: Session,
+    *,
+    user_id: str | None = None,
+    team_ids: list[str] | None = None,
+) -> dict:
+    team_ids = team_ids or []
+    scoped_repo_ids = _scoped_repository_ids(session, user_id=user_id, team_ids=team_ids)
+
+    open_prs_query = select(PullRequest).where(PullRequest.state == "open")
+    open_prs = session.scalars(open_prs_query).all()
+    if scoped_repo_ids is not None:
+        open_prs = [pr for pr in open_prs if pr.repository_id in scoped_repo_ids]
 
     security_count = session.scalar(
         select(func.count())
@@ -105,7 +136,15 @@ def _enrich_dashboard(base: dict, session: Session) -> dict:
     if not activities:
         activities = base.get("recentActivity", [])
 
-    repos = session.scalars(select(Repository)).all()
+    repos_query = select(Repository)
+    if scoped_repo_ids is not None:
+        if not scoped_repo_ids:
+            repos = []
+        else:
+            repos_query = repos_query.where(Repository.id.in_(scoped_repo_ids))
+            repos = session.scalars(repos_query).all()
+    else:
+        repos = session.scalars(repos_query).all()
     top_repos = []
     for repo in repos[:5]:
         if repo.id.startswith("inst-"):
@@ -165,11 +204,25 @@ def _enrich_dashboard(base: dict, session: Session) -> dict:
     return result
 
 
-def get_dashboard(session: Session) -> dict:
+def get_dashboard(
+    session: Session,
+    *,
+    user_id: str | None = None,
+    team_ids: list[str] | None = None,
+) -> dict:
+    team_ids = team_ids or []
     base = seed.get_dashboard()
-    open_prs = session.scalar(
-        select(func.count()).select_from(PullRequest).where(PullRequest.state == "open")
-    )
+    open_prs_query = select(func.count()).select_from(PullRequest).where(PullRequest.state == "open")
+    open_prs: int | None = None
+    if user_id:
+        scoped = _scoped_repository_ids(session, user_id=user_id, team_ids=team_ids)
+        if scoped is not None:
+            if not scoped:
+                open_prs = 0
+            else:
+                open_prs_query = open_prs_query.where(PullRequest.repository_id.in_(scoped))
+    if open_prs is None:
+        open_prs = session.scalar(open_prs_query) or 0
     if open_prs == 0:
         base["summary"] = {
             "openPrCount": base.get("pendingPrs", 12),
@@ -188,4 +241,4 @@ def get_dashboard(session: Session) -> dict:
         base["weeklySummary"] = settings_repo.get_dashboard_weekly_summary(session)
         return base
 
-    return _enrich_dashboard(base, session)
+    return _enrich_dashboard(base, session, user_id=user_id, team_ids=team_ids)

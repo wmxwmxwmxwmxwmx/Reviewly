@@ -14,10 +14,12 @@ import type { Repository, SyncRepositoriesResponse } from "@reviewly/shared"
 import { useAISettings, estimateCostCny } from "@/features/prism/contexts/ai-settings-context"
 import { PrismApiError } from "@/lib/api/client"
 import { useReposSync } from "@/hooks/use-repos-sync"
+import { useAuth } from "@/features/prism/contexts/auth-context"
 import {
   fetchRepoAnalyzeContext,
   fetchRepos,
   saveRepoAiAnalysis,
+  syncMyRepositories,
 } from "@/lib/api/repos"
 
 interface ReposContextValue {
@@ -73,6 +75,7 @@ ${readme || "（无法获取 README）"}`
 }
 
 export function ReposProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth()
   const { settings, hasApiKey, recordUsage } = useAISettings()
   const [repos, setRepos] = useState<Repository[]>([])
   const [loading, setLoading] = useState(true)
@@ -108,12 +111,17 @@ export function ReposProvider({ children }: { children: ReactNode }) {
   const sync = useCallback(async () => {
     setSyncError(null)
     try {
+      if (isAuthenticated) {
+        const result = await syncMyRepositories()
+        await refresh()
+        return result
+      }
       return await syncReposMutation()
     } catch (e: unknown) {
       setSyncError(e instanceof PrismApiError ? e.message : "同步失败")
       throw e
     }
-  }, [syncReposMutation])
+  }, [isAuthenticated, syncReposMutation, refresh])
 
   const importRepo = useCallback(
     async (url: string) => {

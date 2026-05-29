@@ -27,6 +27,20 @@ export function syncRepositories(signal?: AbortSignal) {
   })
 }
 
+export function syncMyRepositories(signal?: AbortSignal) {
+  return apiFetch<SyncRepositoriesResponse>("/api/repos/sync/me", {
+    method: "POST",
+    signal,
+  })
+}
+
+export function syncRepoPullRequests(repoId: string, signal?: AbortSignal) {
+  return apiFetch<{ synced: number; created: number; updated: number }>(
+    `/api/repos/${repoId}/sync-prs`,
+    { method: "POST", signal },
+  )
+}
+
 /** @deprecated Use syncRepositories */
 export const syncRepos = syncRepositories
 
