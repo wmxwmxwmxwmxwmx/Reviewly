@@ -25,6 +25,9 @@ export function TeamView() {
         </div>
         <div className="divide-y divide-border">
           {loading && <p className="px-4 py-6 text-sm text-muted-foreground">加载中…</p>}
+          {!loading && members.length === 0 && (
+            <p className="px-4 py-6 text-sm text-muted-foreground">{zh.sidebar.noTeamMember}</p>
+          )}
           {!loading &&
             members.map((member, idx) => {
               const avatar =

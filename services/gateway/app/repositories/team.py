@@ -4,10 +4,11 @@ import uuid
 from copy import deepcopy
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import not_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import User
+from app.repositories.seed_filter import is_seed_user, seed_user_predicate
 def _member_dict(row: User) -> dict:
     if row.payload:
         return deepcopy(row.payload)
@@ -22,13 +23,13 @@ def _member_dict(row: User) -> dict:
 
 
 def list_members(session: Session) -> list[dict]:
-    rows = session.scalars(select(User)).all()
+    rows = session.scalars(select(User).where(not_(seed_user_predicate()))).all()
     return [_member_dict(r) for r in rows]
 
 
 def get_member(session: Session, member_id: str) -> dict | None:
     row = session.get(User, member_id)
-    if row is None:
+    if row is None or is_seed_user(row):
         return None
     return _member_dict(row)
 
@@ -38,7 +39,7 @@ def create_member(session: Session, body: dict[str, Any]) -> dict:
     row = User(
         id=mid,
         team_id=body.get("teamId", "team-default"),
-        email=body.get("email", f"{mid}@acme.local"),
+        email=body.get("email", f"{mid}@local"),
         payload=deepcopy(body),
     )
     session.add(row)

@@ -167,9 +167,17 @@ def get_findings(session: Session, pull_request_id: str) -> list[dict]:
 
 
 def list_security_findings(session: Session) -> list[dict]:
-    rows = session.scalars(
-        select(AnalysisFinding).where(AnalysisFinding.type == "security")
-    ).all()
+    from app.db.models import PullRequest, Repository
+    from app.repositories.seed_filter import exclude_seed_findings
+
+    stmt = exclude_seed_findings(
+        select(AnalysisFinding)
+        .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
+        .join(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
+        .join(Repository, PullRequest.repository_id == Repository.id)
+        .where(AnalysisFinding.type == "security")
+    )
+    rows = session.scalars(stmt).all()
     return [_finding_to_api(r) for r in rows]
 
 

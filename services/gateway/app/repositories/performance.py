@@ -16,9 +16,17 @@ from app.repositories.performance_center import (
 
 
 def list_performance_findings(session: Session) -> list[dict[str, Any]]:
-    rows = session.scalars(
-        select(AnalysisFinding).where(AnalysisFinding.type == "performance")
-    ).all()
+    from app.db.models import PullRequest, Repository
+    from app.repositories.seed_filter import exclude_seed_findings
+
+    stmt = exclude_seed_findings(
+        select(AnalysisFinding)
+        .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
+        .join(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
+        .join(Repository, PullRequest.repository_id == Repository.id)
+        .where(AnalysisFinding.type == "performance")
+    )
+    rows = session.scalars(stmt).all()
     return [_finding_to_api(r) for r in rows]
 
 

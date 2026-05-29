@@ -80,7 +80,20 @@ def _enrich_dashboard(
 
     open_prs_query = select(PullRequest).where(PullRequest.state == "open")
     open_prs = session.scalars(open_prs_query).all()
-    open_prs = [pr for pr in open_prs if not is_seed_pull_request(pr)]
+    if open_prs:
+        open_pr_repo_map = {
+            r.id: r
+            for r in session.scalars(
+                select(Repository).where(
+                    Repository.id.in_({pr.repository_id for pr in open_prs})
+                )
+            ).all()
+        }
+        open_prs = [
+            pr
+            for pr in open_prs
+            if not is_seed_pull_request(pr, repo=open_pr_repo_map.get(pr.repository_id))
+        ]
     if scoped_repo_ids is not None:
         open_prs = [pr for pr in open_prs if pr.repository_id in scoped_repo_ids]
 
@@ -118,7 +131,10 @@ def _enrich_dashboard(
 
     for job in completed_jobs:
         pr = session.get(PullRequest, job.pull_request_id)
-        if pr is None or is_seed_pull_request(pr):
+        if pr is None:
+            continue
+        job_repo = session.get(Repository, pr.repository_id)
+        if job_repo is not None and is_seed_pull_request(pr, repo=job_repo):
             continue
         if scoped_repo_ids is not None and pr.repository_id not in scoped_repo_ids:
             continue

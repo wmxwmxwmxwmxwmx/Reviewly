@@ -7,16 +7,21 @@ from app.core.config import settings
 from app.db.models import (
     AnalysisFinding,
     AnalysisJob,
+    GovernanceRule,
     GovernanceViolation,
     PullRequest,
     PullRequestDiff,
     Repository,
+    Setting,
+    User,
 )
 from app.db.session import SessionLocal
 from app.repositories.seed_filter import (
+    LEGACY_SEED_GOVERNANCE_RULE_IDS,
     LEGACY_SEED_PULL_REQUEST_IDS,
-    LEGACY_SEED_REPOSITORY_IDS,
+    LEGACY_SEED_USER_IDS,
     seed_repository_predicate,
+    seed_user_predicate,
 )
 
 
@@ -63,9 +68,28 @@ def main() -> None:
         if seed_repo_ids:
             session.execute(delete(Repository).where(Repository.id.in_(seed_repo_ids)))
 
+        deleted_users = session.execute(delete(User).where(seed_user_predicate())).rowcount
+        deleted_rules = session.execute(
+            delete(GovernanceRule).where(
+                GovernanceRule.id.in_(tuple(LEGACY_SEED_GOVERNANCE_RULE_IDS))
+            )
+        ).rowcount
+
+        # Remove demo settings only when still the seeded default row (no custom merge).
+        setting_row = session.get(Setting, "default")
+        deleted_settings = 0
+        if setting_row is not None and setting_row.data:
+            from app.mock import seed
+
+            if setting_row.data == seed.get_settings():
+                session.delete(setting_row)
+                deleted_settings = 1
+
         session.commit()
         print(
-            f"Purged seed data: {len(seed_repo_ids)} repositories, {len(seed_pr_ids)} pull requests"
+            f"Purged seed data: {len(seed_repo_ids)} repositories, "
+            f"{len(seed_pr_ids)} pull requests, {deleted_users} users, "
+            f"{deleted_rules} governance rules, {deleted_settings} settings"
         )
         print(f"Database: {settings.database_url.split('://')[0]}")
     finally:

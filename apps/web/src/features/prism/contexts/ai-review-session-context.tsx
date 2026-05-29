@@ -4,11 +4,14 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react"
+
+const LEGACY_DEMO_PR_ID = "pr-2847"
 import type { AnalysisFinding, AnalysisJob, AnalysisSummary } from "@reviewly/shared"
 
 export type AIReviewPanelTab =
@@ -97,6 +100,7 @@ interface AIReviewSessionContextValue {
   clearSession: (prId: string) => void
   hasCachedSession: (prId: string) => boolean
   setLastReviewedPrId: (prId: string) => void
+  clearLastReviewedPrIdIfLegacy: () => void
 }
 
 const AIReviewSessionContext = createContext<AIReviewSessionContextValue | null>(
@@ -139,8 +143,21 @@ export function AIReviewSessionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const setLastReviewedPrId = useCallback((prId: string) => {
+    if (prId === LEGACY_DEMO_PR_ID) {
+      return
+    }
     setLastReviewedPrIdState(prId)
   }, [])
+
+  const clearLastReviewedPrIdIfLegacy = useCallback(() => {
+    setLastReviewedPrIdState((current) =>
+      current === LEGACY_DEMO_PR_ID ? null : current,
+    )
+  }, [])
+
+  useEffect(() => {
+    clearLastReviewedPrIdIfLegacy()
+  }, [clearLastReviewedPrIdIfLegacy])
 
   const value = useMemo<AIReviewSessionContextValue>(
     () => ({
@@ -150,6 +167,7 @@ export function AIReviewSessionProvider({ children }: { children: ReactNode }) {
       clearSession,
       hasCachedSession,
       setLastReviewedPrId,
+      clearLastReviewedPrIdIfLegacy,
     }),
     [
       lastReviewedPrId,
@@ -158,6 +176,7 @@ export function AIReviewSessionProvider({ children }: { children: ReactNode }) {
       clearSession,
       hasCachedSession,
       setLastReviewedPrId,
+      clearLastReviewedPrIdIfLegacy,
     ],
   )
 
