@@ -14,14 +14,21 @@ import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { usePullRequests } from "@/hooks/use-pull-requests"
+import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
 
 type FilterTab = "all" | "open" | "closed"
 
 export function PRListView() {
   const { items: apiPrs, loading, error } = usePullRequests()
   const { navigate } = useNavigation()
-  const [search, setSearch] = useState("")
-  const [filterTab, setFilterTab] = useState<FilterTab>("open")
+  const [listState, setListState] = usePersistedViewState<{ search: string; filterTab: FilterTab }>(
+    "pull-requests",
+    { search: "", filterTab: "open" },
+  )
+  const search = listState.search
+  const filterTab = listState.filterTab
+  const setSearch = (search: string) => setListState({ search })
+  const setFilterTab = (filterTab: FilterTab) => setListState({ filterTab })
 
   const filteredPRs = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase()
@@ -59,7 +66,7 @@ export function PRListView() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-foreground">{zh.pr.title}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">管理和评审代码变更请求</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.pullRequests}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">

@@ -11,16 +11,56 @@ export interface PaginatedResponse<T> {
   hasMore: boolean
 }
 
+export interface AiPersistedContent {
+  content: string
+  analyzedAt: string
+  model?: string
+  provider?: string
+}
+
+/** @deprecated Use AiPersistedContent */
+export type RepositoryAiAnalysis = AiPersistedContent
+
 export interface Repository {
   id: string
+  githubId?: string | null
   fullName: string
   name: string
   owner: string
-  defaultBranch: string
+  description?: string | null
+  language?: string | null
+  stars?: number
+  forks?: number
   openPrCount: number
-  healthScore: number
+  defaultBranch: string
+  cloneUrl?: string | null
+  htmlUrl?: string | null
+  avatarUrl?: string | null
+  isPrivate?: boolean
+  pushedAt?: string | null
+  githubCreatedAt?: string | null
+  githubUpdatedAt?: string | null
   lastSyncTime: string
+  healthScore: number
   aiReviewEnabled: boolean
+  aiAnalysis?: AiPersistedContent | null
+  aiArchitectureAnalysis?: AiPersistedContent | null
+}
+
+export interface ImportRepositoryBody {
+  url: string
+}
+
+export interface ImportRepositoryResponse {
+  repository: Repository
+}
+
+export interface SyncRepositoriesResponse {
+  synced: number
+  created: number
+  updated: number
+  status: string
+  syncedRepos?: number
 }
 
 export interface RepoAnalyzeContext {
@@ -116,6 +156,7 @@ export interface SecurityCenterFinding {
   status?: "open" | "ignored" | "resolved"
   pullRequestId?: string
   title?: string
+  aiInsight?: AiPersistedContent | null
 }
 
 export interface SecurityFindingsPage {
@@ -143,6 +184,7 @@ export interface PerformanceCenterFinding {
   pullRequestId?: string
   title?: string
   ruleId?: string
+  aiOptimization?: AiPersistedContent | null
 }
 
 export interface PerformanceFindingsPage {
@@ -293,6 +335,7 @@ export interface DashboardStats {
       completedAt: string
     }[]
   }
+  weeklySummary?: AiPersistedContent | null
 }
 
 export interface WeeklySummaryResponse {

@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion"
 import { Users, TrendingUp, TrendingDown } from "lucide-react"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { useTeam } from "@/hooks/use-team"
 
@@ -12,7 +13,7 @@ export function TeamView() {
     <div className="p-5 space-y-5">
       <div>
         <h1 className="text-lg font-semibold text-foreground">团队分析</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">团队成员贡献与协作数据</p>
+        <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.team}</p>
       </div>
 
       {error && <p className="text-sm text-risk-high">{error}</p>}

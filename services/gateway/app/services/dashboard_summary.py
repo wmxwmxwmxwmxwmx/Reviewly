@@ -76,10 +76,19 @@ async def generate_weekly_summary(session: Session) -> dict[str, Any]:
             temperature=temperature,
         )
 
+    content = result["content"]
+    weekly = settings_repo.save_dashboard_weekly_summary(
+        session,
+        content=content,
+        model=model,
+        provider=provider,
+    )
+    session.commit()
     return {
-        "content": result["content"],
+        "content": content,
         "usage": result.get("usage"),
         "latencyMs": int((time.time() - started) * 1000),
+        "weeklySummary": weekly,
     }
 
 

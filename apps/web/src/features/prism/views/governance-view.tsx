@@ -8,6 +8,7 @@ import type { GovernanceRule } from "@reviewly/shared"
 import { Button } from "@/components/ui/button"
 import { GovernanceRuleDialog } from "@/features/prism/components/governance-rule-dialog"
 import { useGovernance } from "@/hooks/use-governance"
+import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
 const matchTypeLabel: Record<string, string> = {
@@ -46,9 +47,7 @@ export function GovernanceView() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">工程治理</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            自定义门禁规则；PR 分析完成后自动匹配 Diff 与 findings
-          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.governance}</p>
         </div>
         <Button type="button" size="sm" onClick={openCreate} className="gap-1.5 shrink-0">
           <Plus className="w-3.5 h-3.5" />

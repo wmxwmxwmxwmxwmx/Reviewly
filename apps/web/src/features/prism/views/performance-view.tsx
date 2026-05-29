@@ -1,13 +1,10 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { motion } from "framer-motion"
 import { Gauge, Search, Zap, ChevronLeft, ChevronRight } from "lucide-react"
 
-import type { PerformanceCenterFinding } from "@reviewly/shared"
-
 import { PerformanceFindingsTable, perfSeverityConfig } from "@/features/prism/components/performance-findings-table"
-import { PerformanceOptimizePanel } from "@/features/prism/components/performance-optimize-panel"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { usePerformanceCenter } from "@/hooks/use-performance-center"
 import { useRepos } from "@/hooks/use-repos"
@@ -37,17 +34,18 @@ export function PerformanceView() {
     setRepoFilter,
     searchInput,
     setSearchInput,
+    filtersOpen,
+    setFiltersOpen,
     groupedByType,
+    expandedFindingId,
     optimizingId,
     optimizeText,
     optimizeError,
-    optimizeFinding,
+    startOptimize,
+    regenerateOptimize,
+    collapseOptimize,
     cancelOptimize,
   } = usePerformanceCenter()
-
-  const [optimizeOpen, setOptimizeOpen] = useState(false)
-  const [activeFinding, setActiveFinding] = useState<PerformanceCenterFinding | null>(null)
-  const [filtersOpen, setFiltersOpen] = useState(true)
 
   const metrics = useMemo(
     () => [
@@ -67,12 +65,7 @@ export function PerformanceView() {
     [stats],
   )
 
-  const openOptimize = (finding: PerformanceCenterFinding) => {
-    setActiveFinding(finding)
-    setOptimizeOpen(true)
-  }
-
-  const goToPr = (finding: PerformanceCenterFinding) => {
+  const goToPr = (finding: { pullRequestId?: string }) => {
     if (finding.pullRequestId) {
       navigate("ai-review", { prId: finding.pullRequestId })
     }
@@ -83,7 +76,7 @@ export function PerformanceView() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">性能分析</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{zh.performance.subtitle}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.performance}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
@@ -98,7 +91,7 @@ export function PerformanceView() {
           </div>
           <button
             type="button"
-            onClick={() => setFiltersOpen((v) => !v)}
+            onClick={() => setFiltersOpen(!filtersOpen)}
             className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-surface-2 rounded-md hover:bg-surface-3"
           >
             {filtersOpen ? zh.common.collapseFilters : zh.common.filter}
@@ -213,9 +206,15 @@ export function PerformanceView() {
         <PerformanceFindingsTable
           items={items}
           loading={loading}
+          expandedFindingId={expandedFindingId}
           optimizingId={optimizingId}
+          optimizeText={optimizeText}
+          optimizeError={optimizeError}
           onRowClick={goToPr}
-          onOptimizeClick={openOptimize}
+          onOptimizeClick={startOptimize}
+          onRegenerate={regenerateOptimize}
+          onCollapse={collapseOptimize}
+          onCancelOptimize={cancelOptimize}
         />
 
         {totalPages > 1 && (
@@ -242,17 +241,6 @@ export function PerformanceView() {
           </div>
         )}
       </div>
-
-      <PerformanceOptimizePanel
-        finding={activeFinding}
-        open={optimizeOpen}
-        onOpenChange={setOptimizeOpen}
-        optimizeText={optimizeText}
-        optimizeError={optimizeError}
-        optimizing={Boolean(optimizingId && activeFinding?.id === optimizingId)}
-        onOptimize={() => activeFinding && void optimizeFinding(activeFinding.id)}
-        onCancel={cancelOptimize}
-      />
     </div>
   )
 }

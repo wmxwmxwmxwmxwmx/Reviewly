@@ -2,19 +2,36 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import type { PerformanceCenterFinding } from "@reviewly/shared"
+import type { AiPersistedContent, PerformanceCenterFinding } from "@reviewly/shared"
 
+import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { PrismApiError } from "@/lib/api/client"
 import {
   fetchPerformanceFindings,
   fetchPerformanceStats,
   optimizePerformanceFinding,
+  patchPerformanceFinding,
   type PerformanceStats,
 } from "@/lib/api/performance"
+import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
 
 const PAGE_SIZE = 10
 
+function buildAiOptimization(
+  content: string,
+  model: string,
+  provider: string,
+): AiPersistedContent {
+  return {
+    content,
+    analyzedAt: new Date().toISOString(),
+    model,
+    provider,
+  }
+}
+
 export function usePerformanceCenter() {
+  const { settings } = useAISettings()
   const [items, setItems] = useState<PerformanceCenterFinding[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -22,10 +39,27 @@ export function usePerformanceCenter() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [severityFilter, setSeverityFilter] = useState<string>("")
-  const [typeFilter, setTypeFilter] = useState<string>("")
-  const [repoFilter, setRepoFilter] = useState<string>("")
-  const [searchInput, setSearchInput] = useState("")
+  const [viewState, setViewState] = usePersistedViewState("performance", {
+    severityFilter: "",
+    typeFilter: "",
+    repoFilter: "",
+    searchInput: "",
+    filtersOpen: true,
+    expandedFindingId: null as string | null,
+  })
+  const severityFilter = viewState.severityFilter
+  const typeFilter = viewState.typeFilter
+  const repoFilter = viewState.repoFilter
+  const searchInput = viewState.searchInput
+  const filtersOpen = viewState.filtersOpen
+  const expandedFindingId = viewState.expandedFindingId
+  const setSeverityFilter = (severityFilter: string) => setViewState({ severityFilter })
+  const setTypeFilter = (typeFilter: string) => setViewState({ typeFilter })
+  const setRepoFilter = (repoFilter: string) => setViewState({ repoFilter })
+  const setSearchInput = (searchInput: string) => setViewState({ searchInput })
+  const setFiltersOpen = (filtersOpen: boolean) => setViewState({ filtersOpen })
+  const setExpandedFindingId = (expandedFindingId: string | null) =>
+    setViewState({ expandedFindingId })
   const [searchQuery, setSearchQuery] = useState("")
 
   const [optimizingId, setOptimizingId] = useState<string | null>(null)
@@ -85,21 +119,82 @@ export function usePerformanceCenter() {
     return map
   }, [items])
 
-  const optimizeFinding = useCallback(async (findingId: string) => {
-    optimizeAbort.current?.abort()
-    const ac = new AbortController()
-    optimizeAbort.current = ac
-    setOptimizingId(findingId)
-    setOptimizeText("")
-    setOptimizeError(null)
+  const collapseOptimize = useCallback(() => {
+    setExpandedFindingId(null)
+  }, [setExpandedFindingId])
 
-    await optimizePerformanceFinding(findingId, {
-      signal: ac.signal,
-      onDelta: (delta) => setOptimizeText((prev) => prev + delta),
-      onError: (msg) => setOptimizeError(msg),
-      onDone: () => setOptimizingId((id) => (id === findingId ? null : id)),
-    })
-  }, [])
+  const optimizeFinding = useCallback(
+    async (findingId: string) => {
+      optimizeAbort.current?.abort()
+      const ac = new AbortController()
+      optimizeAbort.current = ac
+      setOptimizingId(findingId)
+      setOptimizeText("")
+      setOptimizeError(null)
+
+      let accumulated = ""
+
+      await optimizePerformanceFinding(findingId, {
+        signal: ac.signal,
+        onDelta: (delta) => {
+          accumulated += delta
+          setOptimizeText((prev) => prev + delta)
+        },
+        onError: (msg) => setOptimizeError(msg),
+        onDone: async () => {
+          setOptimizingId((id) => (id === findingId ? null : id))
+          if (!accumulated.trim()) return
+          try {
+            const aiOptimization = buildAiOptimization(
+              accumulated,
+              settings.model,
+              settings.provider,
+            )
+            await patchPerformanceFinding(findingId, { aiOptimization })
+            setItems((prev) =>
+              prev.map((item) =>
+                item.id === findingId ? { ...item, aiOptimization } : item,
+              ),
+            )
+          } catch (e: unknown) {
+            setOptimizeError(
+              e instanceof PrismApiError ? e.message : "保存优化方案失败",
+            )
+          }
+        },
+      })
+    },
+    [settings.model, settings.provider],
+  )
+
+  const startOptimize = useCallback(
+    (finding: PerformanceCenterFinding) => {
+      if (expandedFindingId === finding.id && !optimizingId) {
+        collapseOptimize()
+        return
+      }
+
+      setExpandedFindingId(finding.id)
+      setOptimizeError(null)
+
+      const cached = finding.aiOptimization?.content
+      if (cached) {
+        setOptimizeText(cached)
+        return
+      }
+
+      void optimizeFinding(finding.id)
+    },
+    [expandedFindingId, optimizingId, collapseOptimize, setExpandedFindingId, optimizeFinding],
+  )
+
+  const regenerateOptimize = useCallback(
+    (finding: PerformanceCenterFinding) => {
+      setExpandedFindingId(finding.id)
+      void optimizeFinding(finding.id)
+    },
+    [setExpandedFindingId, optimizeFinding],
+  )
 
   const cancelOptimize = useCallback(() => {
     optimizeAbort.current?.abort()
@@ -124,11 +219,16 @@ export function usePerformanceCenter() {
     setRepoFilter,
     searchInput,
     setSearchInput,
+    filtersOpen,
+    setFiltersOpen,
     groupedByType,
+    expandedFindingId,
     optimizingId,
     optimizeText,
     optimizeError,
-    optimizeFinding,
+    startOptimize,
+    regenerateOptimize,
+    collapseOptimize,
     cancelOptimize,
   }
 }

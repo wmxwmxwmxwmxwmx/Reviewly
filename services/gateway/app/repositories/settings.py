@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from app.db.models import Setting
+from app.repositories.ai_persisted import extract_ai_persisted
 from app.services import settings_crypto
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def get_settings(session: Session) -> dict:
@@ -83,6 +89,43 @@ def get_decrypted_secrets(session: Session) -> dict[str, str]:
         return {k: v for k, v in secrets.items() if isinstance(v, str) and v.strip()}
     except Exception:
         return {}
+
+
+def get_dashboard_weekly_summary(session: Session) -> dict | None:
+    row = session.get(Setting, "default")
+    if row is None:
+        return None
+    dashboard = (row.data or {}).get("dashboard") or {}
+    return extract_ai_persisted(dashboard.get("weeklySummary"))
+
+
+def save_dashboard_weekly_summary(
+    session: Session,
+    *,
+    content: str,
+    model: str | None = None,
+    provider: str | None = None,
+) -> dict:
+    row = session.get(Setting, "default")
+    if row is None:
+        from app.mock import seed
+
+        data = seed.get_settings()
+        row = Setting(id="default", data=data, encrypted_secrets=None)
+        session.add(row)
+
+    data = deepcopy(row.data)
+    dashboard = dict(data.get("dashboard") or {})
+    blob: dict = {"content": content, "analyzedAt": _now_iso()}
+    if model:
+        blob["model"] = model
+    if provider:
+        blob["provider"] = provider
+    dashboard["weeklySummary"] = blob
+    data["dashboard"] = dashboard
+    row.data = data
+    session.flush()
+    return blob
 
 
 def rotate_secrets(session: Session) -> dict[str, int]:

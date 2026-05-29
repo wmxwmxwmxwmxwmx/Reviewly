@@ -9,29 +9,31 @@ import {
   type ReactNode,
 } from "react"
 
+import type { Repository, SyncRepositoriesResponse } from "@reviewly/shared"
+
 import { useAISettings, estimateCostCny } from "@/features/prism/contexts/ai-settings-context"
 import { PrismApiError } from "@/lib/api/client"
+import { useReposSync } from "@/hooks/use-repos-sync"
 import {
   fetchRepoAnalyzeContext,
   fetchRepos,
-  syncRepos,
+  saveRepoAiAnalysis,
 } from "@/lib/api/repos"
-import type { Repository } from "@reviewly/shared"
 
 interface ReposContextValue {
   repos: Repository[]
   loading: boolean
   syncing: boolean
+  importing: boolean
   error: string | null
   syncError: string | null
   analyzingRepoId: string | null
-  analyzedRepoId: string | null
-  analysisText: string
-  analysisError: string | null
+  analysisErrorsByRepoId: Record<string, string>
   refresh: () => Promise<void>
-  sync: () => Promise<void>
+  sync: () => Promise<SyncRepositoriesResponse>
+  importRepo: (url: string) => Promise<Repository | null>
   analyzeRepository: (repoId: string) => Promise<void>
-  clearAnalysis: () => void
+  clearAnalysisError: (repoId: string) => void
 }
 
 const ReposContext = createContext<ReposContextValue | null>(null)
@@ -74,13 +76,10 @@ export function ReposProvider({ children }: { children: ReactNode }) {
   const { settings, hasApiKey, recordUsage } = useAISettings()
   const [repos, setRepos] = useState<Repository[]>([])
   const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [analyzingRepoId, setAnalyzingRepoId] = useState<string | null>(null)
-  const [analyzedRepoId, setAnalyzedRepoId] = useState<string | null>(null)
-  const [analysisText, setAnalysisText] = useState("")
-  const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [analysisErrorsByRepoId, setAnalysisErrorsByRepoId] = useState<Record<string, string>>({})
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -99,37 +98,62 @@ export function ReposProvider({ children }: { children: ReactNode }) {
     void refresh()
   }, [refresh])
 
+  const {
+    importing,
+    syncing,
+    importRepo: importRepoMutation,
+    syncRepos: syncReposMutation,
+  } = useReposSync(refresh)
+
   const sync = useCallback(async () => {
-    setSyncing(true)
     setSyncError(null)
     try {
-      await syncRepos()
-      await refresh()
+      return await syncReposMutation()
     } catch (e: unknown) {
       setSyncError(e instanceof PrismApiError ? e.message : "同步失败")
-    } finally {
-      setSyncing(false)
+      throw e
     }
-  }, [refresh])
+  }, [syncReposMutation])
 
-  const clearAnalysis = useCallback(() => {
-    setAnalysisText("")
-    setAnalysisError(null)
-    setAnalyzingRepoId(null)
-    setAnalyzedRepoId(null)
+  const importRepo = useCallback(
+    async (url: string) => {
+      setSyncError(null)
+      try {
+        return await importRepoMutation(url)
+      } catch (e: unknown) {
+        setSyncError(e instanceof PrismApiError ? e.message : "添加仓库失败")
+        throw e
+      }
+    },
+    [importRepoMutation],
+  )
+
+  const clearAnalysisError = useCallback((repoId: string) => {
+    setAnalysisErrorsByRepoId((prev) => {
+      if (!prev[repoId]) return prev
+      const next = { ...prev }
+      delete next[repoId]
+      return next
+    })
   }, [])
 
   const analyzeRepository = useCallback(
     async (repoId: string) => {
       if (!hasApiKey) {
-        setAnalysisError("请先在系统设置中填写 API 密钥。")
-        setAnalyzedRepoId(repoId)
+        setAnalysisErrorsByRepoId((prev) => ({
+          ...prev,
+          [repoId]: "请先在系统设置中填写 API 密钥。",
+        }))
         return
       }
 
       setAnalyzingRepoId(repoId)
-      setAnalysisText("")
-      setAnalysisError(null)
+      setAnalysisErrorsByRepoId((prev) => {
+        if (!prev[repoId]) return prev
+        const next = { ...prev }
+        delete next[repoId]
+        return next
+      })
 
       try {
         const ctx = await fetchRepoAnalyzeContext(repoId)
@@ -166,8 +190,13 @@ export function ReposProvider({ children }: { children: ReactNode }) {
           throw new Error(errMsg)
         }
 
-        setAnalysisText(data?.content || "模型未返回内容。")
-        setAnalyzedRepoId(repoId)
+        const content = data?.content || "模型未返回内容。"
+        const updated = await saveRepoAiAnalysis(repoId, {
+          content,
+          model: settings.model,
+          provider: settings.provider,
+        })
+        setRepos((prev) => prev.map((r) => (r.id === repoId ? updated : r)))
 
         const totalTokens = Number(data?.usage?.totalTokens) || 0
         recordUsage({
@@ -180,7 +209,10 @@ export function ReposProvider({ children }: { children: ReactNode }) {
           latencyMs: Number(data?.latencyMs) || 0,
         })
       } catch (e: unknown) {
-        setAnalysisError(e instanceof Error ? e.message : "AI 分析失败")
+        setAnalysisErrorsByRepoId((prev) => ({
+          ...prev,
+          [repoId]: e instanceof Error ? e.message : "AI 分析失败",
+        }))
       } finally {
         setAnalyzingRepoId(null)
       }
@@ -194,16 +226,16 @@ export function ReposProvider({ children }: { children: ReactNode }) {
         repos,
         loading,
         syncing,
+        importing,
         error,
         syncError,
         analyzingRepoId,
-        analyzedRepoId,
-        analysisText,
-        analysisError,
+        analysisErrorsByRepoId,
         refresh,
         sync,
+        importRepo,
         analyzeRepository,
-        clearAnalysis,
+        clearAnalysisError,
       }}
     >
       {children}

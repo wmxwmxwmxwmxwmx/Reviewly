@@ -1,6 +1,12 @@
-import type { PerformanceCenterFinding, PerformanceFindingsPage } from "@reviewly/shared"
+import type { AiPersistedContent, PerformanceCenterFinding, PerformanceFindingsPage } from "@reviewly/shared"
 
 import { apiFetch } from "./client"
+
+export type SaveFindingAiPayload = {
+  content: string
+  model?: string
+  provider?: string
+}
 
 export interface PerformanceStats {
   openFindings: number
@@ -37,6 +43,21 @@ export function fetchPerformanceStats(signal?: AbortSignal) {
 export function fetchPerformanceFindings(params: PerformanceFindingsQuery = {}) {
   const { signal, ...rest } = params
   return apiFetch<PerformanceFindingsPage>(`/api/performance/findings${buildQuery(rest)}`, { signal })
+}
+
+export function patchPerformanceFinding(
+  findingId: string,
+  body: { aiOptimization: AiPersistedContent },
+  signal?: AbortSignal,
+) {
+  return apiFetch<PerformanceCenterFinding & { aiOptimization?: AiPersistedContent }>(
+    `/api/performance/findings/${findingId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      signal,
+    },
+  )
 }
 
 export async function optimizePerformanceFinding(

@@ -10,24 +10,12 @@ from app.core.config import settings
 from app.core.errors import api_error
 from app.db.deps import get_db
 from app.github import webhooks
-from app.services import repo_sync
 from app.mock import seed
 from app.repositories import settings as settings_repo
 from app.services import settings_crypto
 from app.services.integration_test import run_integration_test
 
 router = APIRouter(prefix="/api", tags=["placeholders"])
-
-
-@router.post("/repos/sync")
-async def repos_sync(db: Session = Depends(get_db)) -> dict:
-    if not settings.github_app_id and not settings.github_pat.strip():
-        return {
-            "syncedRepos": len(seed.list_repos()),
-            "status": "mock",
-            "message": "GitHub 未配置，返回演示数据",
-        }
-    return await repo_sync.sync_repositories_metadata(db)
 
 
 @router.get("/integrations/github/install-url")

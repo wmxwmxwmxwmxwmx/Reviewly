@@ -44,16 +44,18 @@ export function SecurityView() {
     setRepoFilter,
     searchInput,
     setSearchInput,
+    filtersOpen,
+    setFiltersOpen,
     explainingId,
     explainText,
     explainError,
+    prepareExplain,
     explainFinding,
     cancelExplain,
   } = useSecurityCenter()
 
   const [explainOpen, setExplainOpen] = useState(false)
   const [activeFinding, setActiveFinding] = useState<SecurityCenterFinding | null>(null)
-  const [filtersOpen, setFiltersOpen] = useState(true)
 
   const securityMetrics = useMemo(
     () => [
@@ -71,6 +73,7 @@ export function SecurityView() {
 
   const openExplain = (finding: SecurityCenterFinding) => {
     setActiveFinding(finding)
+    prepareExplain(finding)
     setExplainOpen(true)
   }
 
@@ -85,7 +88,7 @@ export function SecurityView() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">安全中心</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{zh.security.subtitle}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.security}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
@@ -100,7 +103,7 @@ export function SecurityView() {
           </div>
           <button
             type="button"
-            onClick={() => setFiltersOpen((v) => !v)}
+            onClick={() => setFiltersOpen(!filtersOpen)}
             className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-surface-2 rounded-md hover:bg-surface-3"
           >
             {filtersOpen ? zh.common.collapseFilters : zh.common.filter}

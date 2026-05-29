@@ -7,9 +7,12 @@ import { AISettingsProvider } from "@/features/prism/contexts/ai-settings-contex
 import { SecuritySettingsProvider } from "@/features/prism/contexts/security-settings-context"
 import { SessionLockOverlay } from "@/features/prism/components/session-lock-overlay"
 import { AIReviewSessionProvider } from "@/features/prism/contexts/ai-review-session-context"
+import { ReposProvider } from "@/features/prism/contexts/repos-context"
 import { NavigationProvider, useNavigation } from "@/features/prism/contexts/navigation-context"
 import { AIReviewView } from "@/features/prism/views/ai-review-view"
 import { StandardView } from "@/features/prism/components/view-registry"
+import { Toaster } from "@/components/ui/toaster"
+import { zh } from "@/lib/i18n/zh"
 
 function PRismPageContent() {
   const { activeView, prId, navigate } = useNavigation()
@@ -77,8 +80,12 @@ function PRismPageContent() {
             onToggleAIPanel={() => setAiPanelOpen((open) => !open)}
           />
         ) : activeView === "ai-review" ? (
-          <main className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            请在 URL 中指定 prId，或从合并请求列表进入
+          <main className="flex flex-1 flex-col items-center justify-center gap-3 p-5 text-center">
+            <div>
+              <h1 className="text-lg font-semibold text-foreground">{zh.nav.aiReview}</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.aiReview}</p>
+            </div>
+            <p className="text-sm text-muted-foreground">{zh.common.aiReviewEmptyHint}</p>
           </main>
         ) : (
           <main className="flex-1 overflow-y-auto">
@@ -101,6 +108,7 @@ export default function PRismPage() {
   return (
     <AISettingsProvider>
       <SecuritySettingsProvider>
+        <Toaster />
         <Suspense
           fallback={
             <div className="flex h-screen items-center justify-center bg-background text-muted-foreground text-sm">
@@ -109,10 +117,12 @@ export default function PRismPage() {
           }
         >
           <AIReviewSessionProvider>
-            <NavigationProvider>
-              <PRismPageContent />
-              <SessionLockOverlay />
-            </NavigationProvider>
+            <ReposProvider>
+              <NavigationProvider>
+                <PRismPageContent />
+                <SessionLockOverlay />
+              </NavigationProvider>
+            </ReposProvider>
           </AIReviewSessionProvider>
         </Suspense>
       </SecuritySettingsProvider>

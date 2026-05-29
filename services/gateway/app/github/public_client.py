@@ -32,11 +32,9 @@ def _check_response(resp: httpx.Response, *, resource: str) -> None:
 
 
 async def get_repo(owner: str, repo: str) -> dict[str, Any]:
-    url = f"https://api.github.com/repos/{owner}/{repo}"
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.get(url, headers=_auth_headers())
-        _check_response(resp, resource="该仓库")
-        return resp.json()
+    from app.github.repositories import fetch_repo
+
+    return await fetch_repo(owner, repo)
 
 
 async def get_pull_request(owner: str, repo: str, number: int) -> dict[str, Any]:
@@ -48,18 +46,9 @@ async def get_pull_request(owner: str, repo: str, number: int) -> dict[str, Any]
 
 
 async def list_user_repos() -> list[dict[str, Any]]:
-    if not settings.github_pat.strip():
-        raise api_error("请配置 GITHUB_PAT 以同步用户仓库。", 501)
+    from app.github.repositories import fetch_user_repositories
 
-    url = "https://api.github.com/user/repos"
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.get(
-            url,
-            headers=_auth_headers(),
-            params={"affiliation": "owner,collaborator,organization_member", "per_page": 100, "sort": "updated"},
-        )
-        _check_response(resp, resource="您的仓库列表")
-        return resp.json()
+    return await fetch_user_repositories()
 
 
 async def list_open_pull_requests(owner: str, repo: str) -> list[dict[str, Any]]:

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AnalysisFinding, AnalysisJob, PullRequest, Repository
 from app.mock import seed
+from app.repositories import settings as settings_repo
 from app.services.activity_log import list_recent
 
 
@@ -160,6 +161,7 @@ def _enrich_dashboard(base: dict, session: Session) -> dict:
         "completedCount": len(durations),
         "recent": timing_recent[:5],
     }
+    result["weeklySummary"] = settings_repo.get_dashboard_weekly_summary(session)
     return result
 
 
@@ -183,6 +185,7 @@ def get_dashboard(session: Session) -> dict:
             "completedCount": 0,
             "recent": [],
         }
+        base["weeklySummary"] = settings_repo.get_dashboard_weekly_summary(session)
         return base
 
     return _enrich_dashboard(base, session)

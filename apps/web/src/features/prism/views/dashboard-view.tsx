@@ -70,7 +70,7 @@ export function DashboardView() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold text-foreground">总览面板</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">查看项目健康状况和关键指标</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.dashboard}</p>
         </div>
         <button
           type="button"

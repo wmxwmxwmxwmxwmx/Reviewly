@@ -114,6 +114,10 @@ Reviewly/
 
 Gateway 测试：`cd services/gateway && .venv\Scripts\pip install -r requirements.txt pytest && .venv\Scripts\pytest`
 
+## 开发者文档
+
+新同学请先阅读 **[docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)**（架构、目录、配置、API、数据流与排错）。
+
 ## 路线图
 
 详见 [docs/plan.md](docs/plan.md)。
