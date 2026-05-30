@@ -1,23 +1,29 @@
 "use client"
 
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import {
   BookOpen,
   GitBranch,
   Star,
   Clock,
-  Settings,
   Loader2,
   BrainCircuit,
   RefreshCw,
   GitFork,
   Code2,
   ExternalLink,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react"
 
 import { AddRepoDialog } from "@/features/prism/components/add-repo-dialog"
 import { SummaryMarkdown } from "@/features/prism/components/summary-markdown"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { toast } from "@/hooks/use-toast"
 import { zh } from "@/lib/i18n/zh"
@@ -210,6 +216,14 @@ function RepoCard({
   const analysisContent = repo.aiAnalysis?.content
   const hasAnalysis = Boolean(analysisContent)
   const showAnalysisPanel = isAnalyzing || hasAnalysis || Boolean(analysisError)
+  const isPrivateRepo = repo.isPrivate === true
+  const [analysisOpen, setAnalysisOpen] = useState(hasAnalysis)
+
+  useEffect(() => {
+    if (hasAnalysis) {
+      setAnalysisOpen(true)
+    }
+  }, [hasAnalysis])
 
   return (
     <motion.div
@@ -218,8 +232,7 @@ function RepoCard({
       transition={{ delay: idx * 0.05 }}
       className="p-4 rounded-lg bg-surface-2 border border-border hover:border-ai-blue/50 transition-colors"
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
+      <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             {repo.avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -261,6 +274,21 @@ function RepoCard({
             </p>
           ) : null}
           <div className="mt-1 flex items-center gap-2 flex-wrap">
+            <span
+              className={cn(
+                "text-[10px] px-1.5 py-0.5 rounded border",
+                isPrivateRepo
+                  ? "bg-ai-purple/10 text-ai-purple border-ai-purple/25"
+                  : "bg-surface-3 text-muted-foreground border-border",
+              )}
+            >
+              {isPrivateRepo ? zh.repos.privateRepo : zh.repos.publicRepo}
+            </span>
+            {repo.owner ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-3 text-muted-foreground border border-border">
+                {zh.repos.repoOwner}：{repo.owner}
+              </span>
+            ) : null}
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-3 text-muted-foreground">
               {zh.repos.defaultBranch}：{repo.defaultBranch}
             </span>
@@ -287,14 +315,6 @@ function RepoCard({
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          className="p-1 hover:bg-surface-3 rounded transition-colors shrink-0"
-          aria-label="设置"
-        >
-          <Settings className="w-4 h-4 text-muted-foreground" />
-        </button>
-      </div>
 
       <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground flex-wrap">
         {repo.stars != null && (
@@ -372,11 +392,35 @@ function RepoCard({
           {isAnalyzing && !analysisContent && (
             <p className="text-xs text-muted-foreground">{zh.repos.generatingAnalysis}</p>
           )}
-          {analysisContent && (
-            <div className="text-xs max-h-64 overflow-y-auto">
-              <SummaryMarkdown content={analysisContent} />
-            </div>
-          )}
+          {analysisContent ? (
+            <Collapsible open={analysisOpen} onOpenChange={setAnalysisOpen}>
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-2 rounded-md px-1 py-1.5 text-left text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                  aria-expanded={analysisOpen}
+                  aria-label={
+                    analysisOpen ? zh.repos.collapseAnalysis : zh.repos.expandAnalysis
+                  }
+                >
+                  <span>{zh.repos.repoAnalysisTitle}</span>
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
+                    {analysisOpen ? zh.repos.collapseAnalysis : zh.repos.expandAnalysis}
+                    {analysisOpen ? (
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    ) : (
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    )}
+                  </span>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-2 text-xs max-h-64 overflow-y-auto">
+                  <SummaryMarkdown content={analysisContent} />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          ) : null}
         </div>
       )}
     </motion.div>

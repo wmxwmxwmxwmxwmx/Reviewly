@@ -148,6 +148,12 @@ export const zh = {
     externalReposSection: "外部仓库",
     externalRepoBadge: "External",
     externalRepoHint: "此仓库通过 URL 导入，不参与团队统计与治理分析",
+    privateRepo: "私人",
+    publicRepo: "公共",
+    repoOwner: "拥有者",
+    repoAnalysisTitle: "AI 分析结果",
+    expandAnalysis: "展开",
+    collapseAnalysis: "收起",
   },
   architecture: {
     scanGraph: "扫描依赖图",
