@@ -1,4 +1,4 @@
-import type { AuthLoginResponse, AuthUser } from "@reviewly/shared"
+import type { AuthLoginResponse, AuthUser, GithubAccountInfo } from "@reviewly/shared"
 
 import { apiFetch } from "./client"
 
@@ -8,6 +8,10 @@ export function fetchGithubLoginUrl() {
 
 export function fetchAuthMe(signal?: AbortSignal) {
   return apiFetch<AuthUser>("/api/auth/me", { signal })
+}
+
+export function fetchGithubAccount(signal?: AbortSignal) {
+  return apiFetch<GithubAccountInfo>("/api/auth/github/account", { signal })
 }
 
 export function logoutAuth() {

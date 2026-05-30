@@ -255,10 +255,7 @@ def list_repos(
         if repo_type == SOURCE_TYPE_EXTERNAL:
             query = query.where(Repository.owner_user_id == user_id)
         else:
-            conditions = [
-                Repository.owner_user_id == user_id,
-                Repository.owner_user_id.is_(None),
-            ]
+            conditions = [Repository.owner_user_id == user_id]
             if team_ids:
                 conditions.append(
                     (Repository.team_id.in_(team_ids)) & (Repository.visibility == "team")
@@ -272,12 +269,10 @@ def get_repo_row_for_user(session: Session, repo_id: str, user_id: str, team_ids
     row = session.get(Repository, repo_id)
     if row is None:
         return None
-    if row.owner_user_id == user_id or row.owner_user_id is None:
-        if is_seed_repository(row):
-            return None
-        return row
     if is_seed_repository(row):
         return None
+    if row.owner_user_id == user_id:
+        return row
     if row.visibility == "team" and row.team_id and row.team_id in team_ids:
         return row
     return None

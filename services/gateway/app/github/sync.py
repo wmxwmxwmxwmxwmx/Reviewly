@@ -151,6 +151,7 @@ async def _persist_pull_request(
         payload=pr_payload,
         diff_files=diff_files,
         patch=patch,
+        owner_user_id=owner_user_id,
     )
     session.commit()
     return pr_id

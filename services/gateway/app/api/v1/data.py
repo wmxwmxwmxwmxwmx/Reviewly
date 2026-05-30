@@ -22,6 +22,15 @@ from app.services import dashboard_summary
 router = APIRouter(prefix="/api", tags=["data"])
 
 
+def _resolve_user_scope(
+    db: Session,
+    user: AuthUser | None,
+) -> tuple[str | None, list[str] | None]:
+    if user and not settings.prism_auth_bypass:
+        return user.id, auth_users_repo.get_team_ids_for_user(db, user.id)
+    return None, None
+
+
 class ImportPrBody(BaseModel):
     url: str = Field(min_length=1)
     pr_url: str | None = Field(default=None, validation_alias="prUrl")
@@ -165,6 +174,7 @@ async def repo_clone(repo_id: str, db: Session = Depends(get_db)) -> dict:
 @router.get("/pull-requests")
 def pull_requests(
     db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
     repo: str | None = None,
     risk: str | None = None,
     author: str | None = None,
@@ -173,6 +183,7 @@ def pull_requests(
     limit: int = Query(default=50, le=100),
     include_external: bool = Query(default=False, alias="includeExternal"),
 ) -> dict:
+    user_id, team_ids = _resolve_user_scope(db, user)
     items = pr_repo.list_pull_requests(
         db,
         repo=repo,
@@ -180,6 +191,8 @@ def pull_requests(
         author=author,
         state=state,
         include_external=include_external,
+        user_id=user_id,
+        team_ids=team_ids,
     )
     return {"items": items[:limit], "cursor": cursor, "hasMore": len(items) > limit}
 
@@ -195,16 +208,26 @@ async def import_pull_request(
 
 
 @router.get("/pull-requests/{pr_id}")
-def pull_request(pr_id: str, db: Session = Depends(get_db)) -> dict:
-    pr = pr_repo.get_pull_request(db, pr_id)
+def pull_request(
+    pr_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> dict:
+    user_id, team_ids = _resolve_user_scope(db, user)
+    pr = pr_repo.get_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids)
     if not pr:
         raise api_error("合并请求不存在", 404)
     return pr
 
 
 @router.get("/pull-requests/{pr_id}/diff")
-async def pull_request_diff(pr_id: str, db: Session = Depends(get_db)) -> list:
-    if pr_repo.get_pull_request(db, pr_id) is None:
+async def pull_request_diff(
+    pr_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> list:
+    user_id, team_ids = _resolve_user_scope(db, user)
+    if pr_repo.get_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids) is None:
         raise api_error("合并请求不存在", 404)
 
     from app.repositories import pull_request_files as pr_files_repo
@@ -223,12 +246,17 @@ async def pull_request_diff(pr_id: str, db: Session = Depends(get_db)) -> list:
         client = get_engine_client()
         return await client.parse_diff(diff_row.patch)
 
-    return pr_repo.get_diff(db, pr_id)
+    return pr_repo.get_diff(db, pr_id, user_id=user_id, team_ids=team_ids)
 
 
 @router.get("/pull-requests/{pr_id}/files")
-def pull_request_files(pr_id: str, db: Session = Depends(get_db)) -> list:
-    if pr_repo.get_pull_request(db, pr_id) is None:
+def pull_request_files(
+    pr_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> list:
+    user_id, team_ids = _resolve_user_scope(db, user)
+    if pr_repo.get_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids) is None:
         raise api_error("合并请求不存在", 404)
     from app.repositories import pull_request_files as pr_files_repo
 
@@ -236,7 +264,14 @@ def pull_request_files(pr_id: str, db: Session = Depends(get_db)) -> list:
 
 
 @router.get("/pull-requests/{pr_id}/analysis/latest")
-def analysis_latest(pr_id: str, db: Session = Depends(get_db)) -> dict:
+def analysis_latest(
+    pr_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> dict:
+    user_id, team_ids = _resolve_user_scope(db, user)
+    if pr_repo.get_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids) is None:
+        raise api_error("合并请求不存在", 404)
     summary = analysis_jobs.get_latest_analysis(db, pr_id)
     if not summary:
         raise api_error("暂无分析结果", 404)
@@ -244,10 +279,15 @@ def analysis_latest(pr_id: str, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/pull-requests/{pr_id}/ai-summary")
-def get_pr_ai_summary(pr_id: str, db: Session = Depends(get_db)) -> dict:
-    if pr_repo.get_pull_request(db, pr_id) is None:
+def get_pr_ai_summary(
+    pr_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> dict:
+    user_id, team_ids = _resolve_user_scope(db, user)
+    if pr_repo.get_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids) is None:
         raise api_error("合并请求不存在", 404)
-    summary = pr_repo.get_ai_summary(db, pr_id)
+    summary = pr_repo.get_ai_summary(db, pr_id, user_id=user_id, team_ids=team_ids)
     if not summary:
         raise api_error("暂无 AI 摘要", 404)
     return summary
@@ -258,8 +298,10 @@ def patch_pr_ai_summary(
     pr_id: str,
     body: PrAiSummaryBody,
     db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
 ) -> dict:
-    if pr_repo.get_pull_request(db, pr_id) is None:
+    user_id, team_ids = _resolve_user_scope(db, user)
+    if pr_repo.get_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids) is None:
         raise api_error("合并请求不存在", 404)
     from datetime import datetime, timezone
 
@@ -271,7 +313,7 @@ def patch_pr_ai_summary(
         payload["model"] = body.model.strip()
     if body.provider:
         payload["provider"] = body.provider.strip()
-    saved = pr_repo.save_ai_summary(db, pr_id, payload)
+    saved = pr_repo.save_ai_summary(db, pr_id, payload, user_id=user_id, team_ids=team_ids)
     if saved is None:
         raise api_error("保存失败", 500)
     return saved
@@ -282,7 +324,11 @@ async def start_analysis(
     pr_id: str,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
 ) -> dict:
+    user_id, team_ids = _resolve_user_scope(db, user)
+    if pr_repo.get_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids) is None:
+        raise api_error("合并请求不存在", 404)
     try:
         result = analysis_jobs.create_job(db, pr_id)
         job_id = result.pop("_schedule", None)
@@ -306,15 +352,25 @@ async def start_analysis(
 
 
 @router.get("/pull-requests/{pr_id}/findings")
-def pr_findings(pr_id: str, db: Session = Depends(get_db)) -> list:
-    if pr_repo.get_pull_request(db, pr_id) is None:
+def pr_findings(
+    pr_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> list:
+    user_id, team_ids = _resolve_user_scope(db, user)
+    if pr_repo.get_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids) is None:
         raise api_error("合并请求不存在", 404)
     return analysis_jobs.get_findings(db, pr_id)
 
 
 @router.get("/pull-requests/{pr_id}/governance")
-def pr_governance(pr_id: str, db: Session = Depends(get_db)) -> list:
-    if pr_repo.get_pull_request(db, pr_id) is None:
+def pr_governance(
+    pr_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> list:
+    user_id, team_ids = _resolve_user_scope(db, user)
+    if pr_repo.get_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids) is None:
         raise api_error("合并请求不存在", 404)
     return governance_repo.list_rules_for_pr(db, pr_id)
 

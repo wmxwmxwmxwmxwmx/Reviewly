@@ -53,3 +53,11 @@ def logout() -> dict:
 @router.get("/me")
 def auth_me(user: AuthUser = Depends(get_current_user)) -> dict:
     return auth_users_repo.user_to_api(user)
+
+
+@router.get("/github/account")
+async def github_account(
+    user: AuthUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    return await auth_users_repo.github_account_to_api(db, user)

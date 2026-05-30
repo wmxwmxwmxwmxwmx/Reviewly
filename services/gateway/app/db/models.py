@@ -96,6 +96,7 @@ class PullRequest(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     repository_id: Mapped[str] = mapped_column(ForeignKey("repositories.id"))
+    owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("auth_users.id"), index=True)
     number: Mapped[int] = mapped_column(Integer)
     github_id: Mapped[str] = mapped_column(String(64), unique=True)
     state: Mapped[str] = mapped_column(String(32))

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import {
   BookOpen,
@@ -240,14 +240,8 @@ function RepoCard({
   const hasAnalysis = Boolean(analysisContent)
   const showAnalysisPanel = isAnalyzing || hasAnalysis || Boolean(analysisError)
   const isPrivateRepo = repo.isPrivate === true
-  const [analysisOpen, setAnalysisOpen] = useState(hasAnalysis)
+  const [analysisOpen, setAnalysisOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
-
-  useEffect(() => {
-    if (hasAnalysis) {
-      setAnalysisOpen(true)
-    }
-  }, [hasAnalysis])
 
   const handleRemove = async () => {
     try {

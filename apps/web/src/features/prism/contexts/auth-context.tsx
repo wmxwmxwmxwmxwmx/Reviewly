@@ -15,6 +15,7 @@ import type { AuthUser } from "@reviewly/shared"
 import { fetchAuthMe, fetchGithubLoginUrl, logoutAuth } from "@/lib/api/auth"
 import { PrismApiError } from "@/lib/api/client"
 import {
+  clearAuthSession,
   clearAuthToken,
   getAuthToken,
   isAuthBypassEnabled,
@@ -28,6 +29,7 @@ interface AuthContextValue {
   isAuthenticated: boolean
   login: () => Promise<void>
   logout: () => Promise<void>
+  switchAccount: () => Promise<void>
   setTokenFromCallback: (token: string) => Promise<void>
   refreshUser: () => Promise<void>
 }
@@ -92,10 +94,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-    clearAuthToken()
+    clearAuthSession()
     setToken(null)
     setUser(null)
   }, [])
+
+  const switchAccount = useCallback(async () => {
+    clearAuthSession()
+    setToken(null)
+    setUser(null)
+    await login()
+  }, [login])
 
   const setTokenFromCallback = useCallback(
     async (newToken: string) => {
@@ -116,10 +125,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       login,
       logout,
+      switchAccount,
       setTokenFromCallback,
       refreshUser,
     }),
-    [user, token, loading, isAuthenticated, login, logout, setTokenFromCallback, refreshUser],
+    [user, token, loading, isAuthenticated, login, logout, switchAccount, setTokenFromCallback, refreshUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

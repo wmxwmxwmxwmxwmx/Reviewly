@@ -13,6 +13,13 @@ export function clearAuthToken(): void {
   localStorage.removeItem(TOKEN_KEY)
 }
 
+export function clearAuthSession(): void {
+  clearAuthToken()
+  if (typeof window !== "undefined") {
+    sessionStorage.clear()
+  }
+}
+
 export function isAuthBypassEnabled(): boolean {
   return process.env.NEXT_PUBLIC_PRISM_AUTH_BYPASS === "1"
 }
