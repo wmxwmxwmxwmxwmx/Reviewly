@@ -21,6 +21,7 @@ import {
 import { AddRepoDialog } from "@/features/prism/components/add-repo-dialog"
 import { RepoPrList } from "@/features/prism/components/repo-pr-list"
 import { RepositoryBadges } from "@/features/prism/components/repository-badges"
+import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
 import { RepositoryOnboardingProgress } from "@/features/prism/components/repository-onboarding-progress"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { useRepositoryOnboarding } from "@/hooks/use-repository-onboarding"
@@ -350,13 +351,14 @@ function ExternalRepoOnboardSection({
     void onReposRefresh()
   }, [phase, onReposRefresh])
 
-  if (repo.managed) {
+  if (isRepositoryManaged(repo)) {
     return <RepositoryJobBar repoId={repo.id} seedJob={repo.activeJob} />
   }
 
   const showProgress =
     onboarding || Boolean(latest) || repo.activeJob?.jobType === "onboarding"
-  const showOnboardButton = !onboarding && phase !== "completed" && !repo.managed
+  const showOnboardButton =
+    !onboarding && phase !== "completed" && !isRepositoryManaged(repo)
 
   return (
     <div className="mt-3 pt-3 border-t border-border space-y-2">
@@ -458,7 +460,12 @@ function RepoCard({
             <span className="text-sm font-medium text-foreground font-mono truncate">
               {repo.owner}/{repo.name}
             </span>
-            <RepositoryBadges sourceType={repo.sourceType} managed={repo.managed} />
+            <RepositoryBadges
+              sourceType={repo.sourceType}
+              isManaged={repo.isManaged}
+              managed={repo.managed}
+              repositoryType={repo.repositoryType}
+            />
             {repo.htmlUrl ? (
               <a
                 href={repo.htmlUrl}

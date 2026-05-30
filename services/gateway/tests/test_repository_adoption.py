@@ -212,6 +212,71 @@ def test_onboard_marks_managed_and_starts_job(client: TestClient, db: Session) -
     assert row.repository_type == REPOSITORY_TYPE_MANAGED
 
 
+def test_adopted_repo_survives_public_pr_reimport(client: TestClient, db: Session) -> None:
+    user = _bypass_user(db)
+    repo = _insert_repo(
+        db,
+        repo_id="repo-888001",
+        full_name="obra/superpowers",
+        source_type=SOURCE_TYPE_EXTERNAL,
+        owner_user_id=user.id,
+    )
+    db.commit()
+
+    with patch("app.api.v1.repository_jobs.repository_jobs_service.schedule_repository_job"):
+        adopt = client.post(f"/api/repos/{repo.id}/adopt")
+    assert adopt.status_code == 200
+
+    mock_pr = {
+        "id": 888001,
+        "number": 2,
+        "title": "reimport after adopt",
+        "state": "open",
+        "user": {"login": "dev"},
+        "updated_at": "2025-01-02T00:00:00Z",
+        "created_at": "2025-01-02T00:00:00Z",
+        "head": {"ref": "feat"},
+        "base": {
+            "ref": "main",
+            "repo": {"id": 888001, "full_name": "obra/superpowers", "default_branch": "main"},
+        },
+        "additions": 1,
+        "deletions": 0,
+        "changed_files": 1,
+        "html_url": "https://github.com/obra/superpowers/pull/2",
+    }
+    mock_repo = {
+        "id": 888001,
+        "full_name": "obra/superpowers",
+        "default_branch": "main",
+    }
+
+    with _public_import_mocks(mock_pr, mock_repo):
+        reimport = client.post(
+            "/api/pull-requests/import",
+            json={"url": "https://github.com/obra/superpowers/pull/2"},
+        )
+    assert reimport.status_code == 200
+    pr_id = reimport.json()["prId"]
+
+    db.expire_all()
+    row = db.get(Repository, repo.id)
+    assert row is not None
+    assert row.managed is True
+    assert row.repository_type == REPOSITORY_TYPE_MANAGED
+
+    repos_api = client.get("/api/repos", params={"type": "all"}).json()
+    repo_api = next(r for r in repos_api if r["id"] == repo.id)
+    assert repo_api["isManaged"] is True
+    assert repo_api["managed"] is True
+    assert repo_api["repositoryType"] == REPOSITORY_TYPE_MANAGED
+
+    pr_api = client.get(f"/api/pull-requests/{pr_id}").json()
+    assert pr_api["isManaged"] is True
+    assert pr_api["managed"] is True
+    assert pr_api["repositoryType"] == REPOSITORY_TYPE_MANAGED
+
+
 def test_adopt_marks_managed_and_starts_job(client: TestClient, db: Session) -> None:
     user = _bypass_user(db)
     repo = _insert_repo(

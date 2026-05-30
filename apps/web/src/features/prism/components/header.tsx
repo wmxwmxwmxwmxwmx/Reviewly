@@ -101,7 +101,12 @@ export function Header({
           </div>
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-[11px] text-muted-foreground min-w-0">
             <span className="truncate max-w-[10rem] sm:max-w-xs">{prData.repo}</span>
-            <RepositoryBadges sourceType={prData.sourceType} managed={prData.managed} />
+            <RepositoryBadges
+              sourceType={prData.sourceType}
+              isManaged={prData.isManaged}
+              managed={prData.managed}
+              repositoryType={prData.repositoryType}
+            />
             <span className="font-mono shrink-0">#{prData.number}</span>
             <span className="hidden sm:inline text-muted-foreground/60">·</span>
             <span

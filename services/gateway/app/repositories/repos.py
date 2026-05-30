@@ -38,6 +38,11 @@ from app.repositories.seed_filter import (
     only_external_repositories,
     only_stats_eligible_repositories,
 )
+from app.repositories.repo_management import (
+    apply_management_fields_to_api,
+    external_sync_metadata_defaults,
+    repository_is_adopted,
+)
 from app.services.repo_health import compute_repo_health
 
 
@@ -94,7 +99,8 @@ def _apply_repository_type(row: Repository, metadata: dict[str, Any], *, created
         else:
             row.repository_type = REPOSITORY_TYPE_OWNED
     if managed is not None:
-        row.managed = bool(managed)
+        if not (repository_is_adopted(row) and not bool(managed)):
+            row.managed = bool(managed)
     elif created:
         row.managed = row.repository_type != REPOSITORY_TYPE_EXTERNAL
 
@@ -236,8 +242,7 @@ def _repo_to_api(session: Session, row: Repository) -> dict:
     data["aiAnalysis"] = extract_from_settings(row.settings, "aiAnalysis")
     data["aiArchitectureAnalysis"] = extract_from_settings(row.settings, "aiArchitectureAnalysis")
     data["sourceType"] = row.source_type or SOURCE_TYPE_GITHUB
-    data["repositoryType"] = row.repository_type or REPOSITORY_TYPE_OWNED
-    data["managed"] = bool(row.managed)
+    apply_management_fields_to_api(data, row)
     if row.local_path:
         data["localPath"] = row.local_path
     if row.last_cloned_at is not None:
@@ -525,6 +530,14 @@ def upsert_repo(
     if gh_repo is not None and source_type == SOURCE_TYPE_EXTERNAL:
         from app.github.repo_mapper import github_repo_to_metadata
 
+        existing_row: Repository | None = None
+        if github_id:
+            existing_row = get_repository_by_github_id(session, str(github_id))
+        if existing_row is None:
+            existing_row = get_repository_by_full_name(session, full_name)
+        if existing_row is None:
+            existing_row = session.get(Repository, repo_id)
+
         metadata = github_repo_to_metadata(
             gh_repo,
             open_prs=int((payload or {}).get("openPrCount", 0)),
@@ -532,8 +545,7 @@ def upsert_repo(
             installation_id=installation_id,
         )
         metadata["source_type"] = SOURCE_TYPE_EXTERNAL
-        metadata["repository_type"] = REPOSITORY_TYPE_EXTERNAL
-        metadata["managed"] = False
+        metadata = external_sync_metadata_defaults(metadata, existing=existing_row)
         if owner_user_id is not None:
             metadata["owner_user_id"] = owner_user_id
         if payload:
@@ -556,9 +568,10 @@ def upsert_repo(
             metadata["source_type"] = source_type
         if owner_user_id is not None:
             metadata["owner_user_id"] = owner_user_id
+        existing_row = session.get(Repository, repo_id)
         if source_type == SOURCE_TYPE_EXTERNAL:
-            metadata["repository_type"] = REPOSITORY_TYPE_EXTERNAL
-            metadata["managed"] = False
+            metadata["source_type"] = SOURCE_TYPE_EXTERNAL
+            metadata = external_sync_metadata_defaults(metadata, existing=existing_row)
         else:
             metadata.setdefault("repository_type", REPOSITORY_TYPE_OWNED)
             metadata.setdefault("managed", True)

@@ -17,6 +17,7 @@ from app.github.repo_mapper import github_repo_to_metadata
 from app.github.repositories import fetch_repo_by_url, fetch_user_repositories
 from app.repositories import auth_users as auth_users_repo
 from app.repositories import repos as repos_repo
+from app.repositories.repo_management import external_sync_metadata_defaults
 from app.repositories.seed_filter import SOURCE_TYPE_EXTERNAL, SOURCE_TYPE_GITHUB, REPOSITORY_TYPE_EXTERNAL, REPOSITORY_TYPE_OWNED
 from app.services.activity_log import record_activity
 
@@ -70,8 +71,10 @@ async def import_repository_from_url(
     metadata["visibility"] = "private"
     metadata["source"] = "oauth" if user else "pat"
     metadata["source_type"] = SOURCE_TYPE_EXTERNAL
-    metadata["repository_type"] = REPOSITORY_TYPE_EXTERNAL
-    metadata["managed"] = False
+    existing_row = repos_repo.get_repository_by_full_name(session, metadata["full_name"])
+    if existing_row is None:
+        existing_row = repos_repo.get_repository_by_github_id(session, str(metadata.get("github_id") or ""))
+    metadata = external_sync_metadata_defaults(metadata, existing=existing_row)
     if team_ids:
         metadata["team_id"] = team_ids[0]
 

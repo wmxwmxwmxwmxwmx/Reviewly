@@ -37,6 +37,8 @@ import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import { formatPrismApiError, PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { AdoptRepoBanner } from "@/features/prism/components/adopt-repo-banner"
+import { useReposStore } from "@/features/prism/contexts/repos-context"
+import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
 
 interface AIReviewViewProps {
   prId: string
@@ -45,6 +47,7 @@ interface AIReviewViewProps {
 
 export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps) {
   const { navigate } = useNavigation()
+  const { refresh: refreshRepos } = useReposStore()
   const { settings, hasApiKey, recordUsage } = useAISettings()
   const {
     getSession,
@@ -515,10 +518,18 @@ ${diffContext || "（无 diff 内容）"}`,
 
   const summaryError = analysisError ?? persistError
   const showPrSkeleton = prLoading && !sessionHasData && !pr
-  const isExternalRepo =
-    pr?.repositoryType === "external" ||
-    pr?.managed === false ||
-    pr?.sourceType === "external"
+  const showAdoptBanner = pr != null && !isRepositoryManaged(pr)
+
+  const handleRepoAdopted = useCallback(() => {
+    patchLocal({
+      isManaged: true,
+      managed: true,
+      repositoryType: "managed",
+    })
+    reloadPr()
+    void refreshRepos()
+    onReviewStatusChanged?.()
+  }, [patchLocal, reloadPr, refreshRepos, onReviewStatusChanged])
 
   if ((prError || !pr) && !sessionHasData && !prLoading) {
     return (
@@ -581,9 +592,9 @@ ${diffContext || "（无 diff 内容）"}`,
       )}
 
       <div className="flex flex-1 min-w-0 flex-col min-h-0">
-        {isExternalRepo && pr ? (
+        {showAdoptBanner ? (
           <div className="shrink-0 px-3 pt-2">
-            <AdoptRepoBanner pr={pr} />
+            <AdoptRepoBanner pr={pr} onAdopted={handleRepoAdopted} />
           </div>
         ) : null}
         {diffError ? (
