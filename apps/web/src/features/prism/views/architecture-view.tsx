@@ -1,40 +1,94 @@
 "use client"
 
-import { Loader2, Network, BrainCircuit } from "lucide-react"
-import { useEffect, useMemo } from "react"
+import { BrainCircuit, Loader2, Network } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { Skeleton } from "@/components/ui/skeleton"
-import { ArchitectureGraphViewer } from "@/features/prism/components/architecture-graph-viewer"
+import { ArchitectureDistributionCharts } from "@/features/prism/components/architecture-distribution-charts"
+import { ArchitectureModuleExplorer } from "@/features/prism/components/architecture-module-explorer"
+import { ArchitectureOverview } from "@/features/prism/components/architecture-overview"
+import { ArchitectureRisksPanel } from "@/features/prism/components/architecture-risks-panel"
 import { ArchitectureScanProgressBar } from "@/features/prism/components/architecture-scan-progress"
+import { ArchitectureTopologyGraph } from "@/features/prism/components/architecture-topology-graph"
 import { SummaryMarkdown } from "@/features/prism/components/summary-markdown"
+import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { useArchitecture } from "@/hooks/use-architecture"
 import { useArchitectureAnalyze } from "@/hooks/use-architecture-analyze"
+import { useArchitectureSecurityFindings } from "@/hooks/use-architecture-security-findings"
 import { useArchitectureSelection } from "@/hooks/use-architecture-selection"
 import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
-import { useReposStore } from "@/features/prism/contexts/repos-context"
+import { useRepositoryJobs } from "@/hooks/use-repository-jobs"
+import type { RiskFocus } from "@/lib/architecture/graph-utils"
+import { extendSummary } from "@/lib/architecture/graph-utils"
 import { isStatsEligibleRepo } from "@/lib/repos-utils"
 import { zh } from "@/lib/i18n/zh"
-import { cn } from "@/lib/utils"
 
 export function ArchitectureView() {
-  const { repos: allRepos, loading: reposLoading, error: reposError } = useReposStore()
+  const { repoId: urlRepoId, navigate } = useNavigation()
+  const { repos: allRepos, loading: reposLoading, error: reposError, refresh: refreshRepos } =
+    useReposStore()
   const repos = useMemo(() => allRepos.filter(isStatsEligibleRepo), [allRepos])
+
   const [archState, setArchState] = usePersistedViewState("architecture", {
     repoId: null as string | null,
     selectedNodeId: null as string | null,
   })
   const repoId = archState.repoId
-  const setRepoId = (id: string | null) => setArchState({ repoId: id })
+  const setRepoId = useCallback(
+    (id: string | null) => {
+      setArchState({ repoId: id })
+      if (id) navigate("architecture", { repoId: id })
+    },
+    [setArchState, navigate],
+  )
   const selectedNodeId = archState.selectedNodeId
   const setSelectedNodeId = (id: string | null) => setArchState({ selectedNodeId: id })
 
+  const [riskFocus, setRiskFocus] = useState<RiskFocus>(null)
+
+  useEffect(() => {
+    if (urlRepoId && urlRepoId !== repoId) {
+      setArchState({ repoId: urlRepoId })
+    }
+  }, [urlRepoId, repoId, setArchState])
+
   useEffect(() => {
     if (!repoId && repos.length > 0) {
-      setRepoId(repos[0].id)
+      const first = repos[0].id
+      setArchState({ repoId: first })
+      navigate("architecture", { repoId: first })
     }
-  }, [repoId, repos, setRepoId])
+  }, [repoId, repos, setArchState, navigate])
 
-  const { graph, metrics, loading, scanning, scanProgress, error, scan } = useArchitecture(repoId)
+  const selectedRepo = repos.find((r) => r.id === repoId)
+  const securityByFile = useArchitectureSecurityFindings(selectedRepo?.fullName)
+
+  const {
+    graph,
+    metrics,
+    loading,
+    scanning,
+    scanProgress,
+    error,
+    scan,
+    scanInBackground,
+    refetch,
+  } = useArchitecture(repoId)
+
+  const { active: jobActive, latest: latestJob, refresh: refreshJob } = useRepositoryJobs(
+    repoId,
+    Boolean(repoId),
+  )
+
+  useEffect(() => {
+    if (!jobActive && latestJob?.jobType === "architecture" && latestJob.status === "success") {
+      void refetch()
+      void refreshRepos()
+      refreshJob()
+    }
+  }, [jobActive, latestJob, refetch, refreshRepos, refreshJob])
+
   const { selectedNode, inbound, outbound } = useArchitectureSelection(
     graph,
     selectedNodeId,
@@ -43,14 +97,12 @@ export function ArchitectureView() {
   const { content: aiContent, loading: aiLoading, error: aiError, analyze } =
     useArchitectureAnalyze(repoId)
 
-  const selectedLabel = repos.find((r) => r.id === repoId)?.fullName
+  const selectedLabel = selectedRepo?.fullName
   const needsScan = graph?.status === "empty"
   const hasGraphData = (graph?.nodes.length ?? 0) > 0
   const scanReturnedEmpty =
     Boolean(graph?.scannedAt) && !needsScan && !hasGraphData && !loading && !scanning
-  const scanSummary = metrics?.summary as
-    | (typeof metrics.summary & { truncated?: boolean; filesDiscovered?: number })
-    | undefined
+  const scanSummary = extendSummary(metrics ?? undefined)
   const scanWasTruncated = Boolean(scanSummary?.truncated)
 
   const handleAnalyze = async () => {
@@ -62,35 +114,55 @@ export function ArchitectureView() {
     await analyze()
   }
 
+  const handleRepoChange = (id: string) => {
+    setRepoId(id || null)
+    setSelectedNodeId(null)
+    setRiskFocus(null)
+  }
+
+  const backgroundScanning =
+    scanning || (jobActive && latestJob?.jobType === "architecture")
+
   return (
-    <div className="p-5 space-y-5">
-      <div className="flex items-center justify-between gap-4">
+    <div className="p-5 space-y-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-lg font-semibold text-foreground">架构分析</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.architecture}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => scan()}
-          disabled={!repoId || scanning}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-ai-blue rounded-md hover:bg-[oklch(0.55_0.19_240)] transition-colors disabled:opacity-50"
-        >
-          {scanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Network className="w-3.5 h-3.5" />}
-          重新扫描
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void scanInBackground()}
+            disabled={!repoId || backgroundScanning}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground bg-surface-2 border border-border rounded-md hover:bg-surface-3 disabled:opacity-50"
+          >
+            {zh.architecture.scanInBackground}
+          </button>
+          <button
+            type="button"
+            onClick={() => void scan()}
+            disabled={!repoId || backgroundScanning}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-ai-blue rounded-md hover:bg-[oklch(0.55_0.19_240)] transition-colors disabled:opacity-50"
+          >
+            {backgroundScanning ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Network className="w-3.5 h-3.5" />
+            )}
+            {zh.architecture.rescan}
+          </button>
+        </div>
       </div>
 
       <div className="rounded-lg border border-border p-4 bg-surface-2 space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-medium text-foreground">选择仓库</div>
+          <div className="text-sm font-medium text-foreground">{zh.architecture.selectRepo}</div>
           {reposError && <p className="text-sm text-risk-high">{reposError}</p>}
         </div>
         <select
           value={repoId ?? ""}
-          onChange={(e) => {
-            setRepoId(e.target.value || null)
-            setSelectedNodeId(null)
-          }}
+          onChange={(e) => handleRepoChange(e.target.value)}
           disabled={reposLoading}
           className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-ai-blue"
         >
@@ -103,7 +175,11 @@ export function ArchitectureView() {
               </option>
             ))}
         </select>
-        {selectedLabel && <div className="text-xs text-muted-foreground">当前：{selectedLabel}</div>}
+        {selectedLabel && (
+          <div className="text-xs text-muted-foreground">
+            {zh.architecture.current}：{selectedLabel}
+          </div>
+        )}
       </div>
 
       {error && (
@@ -112,11 +188,19 @@ export function ArchitectureView() {
         </div>
       )}
 
-      {scanning && scanProgress && (
-        <ArchitectureScanProgressBar progress={scanProgress} />
-      )}
+      {(scanning && scanProgress) || (jobActive && latestJob?.jobType === "architecture") ? (
+        <ArchitectureScanProgressBar
+          progress={
+            scanProgress ?? {
+              phase: "prepare",
+              percent: latestJob?.progress ?? 10,
+              message: latestJob?.message ?? "后台扫描进行中…",
+            }
+          }
+        />
+      ) : null}
 
-      {!loading && !scanning && needsScan && repoId && (
+      {!loading && !backgroundScanning && needsScan && repoId && (
         <div className="rounded-lg border border-ai-blue/30 bg-ai-blue/10 px-4 py-3 text-sm text-foreground">
           {zh.architecture.scanBeforeAi}
         </div>
@@ -139,203 +223,166 @@ export function ArchitectureView() {
         </div>
       )}
 
-      {hasGraphData && metrics?.summary && (
-        <div className="rounded-lg border border-border bg-surface-2 px-4 py-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
-          <span>
-            源文件 <span className="text-foreground font-medium">{metrics.summary.fileCount}</span>
-          </span>
-          <span>
-            依赖边 <span className="text-foreground font-medium">{metrics.summary.edgeCount}</span>
-          </span>
-          {Object.entries(metrics.summary.languages).map(([lang, count]) => (
-            <span key={lang}>
-              {lang}{" "}
-              <span className="text-foreground font-medium">{count}</span>
-            </span>
-          ))}
-        </div>
+      <ArchitectureOverview graph={graph} metrics={metrics ?? undefined} loading={loading} />
+
+      {hasGraphData && graph && metrics && (
+        <ArchitectureDistributionCharts nodes={graph.nodes} metrics={metrics} />
       )}
 
-      {metrics && (metrics.cycles.length > 0 || metrics.giantModules.length > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {metrics.cycles.length > 0 && (
-            <div className="rounded-lg border border-border p-3 bg-surface-2">
-              <p className="text-xs font-medium text-foreground mb-1">循环依赖</p>
-              <p className="text-xs text-muted-foreground">{metrics.cycles.length} 处检测到环</p>
-            </div>
-          )}
-          {metrics.giantModules.length > 0 && (
-            <div className="rounded-lg border border-border p-3 bg-surface-2">
-              <p className="text-xs font-medium text-foreground mb-1">巨型模块</p>
-              <p className="text-xs text-muted-foreground">{metrics.giantModules.length} 个文件超阈值</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="rounded-lg border border-border overflow-hidden">
-        <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground">依赖图</span>
-          {graph && (
-            <span className="text-xs text-muted-foreground ml-auto">
-              节点 {graph.nodes.length} · 边 {graph.edges.length}
-            </span>
-          )}
-        </div>
-
-        {(loading || scanning) && !graph && !scanProgress && (
-          <div className="p-4 space-y-2">
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-4 w-2/3" />
+      {hasGraphData && graph && (
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+          <div className="xl:col-span-3 space-y-3">
+            <ArchitectureRisksPanel
+              graph={graph}
+              riskFocus={riskFocus}
+              onRiskFocus={setRiskFocus}
+              onSelectNode={setSelectedNodeId}
+            />
+            <ArchitectureModuleExplorer
+              graph={graph}
+              selectedNodeId={selectedNodeId}
+              selectedNode={selectedNode}
+              inbound={inbound}
+              outbound={outbound}
+              onSelectNode={setSelectedNodeId}
+              securityCountByFile={securityByFile}
+            />
           </div>
-        )}
 
-        {!loading && !scanning && needsScan && repoId && (
-          <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
-            <Network className="w-8 h-8 text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">{zh.architecture.notScannedYet}</p>
+          <div className="xl:col-span-5 space-y-3">
+            <div className="rounded-lg border border-border overflow-hidden">
+              <div className="px-4 py-2 bg-surface-2 border-b border-border flex items-center gap-2">
+                <span className="text-sm font-medium text-foreground">
+                  {zh.architecture.topology}
+                </span>
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {zh.architecture.graphSummary(graph.nodes.length, graph.edges.length)}
+                </span>
+              </div>
+              <ArchitectureTopologyGraph
+                graph={graph}
+                selectedNodeId={selectedNodeId}
+                riskFocus={riskFocus}
+                onSelectNode={setSelectedNodeId}
+                securityCountByFile={securityByFile}
+              />
+            </div>
+          </div>
+
+          <div className="xl:col-span-4">
+            <div className="rounded-lg border border-border overflow-hidden sticky top-4">
+              <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <BrainCircuit className="w-4 h-4 text-ai-blue" />
+                  <span className="text-sm font-medium text-foreground">
+                    {zh.architecture.aiAnalysis}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleAnalyze()}
+                  disabled={!repoId || aiLoading || backgroundScanning}
+                  className="text-xs px-2.5 py-1 rounded-md bg-ai-blue/15 text-ai-blue hover:bg-ai-blue/25 disabled:opacity-50 flex items-center gap-1"
+                >
+                  {(aiLoading || backgroundScanning) && (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  )}
+                  {aiContent && !aiLoading ? zh.actions.regenerate : zh.actions.analyzeArchitecture}
+                </button>
+              </div>
+
+              {hasGraphData && metrics && (metrics.cycles.length > 0 || metrics.layerViolations.length > 0) && (
+                <div className="px-4 py-2 border-b border-border text-[10px] text-muted-foreground bg-surface-1">
+                  结构化风险：
+                  {metrics.cycles.length > 0 && (
+                    <span className="text-risk-high ml-1">{metrics.cycles.length} 环</span>
+                  )}
+                  {metrics.layerViolations.length > 0 && (
+                    <span className="text-amber-400 ml-1">
+                      {metrics.layerViolations.length} 分层违规
+                    </span>
+                  )}
+                  {metrics.giantModules.length > 0 && (
+                    <span className="ml-1">{metrics.giantModules.length} 巨型模块</span>
+                  )}
+                  <span className="block mt-1">下方 AI 报告基于同一依赖图生成。</span>
+                </div>
+              )}
+
+              {needsScan && (
+                <p className="px-4 py-2 text-xs text-muted-foreground border-b border-border">
+                  {zh.architecture.scanBeforeAi}
+                </p>
+              )}
+              {needsScan && aiContent && !aiLoading && (
+                <p className="px-4 py-2 text-xs text-amber-400/90 border-b border-border">
+                  以下为基于空依赖图生成的历史结果，请重新扫描后再生成。
+                </p>
+              )}
+              {aiError && <p className="px-4 py-2 text-xs text-risk-high">{aiError}</p>}
+              {aiLoading && (
+                <div className="px-4 py-3 border-b border-border space-y-2">
+                  <p className="text-xs text-ai-blue flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    {zh.architecture.aiGenerating}
+                  </p>
+                  {aiContent ? (
+                    <div className="text-sm max-h-96 overflow-y-auto">
+                      <SummaryMarkdown content={aiContent} />
+                    </div>
+                  ) : (
+                    <Skeleton className="h-24 w-full" />
+                  )}
+                </div>
+              )}
+              {aiContent && !aiLoading && (
+                <div className="px-4 py-3 text-sm max-h-[min(70vh,520px)] overflow-y-auto">
+                  <SummaryMarkdown content={aiContent} />
+                </div>
+              )}
+              {!aiContent && !aiLoading && (
+                <p className="px-4 py-3 text-xs text-muted-foreground">
+                  {needsScan || !hasGraphData
+                    ? zh.architecture.scanBeforeAi
+                    : zh.architecture.aiAnalyzeHint}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(loading || backgroundScanning) && !graph && !scanProgress && !jobActive && (
+        <div className="p-4 space-y-2">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-4 w-2/3" />
+        </div>
+      )}
+
+      {!loading && !backgroundScanning && needsScan && repoId && (
+        <div className="flex flex-col items-center justify-center gap-3 p-10 text-center rounded-lg border border-border">
+          <Network className="w-8 h-8 text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">{zh.architecture.notScannedYet}</p>
+          <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => scan()}
-              disabled={scanning}
-              className="text-xs font-medium text-white bg-ai-blue px-3 py-1.5 rounded-md hover:bg-[oklch(0.55_0.19_240)] transition-colors disabled:opacity-50"
+              onClick={() => void scan()}
+              disabled={backgroundScanning}
+              className="text-xs font-medium text-white bg-ai-blue px-3 py-1.5 rounded-md"
             >
               {zh.architecture.startScan}
             </button>
-          </div>
-        )}
-
-        {scanReturnedEmpty && (
-          <div className="p-6 text-center text-sm text-muted-foreground">{zh.architecture.scanEmpty}</div>
-        )}
-
-        {hasGraphData && graph && (
-          <ArchitectureGraphViewer
-            graph={graph}
-            selectedNodeId={selectedNodeId}
-            onSelectNode={setSelectedNodeId}
-          />
-        )}
-
-        <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4 border-t border-border">
-          <div className="space-y-2">
-            <div className="text-xs text-muted-foreground">节点列表</div>
-            {loading ? (
-              <Skeleton className="h-20 w-full" />
-            ) : (
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {graph?.nodes.map((n) => (
-                  <button
-                    key={n.id}
-                    type="button"
-                    onClick={() => setSelectedNodeId(n.id)}
-                    className={cn(
-                      "w-full flex items-center justify-between text-xs px-2 py-1 rounded border",
-                      selectedNodeId === n.id
-                        ? "border-ai-blue bg-ai-blue/10"
-                        : "border-border bg-surface-2",
-                    )}
-                  >
-                    <span className="font-mono text-foreground truncate">{n.label}</span>
-                    <span className="text-muted-foreground ml-2 shrink-0">{n.layer}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <div className="text-xs text-muted-foreground">模块详情</div>
-            {selectedNode ? (
-              <div className="text-xs space-y-2 p-3 rounded border border-border bg-surface-2">
-                <div>
-                  <span className="text-muted-foreground">路径 </span>
-                  <span className="font-mono text-foreground">{selectedNode.path ?? selectedNode.id}</span>
-                </div>
-                <div className="flex gap-3">
-                  <span>语言 {selectedNode.language ?? "—"}</span>
-                  <span>分层 {selectedNode.layer ?? "—"}</span>
-                  <span>行数 {selectedNode.lines ?? "—"}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">入边 ({inbound.length})</span>
-                  <ul className="mt-1 font-mono text-[10px] text-muted-foreground max-h-16 overflow-y-auto">
-                    {inbound.map((e) => (
-                      <li key={`${e.from}-${e.to}`}>{e.from}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">出边 ({outbound.length})</span>
-                  <ul className="mt-1 font-mono text-[10px] text-muted-foreground max-h-16 overflow-y-auto">
-                    {outbound.map((e) => (
-                      <li key={`${e.from}-${e.to}`}>{e.to}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground p-3">点击节点查看详情</p>
-            )}
+            <button
+              type="button"
+              onClick={() => void scanInBackground()}
+              disabled={backgroundScanning}
+              className="text-xs font-medium text-muted-foreground bg-surface-2 border border-border px-3 py-1.5 rounded-md"
+            >
+              {zh.architecture.scanInBackground}
+            </button>
           </div>
         </div>
-      </div>
-
-      <div className="rounded-lg border border-border overflow-hidden">
-        <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <BrainCircuit className="w-4 h-4 text-ai-blue" />
-            <span className="text-sm font-medium text-foreground">AI 架构分析</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => void handleAnalyze()}
-            disabled={!repoId || aiLoading || scanning}
-            className="text-xs px-2.5 py-1 rounded-md bg-ai-blue/15 text-ai-blue hover:bg-ai-blue/25 disabled:opacity-50 flex items-center gap-1"
-          >
-            {(aiLoading || scanning) && <Loader2 className="w-3 h-3 animate-spin" />}
-            {aiContent && !aiLoading ? zh.actions.regenerate : zh.actions.analyzeArchitecture}
-          </button>
-        </div>
-        {needsScan && (
-          <p className="px-4 py-2 text-xs text-muted-foreground border-t border-border">
-            {zh.architecture.scanBeforeAi}
-          </p>
-        )}
-        {needsScan && aiContent && !aiLoading && (
-          <p className="px-4 py-2 text-xs text-amber-400/90 border-t border-border">
-            以下为基于空依赖图生成的历史结果，请重新扫描后再生成。
-          </p>
-        )}
-        {aiError && <p className="px-4 py-2 text-xs text-risk-high">{aiError}</p>}
-        {aiLoading && (
-          <div className="px-4 py-3 border-t border-border space-y-2">
-            <p className="text-xs text-ai-blue flex items-center gap-1.5">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              {zh.architecture.aiGenerating}
-            </p>
-            {aiContent ? (
-              <div className="text-sm max-h-96 overflow-y-auto">
-                <SummaryMarkdown content={aiContent} />
-              </div>
-            ) : (
-              <Skeleton className="h-24 w-full" />
-            )}
-          </div>
-        )}
-        {aiContent && !aiLoading && (
-          <div className="px-4 py-3 text-sm border-t border-border max-h-96 overflow-y-auto">
-            <SummaryMarkdown content={aiContent} />
-          </div>
-        )}
-        {!aiContent && !aiLoading && (
-          <p className="px-4 py-3 text-xs text-muted-foreground">
-            {needsScan || !hasGraphData
-              ? zh.architecture.scanBeforeAi
-              : zh.architecture.aiAnalyzeHint}
-          </p>
-        )}
-      </div>
+      )}
     </div>
   )
 }

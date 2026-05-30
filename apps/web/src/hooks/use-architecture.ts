@@ -9,6 +9,7 @@ import {
   type ArchitectureGraph,
   type ArchitectureScanProgress,
 } from "@/lib/api/architecture"
+import { startRepoAnalyze } from "@/lib/api/repos"
 
 export function useArchitecture(repoId: string | null) {
   const [graph, setGraph] = useState<ArchitectureGraph | null>(null)
@@ -109,6 +110,20 @@ export function useArchitecture(repoId: string | null) {
 
   const refetch = useCallback(() => load(), [load])
 
+  /** Queue architecture scan via repository_jobs (non-blocking SSE). */
+  const scanInBackground = useCallback(async (): Promise<boolean> => {
+    if (!repoId) return false
+    setError(null)
+    try {
+      await startRepoAnalyze(repoId, { types: ["architecture"] })
+      return true
+    } catch (e: unknown) {
+      const msg = e instanceof PrismApiError ? e.message : "提交后台任务失败"
+      setError(msg)
+      return false
+    }
+  }, [repoId])
+
   return {
     graph,
     metrics: graph?.metrics ?? null,
@@ -117,6 +132,7 @@ export function useArchitecture(repoId: string | null) {
     scanProgress,
     error,
     scan,
+    scanInBackground,
     refetch,
   }
 }

@@ -247,6 +247,12 @@ export const zh = {
     scanBeforeAi: "请先扫描依赖图，再生成 AI 架构分析。",
     aiGenerating: "正在生成架构分析…",
     graphSummary: (nodes: number, edges: number) => `节点 ${nodes} · 边 ${edges}`,
+    overview: "架构总览",
+    risks: "架构风险",
+    moduleExplorer: "模块浏览器",
+    topology: "依赖拓扑",
+    scanInBackground: "后台扫描",
+    rescan: "重新扫描",
     scanPhases: {
       prepare: "准备",
       clone: "克隆仓库",

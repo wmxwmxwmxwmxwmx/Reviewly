@@ -383,6 +383,9 @@ export interface ArchitectureScanMetrics {
     fileCount: number
     edgeCount: number
     languages: Record<string, number>
+    truncated?: boolean
+    filesDiscovered?: number
+    edgesTruncated?: boolean
   }
 }
 
