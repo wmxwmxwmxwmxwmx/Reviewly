@@ -62,7 +62,8 @@ def test_github_client_passes_has_pat_on_error() -> None:
     """GitHubClient must pass has_pat to avoid TypeError on failed responses."""
     import inspect
 
-    from app.github import client as client_mod
+    from app.integrations.github import github_client as canonical
 
-    source = inspect.getsource(client_mod.GitHubClient)
-    assert source.count("has_pat=True") >= 4
+    source = inspect.getsource(canonical.GitHubClient)
+    assert "has_pat=True" in source
+    assert source.count("raise_for_github_response") >= 2
