@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     architecture_scan_max_edges: int = 25000
     repo_cache_ttl_hours: int = 24
     git_clone_timeout_seconds: int = 1800
+    prism_analysis_cost_per_run_usd: float = 0.05
 
 
 settings = Settings()

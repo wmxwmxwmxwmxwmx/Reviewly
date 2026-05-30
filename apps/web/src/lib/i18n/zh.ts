@@ -37,6 +37,9 @@ export const zh = {
     low: "低危",
     none: "正常",
   },
+  analysis: {
+    cacheLoaded: "已从缓存加载分析结果",
+  },
   ai: {
     contextWindow: "上下文窗口",
     breakingChanges: "破坏性变更",
@@ -192,7 +195,7 @@ export const zh = {
     failed: "失败",
   },
   aiReview: {
-    openRepository: "Open Repository",
+    openRepository: "打开仓库",
   },
   adoptRepo: {
     title: "将此仓库加入团队管理？",

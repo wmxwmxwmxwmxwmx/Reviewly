@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import AnalysisFinding, AnalysisJob
+from app.db.models import AnalysisFinding, AnalysisJob, PullRequest
+from app.services.analysis_cache import PHASE_QUEUED
 
 
 def _now_iso() -> str:
@@ -21,6 +22,9 @@ def _job_to_api(job: AnalysisJob) -> dict:
         "progress": job.progress,
         "chunkIndex": job.chunk_index,
         "chunkTotal": job.chunk_total,
+        "phase": job.phase or PHASE_QUEUED,
+        "analysisVersion": job.analysis_version,
+        "cacheHit": bool(job.cache_hit),
         "createdAt": job.created_at.isoformat().replace("+00:00", "Z") if job.created_at else _now_iso(),
         "completedAt": job.completed_at.isoformat().replace("+00:00", "Z") if job.completed_at else None,
         "error": job.error_message,
@@ -42,7 +46,25 @@ def _finding_to_api(row: AnalysisFinding) -> dict:
     }
 
 
-def create_job(session: Session, pull_request_id: str, chunk_total: int) -> AnalysisJob:
+def _completed_job_query(pull_request_id: str, analysis_version: str | None):
+    stmt = select(AnalysisJob).where(
+        AnalysisJob.pull_request_id == pull_request_id,
+        AnalysisJob.status == "completed",
+    )
+    if analysis_version:
+        stmt = stmt.where(AnalysisJob.analysis_version == analysis_version)
+    return stmt.order_by(AnalysisJob.completed_at.desc()).limit(1)
+
+
+def create_job(
+    session: Session,
+    pull_request_id: str,
+    chunk_total: int,
+    *,
+    analysis_version: str,
+    head_sha: str,
+    base_sha: str | None = None,
+) -> AnalysisJob:
     import uuid
 
     job_id = f"job-{uuid.uuid4().hex[:12]}"
@@ -53,6 +75,11 @@ def create_job(session: Session, pull_request_id: str, chunk_total: int) -> Anal
         progress=0,
         chunk_index=0,
         chunk_total=max(chunk_total, 1),
+        analysis_version=analysis_version,
+        head_sha=head_sha,
+        base_sha=base_sha,
+        phase=PHASE_QUEUED,
+        cache_hit=False,
     )
     session.add(job)
     session.commit()
@@ -63,6 +90,10 @@ def create_job(session: Session, pull_request_id: str, chunk_total: int) -> Anal
 def get_job(session: Session, job_id: str) -> dict | None:
     job = session.get(AnalysisJob, job_id)
     return _job_to_api(job) if job else None
+
+
+def get_job_row(session: Session, job_id: str) -> AnalysisJob | None:
+    return session.get(AnalysisJob, job_id)
 
 
 def update_job(session: Session, job_id: str, **fields: object) -> None:
@@ -78,13 +109,33 @@ def update_job(session: Session, job_id: str, **fields: object) -> None:
             job.chunk_index = int(value)  # type: ignore[arg-type]
         elif key == "chunkTotal":
             job.chunk_total = int(value)  # type: ignore[arg-type]
+        elif key == "phase":
+            job.phase = str(value) if value else None
         elif key == "error":
             job.error_message = str(value) if value else None
         elif key == "completedAt":
             job.completed_at = datetime.now(timezone.utc)
         elif key == "resultSummary":
             job.result_summary = value  # type: ignore[assignment]
+        elif key == "durationMs":
+            job.duration_ms = int(value)  # type: ignore[arg-type]
     session.commit()
+
+
+def update_job_phase(
+    session: Session,
+    job_id: str,
+    phase: str,
+    *,
+    progress: int | None = None,
+    status: str | None = None,
+) -> None:
+    fields: dict[str, object] = {"phase": phase}
+    if progress is not None:
+        fields["progress"] = progress
+    if status is not None:
+        fields["status"] = status
+    update_job(session, job_id, **fields)
 
 
 def save_findings(session: Session, job_id: str, findings: list[dict]) -> None:
@@ -132,23 +183,16 @@ def save_findings(session: Session, job_id: str, findings: list[dict]) -> None:
 
 
 def get_latest_analysis(session: Session, pull_request_id: str) -> dict | None:
-    job = session.scalar(
-        select(AnalysisJob)
-        .where(
-            AnalysisJob.pull_request_id == pull_request_id,
-            AnalysisJob.status == "completed",
-        )
-        .order_by(AnalysisJob.completed_at.desc())
-        .limit(1)
-    )
+    pr = session.get(PullRequest, pull_request_id)
+    version = pr.analysis_version if pr else None
+    job = session.scalar(_completed_job_query(pull_request_id, version))
     if job and job.result_summary:
         return deepcopy(job.result_summary)
-
     return None
 
 
 def get_findings(session: Session, pull_request_id: str) -> list[dict]:
-    from app.db.models import PullRequest, Repository
+    from app.db.models import Repository
     from app.repositories.seed_filter import is_seed_pull_request
 
     pr = session.get(PullRequest, pull_request_id)
@@ -157,15 +201,8 @@ def get_findings(session: Session, pull_request_id: str) -> list[dict]:
         if repo is not None and is_seed_pull_request(pr, repo=repo):
             return []
 
-    job = session.scalar(
-        select(AnalysisJob)
-        .where(
-            AnalysisJob.pull_request_id == pull_request_id,
-            AnalysisJob.status == "completed",
-        )
-        .order_by(AnalysisJob.completed_at.desc())
-        .limit(1)
-    )
+    version = pr.analysis_version if pr else None
+    job = session.scalar(_completed_job_query(pull_request_id, version))
     if job:
         rows = session.scalars(
             select(AnalysisFinding).where(AnalysisFinding.job_id == job.id)
@@ -178,7 +215,7 @@ def get_findings(session: Session, pull_request_id: str) -> list[dict]:
 def list_security_findings(session: Session) -> list[dict]:
     from sqlalchemy import or_
 
-    from app.db.models import PullRequest, Repository
+    from app.db.models import Repository
     from app.repositories.seed_filter import exclude_seed_findings, only_stats_eligible_findings
 
     base = (

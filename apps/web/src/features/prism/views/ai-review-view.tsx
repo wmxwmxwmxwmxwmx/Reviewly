@@ -328,7 +328,7 @@ ${diffContext || "（无 diff 内容）"}`,
     ],
   )
 
-  const handleRescan = useCallback(async () => {
+  const handleRescan = useCallback(async (options?: { force?: boolean }) => {
     if (analyzing || prLoading || diffLoading || !pr) return
 
     analyzeAbortRef.current?.abort()
@@ -336,9 +336,12 @@ ${diffContext || "（无 diff 内容）"}`,
     const ac = new AbortController()
     analyzeAbortRef.current = ac
 
+    const force = options?.force ?? true
     setScanning(true)
     setSummaryStreaming(false)
-    setGeneratedSummary(undefined)
+    if (force) {
+      setGeneratedSummary(undefined)
+    }
     setAnalysisError(null)
     setChunkProgress({ current: 0, total: diffTotal })
 
@@ -346,6 +349,7 @@ ${diffContext || "（无 diff 内容）"}`,
 
     try {
       const result = await runAnalysis({
+        force,
         signal: ac.signal,
         onProgress: (activeJob) => {
           setJob(activeJob)
@@ -363,6 +367,24 @@ ${diffContext || "（无 diff 内容）"}`,
       })
 
       setGovernanceRefreshKey((k) => k + 1)
+
+      if (result.cacheHit) {
+        setSyncLabel(zh.analysis.cacheLoaded)
+        if (result.latest?.summary) {
+          setGeneratedSummary(result.latest.summary)
+        }
+        if (aiSummary?.content) {
+          setGeneratedSummary(aiSummary.content)
+          return
+        }
+        if (!hasApiKey) {
+          setAnalysisError("规则扫描与治理检查已完成。填写 API 密钥后可生成 AI 摘要。")
+          return
+        }
+        if (result.latest?.summary) {
+          return
+        }
+      }
 
       if (!hasApiKey) {
         if (result.latest?.summary) {
@@ -405,6 +427,7 @@ ${diffContext || "（无 diff 内容）"}`,
     setJob,
     hasApiKey,
     generateSummary,
+    aiSummary?.content,
   ])
 
   handleRescanRef.current = handleRescan
@@ -414,7 +437,7 @@ ${diffContext || "（无 diff 内容）"}`,
     const pendingPrId = sessionStorage.getItem(PENDING_AUTO_ANALYZE_KEY)
     if (!pendingPrId || pendingPrId !== prId) return
     sessionStorage.removeItem(PENDING_AUTO_ANALYZE_KEY)
-    void handleRescanRef.current?.()
+    void handleRescanRef.current?.({ force: false })
   }, [prId, prLoading, diffLoading, pr, importing])
 
   const handleRegenerateSummary = useCallback(async () => {
@@ -511,15 +534,19 @@ ${diffContext || "（无 diff 内容）"}`,
               onToggleAIPanel={onToggleAIPanel}
             />
           ) : showPrSkeleton ? (
-            <div className="flex items-center gap-3 h-[68px] px-5 border-b border-border shrink-0">
-              <Skeleton className="h-8 w-8 rounded-md" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-2/3" />
-                <Skeleton className="h-3 w-1/3" />
+            <div className="flex flex-col gap-2 px-4 sm:px-5 py-2.5 border-b border-border shrink-0 min-h-[100px]">
+              <div className="space-y-1.5 max-w-3xl">
+                <Skeleton className="h-2.5 w-20" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-8 w-24 ml-auto" />
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2 h-[68px] px-5 border-b border-border text-sm text-muted-foreground shrink-0">
+            <div className="flex items-center gap-2 min-h-[100px] px-5 py-2.5 border-b border-border text-sm text-muted-foreground shrink-0">
               <Loader2 className="w-4 h-4 animate-spin" />
               正在加载 PR 信息…
             </div>

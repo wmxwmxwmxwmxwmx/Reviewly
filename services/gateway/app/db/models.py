@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -127,6 +127,9 @@ class PullRequest(Base):
     state: Mapped[str] = mapped_column(String(32))
     risk_score: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    head_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    base_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    analysis_version: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     payload: Mapped[dict | None] = mapped_column(JSON)
 
     analysis_jobs: Mapped[list[AnalysisJob]] = relationship(back_populates="pull_request")
@@ -175,10 +178,34 @@ class AnalysisJob(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     result_summary: Mapped[dict | None] = mapped_column(JSON)
     error_message: Mapped[str | None] = mapped_column(String(1024))
+    analysis_version: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    head_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    base_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    phase: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    cache_hit: Mapped[bool] = mapped_column(Boolean, default=False)
+    source_job_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("analysis_jobs.id"), nullable=True
+    )
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     pull_request: Mapped[PullRequest | None] = relationship(back_populates="analysis_jobs")
     findings: Mapped[list[AnalysisFinding]] = relationship(back_populates="job")
+
+
+class AnalysisCacheEvent(Base):
+    __tablename__ = "analysis_cache_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    pull_request_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pull_requests.id"), nullable=True, index=True
+    )
+    analysis_version: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    job_id: Mapped[str | None] = mapped_column(ForeignKey("analysis_jobs.id"), nullable=True)
+    cache_hit: Mapped[bool] = mapped_column(Boolean, default=False)
+    saved_duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    estimated_cost_usd: Mapped[float] = mapped_column(Numeric(10, 4), default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class AnalysisFinding(Base):

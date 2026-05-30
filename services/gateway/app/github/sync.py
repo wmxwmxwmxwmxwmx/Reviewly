@@ -15,6 +15,7 @@ from app.repositories import pull_request_files as pr_files_repo
 from app.repositories import pull_requests as pr_repo
 from app.repositories import repos as repos_repo
 from app.repositories.seed_filter import SOURCE_TYPE_EXTERNAL, SOURCE_TYPE_GITHUB
+from app.services.analysis_cache import extract_shas_from_github_pr, sync_pr_analysis_version
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,11 @@ def _map_pr(gh_pr: dict[str, Any], repo_id: str, repo_label: str) -> tuple[str, 
         "commits": 0,
         "url": gh_pr.get("html_url", ""),
     }
+    head_sha, base_sha = extract_shas_from_github_pr(gh_pr)
+    if head_sha:
+        payload["headSha"] = head_sha
+    if base_sha:
+        payload["baseSha"] = base_sha
     _enrich_pr_payload(payload, risk_score)
     return pr_id, payload
 
@@ -158,7 +164,8 @@ async def _persist_pull_request(
             pr_payload["commits"] = commits_n
         mapped_files = [pr_files_repo.map_github_file(f) for f in gh_files]
         diff_files = pr_files_repo.build_diff_view_rows_from_patch(patch, mapped_files)
-        pr_repo.upsert_pull_request(
+        head_sha, base_sha = extract_shas_from_github_pr(gh_pr)
+        pr_row = pr_repo.upsert_pull_request(
             session,
             pr_id=pr_id,
             repository_id=repo_id,
@@ -170,7 +177,10 @@ async def _persist_pull_request(
             diff_files=diff_files,
             patch=patch,
             owner_user_id=owner_user_id,
+            head_sha=head_sha,
+            base_sha=base_sha,
         )
+        sync_pr_analysis_version(session, pr_row, head_sha=head_sha, base_sha=base_sha, full_name=full_name)
         pr_files_repo.replace_files(session, pr_id, mapped_files)
         session.commit()
         return pr_id, repo_id, repository_created

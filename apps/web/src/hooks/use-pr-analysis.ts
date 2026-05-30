@@ -86,6 +86,7 @@ export function usePrAnalysis(
 
   const runAnalysis = useCallback(
     async (options?: {
+      force?: boolean
       onProgress?: (job: AnalysisJob) => void
       signal?: AbortSignal
     }) => {
@@ -96,6 +97,12 @@ export function usePrAnalysis(
       setJob(result.job)
       setLatest(result.latest)
       setFindings(result.findings)
+      if (result.cacheHit && result.latest) {
+        const persisted = await loadPersistedAnalysis(prId, options?.signal).catch(() => null)
+        if (persisted?.aiSummary) {
+          setAiSummary(persisted.aiSummary)
+        }
+      }
       setPersistError(null)
       return result
     },

@@ -363,6 +363,7 @@ def patch_pr_ai_summary(
 async def start_analysis(
     pr_id: str,
     background_tasks: BackgroundTasks,
+    force: bool = False,
     db: Session = Depends(get_db),
     user: AuthUser | None = Depends(get_optional_user),
 ) -> dict:
@@ -370,7 +371,7 @@ async def start_analysis(
     if pr_repo.get_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids) is None:
         raise api_error("合并请求不存在", 404)
     try:
-        result = analysis_jobs.create_job(db, pr_id)
+        result = analysis_jobs.create_job(db, pr_id, force=force)
         job_id = result.pop("_schedule", None)
         if job_id:
 

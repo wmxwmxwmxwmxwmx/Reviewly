@@ -13,6 +13,9 @@ import {
   BrainCircuit,
   Loader2,
   RefreshCw,
+  Database,
+  Timer,
+  DollarSign,
 } from "lucide-react"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
@@ -78,6 +81,7 @@ export function DashboardView() {
   const recentReviews = dashboard?.recentReviews ?? []
 
   const topRepos = dashboard?.topRepos ?? []
+  const analysisCache = dashboard?.analysisCache
 
   return (
     <div className="p-5 space-y-5">
@@ -103,6 +107,43 @@ export function DashboardView() {
           <button type="button" onClick={() => refetch()} className="text-xs underline">
             重试
           </button>
+        </div>
+      )}
+
+      {analysisCache && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            {
+              icon: Database,
+              label: "缓存命中率",
+              value: `${analysisCache.hitRate}%`,
+              color: "text-ai-blue",
+            },
+            {
+              icon: Timer,
+              label: "节省分析时间",
+              value: analysisCache.savedTimeLabel,
+              color: "text-risk-low",
+            },
+            {
+              icon: DollarSign,
+              label: "预估节省 AI 成本",
+              value: `$${analysisCache.estimatedCostSavedUsd.toFixed(2)}`,
+              color: "text-ai-purple",
+            },
+          ].map((card, idx) => (
+            <motion.div
+              key={card.label}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              className="p-4 rounded-lg bg-surface-2 border border-border"
+            >
+              <card.icon className={cn("w-5 h-5 mb-2", card.color)} />
+              <div className="text-2xl font-semibold text-foreground">{card.value}</div>
+              <div className="text-xs text-muted-foreground mt-1">{card.label}</div>
+            </motion.div>
+          ))}
         </div>
       )}
 

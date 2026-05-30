@@ -76,7 +76,14 @@ async def _scan_repo_files(
 
 def _collect_findings(root: Path, *, finding_type: str) -> list[dict[str, Any]]:
     max_files = getattr(settings, "repo_scan_max_files", MAX_SCAN_FILES)
-    files = iter_source_files(root, max_files)
+    files, total_discovered, truncated = iter_source_files(root, max_files)
+    if truncated:
+        logger.info(
+            "Repo scan truncated at %s files (discovered %s) under %s",
+            max_files,
+            total_discovered,
+            root,
+        )
     all_findings: list[dict[str, Any]] = []
     seen: set[str] = set()
 

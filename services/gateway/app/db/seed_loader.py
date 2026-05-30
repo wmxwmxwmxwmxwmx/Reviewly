@@ -17,6 +17,9 @@ from app.db.models import (
     User,
 )
 from app.mock import seed
+from app.services.analysis_cache import build_analysis_version, sync_pr_analysis_version
+
+SEED_HEAD_SHA = "0" * 40
 
 
 def _has_rows(session: Session, model: type) -> bool:
@@ -47,16 +50,25 @@ def load_seed_if_empty(session: Session) -> bool:
 
     for pr in seed.list_pull_requests():
         pr_copy = deepcopy(pr)
-        session.add(
-            PullRequest(
-                id=pr_copy["id"],
-                repository_id=pr_copy["repoId"],
-                number=pr_copy["number"],
-                github_id=f"gh-{pr_copy['id']}",
-                state=pr_copy["state"],
-                risk_score=pr_copy.get("riskScore", 0),
-                payload=pr_copy,
-            )
+        repo_name = pr_copy.get("repo") or "unknown/repo"
+        head_sha = SEED_HEAD_SHA if pr_copy["id"] == seed.DEFAULT_PR_ID else f"seed{pr_copy['id']}"[:40].ljust(40, "0")
+        pr_row = PullRequest(
+            id=pr_copy["id"],
+            repository_id=pr_copy["repoId"],
+            number=pr_copy["number"],
+            github_id=f"gh-{pr_copy['id']}",
+            state=pr_copy["state"],
+            risk_score=pr_copy.get("riskScore", 0),
+            payload={**pr_copy, "headSha": head_sha},
+            head_sha=head_sha,
+        )
+        session.add(pr_row)
+        sync_pr_analysis_version(
+            session,
+            pr_row,
+            head_sha=head_sha,
+            base_sha=None,
+            full_name=repo_name,
         )
         diff_files = seed.get_diff(pr_copy["id"])
         if diff_files:
@@ -108,7 +120,16 @@ def load_seed_if_empty(session: Session) -> bool:
 
     from app.repositories import analysis as analysis_repo
 
-    job = analysis_repo.create_job(session, seed.DEFAULT_PR_ID, 1)
+    default_pr = session.get(PullRequest, seed.DEFAULT_PR_ID)
+    assert default_pr is not None and default_pr.head_sha and default_pr.analysis_version
+    job = analysis_repo.create_job(
+        session,
+        seed.DEFAULT_PR_ID,
+        1,
+        analysis_version=default_pr.analysis_version,
+        head_sha=default_pr.head_sha,
+        base_sha=default_pr.base_sha,
+    )
     seeded_findings: list = []
     for f in seed.list_findings(seed.DEFAULT_PR_ID):
         seeded_findings.append(deepcopy(f))

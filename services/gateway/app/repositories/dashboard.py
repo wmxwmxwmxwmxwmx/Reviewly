@@ -18,6 +18,7 @@ from app.repositories.seed_filter import (
     only_stats_eligible_repositories,
 )
 from app.services.activity_log import list_recent
+from app.services.analysis_cache import aggregate_cache_stats
 
 
 def _count_active_analysis_jobs(session: Session) -> int:
@@ -301,6 +302,7 @@ def _enrich_dashboard(
         },
         "weeklySummary": settings_repo.get_dashboard_weekly_summary(session),
         "runningTasks": _running_tasks(session),
+        "analysisCache": aggregate_cache_stats(session),
     }
 
 

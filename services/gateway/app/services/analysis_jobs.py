@@ -6,11 +6,12 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import PullRequestDiff
+from app.db.models import AnalysisJob, PullRequestDiff
 from app.grpc_client.engine import get_engine_client
 from app.repositories import analysis as analysis_repo
 from app.repositories import pull_request_files as pr_files_repo
 from app.repositories import pull_requests as pr_repo
+from app.services import analysis_cache as cache
 
 
 async def run_job(session: Session, job_id: str) -> None:
@@ -19,7 +20,12 @@ async def run_job(session: Session, job_id: str) -> None:
         return
 
     pr_id = job_api["pullRequestId"]
-    analysis_repo.update_job(session, job_id, status="running")
+    if not pr_id:
+        return
+
+    analysis_repo.update_job_phase(
+        session, job_id, cache.PHASE_FETCHING_DIFF, progress=5, status="running"
+    )
 
     client = get_engine_client()
     findings_list: list[dict[str, Any]] = []
@@ -29,7 +35,6 @@ async def run_job(session: Session, job_id: str) -> None:
     if stored_paths:
         file_paths = stored_paths
         patch = pr_files_repo.build_combined_patch(session, pr_id)
-        diff_files = pr_files_repo.to_diff_view_rows(pr_files_repo.list_files(session, pr_id))
     else:
         diff_files = pr_repo.get_diff(session, pr_id)
         file_paths = [f["path"] for f in diff_files]
@@ -37,6 +42,8 @@ async def run_job(session: Session, job_id: str) -> None:
             select(PullRequestDiff).where(PullRequestDiff.pull_request_id == pr_id)
         )
         patch = diff_row.patch if diff_row and diff_row.patch else ""
+
+    analysis_repo.update_job_phase(session, job_id, cache.PHASE_SCANNING, progress=10)
 
     from app.analysis.pipeline import run_analysis_pipeline
 
@@ -49,36 +56,50 @@ async def run_job(session: Session, job_id: str) -> None:
             file_paths=file_paths,
             engine_client=client,
         ):
-            analysis_repo.update_job(
-                session,
-                job_id,
-                status=progress.get("status", "running"),
-                progress=progress.get("progress", 0),
-                chunkIndex=progress.get("chunkIndex", 0),
-                chunkTotal=progress.get("chunkTotal", 0),
-            )
+            status = progress.get("status", "running")
+            prog = int(progress.get("progress", 0))
+            if status == "running":
+                mapped = 10 + int(prog * 0.6) if prog <= 100 else prog
+                analysis_repo.update_job_phase(
+                    session, job_id, cache.PHASE_SCANNING, progress=min(mapped, 70), status="running"
+                )
             if progress.get("findings"):
                 findings_list = progress["findings"]
             if progress.get("resultSummary"):
                 result_summary = progress["resultSummary"]
-            if progress.get("status") == "failed":
+            if status == "failed":
                 analysis_repo.update_job(
                     session,
                     job_id,
                     status="failed",
                     error=progress.get("error", "分析失败"),
+                    phase=cache.PHASE_SCANNING,
                 )
                 return
     except Exception as exc:  # noqa: BLE001
         analysis_repo.update_job(session, job_id, status="failed", error=str(exc))
         return
 
-    analysis_repo.save_findings(session, job_id, findings_list)
+    analysis_repo.update_job_phase(session, job_id, cache.PHASE_GENERATING_SUMMARY, progress=75)
 
     if not result_summary:
         from app.engine.summary import build_result_summary
 
         result_summary = build_result_summary(findings_list, pr_id)
+
+    analysis_repo.update_job_phase(session, job_id, cache.PHASE_SAVING_RESULTS, progress=85)
+
+    analysis_repo.save_findings(session, job_id, findings_list)
+
+    from app.services.governance_evaluator import run_governance_check
+
+    run_governance_check(
+        session,
+        pr_id,
+        patch=patch,
+        file_paths=file_paths,
+        findings=findings_list,
+    )
 
     analysis_repo.update_job(
         session,
@@ -87,6 +108,7 @@ async def run_job(session: Session, job_id: str) -> None:
         progress=100,
         resultSummary=result_summary,
         completedAt=True,
+        phase=cache.PHASE_COMPLETED,
     )
 
     from app.db.models import AnalysisJob
@@ -98,6 +120,9 @@ async def run_job(session: Session, job_id: str) -> None:
     duration_ms = 0
     if job_row and job_row.created_at and job_row.completed_at:
         duration_ms = int((job_row.completed_at - job_row.created_at).total_seconds() * 1000)
+        job_row.duration_ms = duration_ms
+        session.commit()
+
     record_activity(
         session,
         event_type="analysis_completed",
@@ -117,27 +142,64 @@ async def run_job(session: Session, job_id: str) -> None:
         payload={"jobId": job_id},
     )
 
-    from app.services.governance_evaluator import run_governance_check
-
-    run_governance_check(
-        session,
-        pr_id,
-        patch=patch,
-        file_paths=file_paths,
-        findings=findings_list,
-    )
+    if job_row and job_row.analysis_version:
+        cache.record_cache_event(
+            session,
+            pull_request_id=pr_id,
+            analysis_version=job_row.analysis_version,
+            job_id=job_id,
+            cache_hit=False,
+            saved_duration_ms=0,
+        )
     session.commit()
 
 
-def create_job(session: Session, pull_request_id: str) -> dict[str, Any]:
+def create_job(session: Session, pull_request_id: str, *, force: bool = False) -> dict[str, Any]:
     if pr_repo.get_pull_request(session, pull_request_id) is None:
         raise KeyError(pull_request_id)
+
+    version, head_sha, base_sha, _full_name = cache.resolve_pr_version_context(session, pull_request_id)
+
+    if not force:
+        cached = cache.find_cached_completed_job(session, version)
+        if cached is not None:
+            saved_ms = cached.duration_ms or 0
+            cache.record_cache_event(
+                session,
+                pull_request_id=pull_request_id,
+                analysis_version=version,
+                job_id=cached.id,
+                cache_hit=True,
+                saved_duration_ms=saved_ms,
+            )
+            session.commit()
+            return {
+                "jobId": cached.id,
+                "queued": False,
+                "cacheHit": True,
+                "cached": True,
+                "analysisVersion": version,
+            }
 
     file_count = len(pr_files_repo.file_paths(session, pull_request_id))
     if not file_count:
         file_count = len(pr_repo.get_diff(session, pull_request_id))
-    job = analysis_repo.create_job(session, pull_request_id, file_count or 1)
-    return {"jobId": job.id, "_schedule": job.id}
+    job = analysis_repo.create_job(
+        session,
+        pull_request_id,
+        file_count or 1,
+        analysis_version=version,
+        head_sha=head_sha,
+        base_sha=base_sha,
+    )
+    return {
+        "jobId": job.id,
+        "_schedule": job.id,
+        "queued": True,
+        "cacheHit": False,
+        "cached": False,
+        "analysisVersion": version,
+    }
 
 
 def get_job(session: Session, job_id: str) -> dict[str, Any] | None:

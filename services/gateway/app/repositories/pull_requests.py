@@ -225,6 +225,8 @@ def upsert_pull_request(
     diff_files: list[dict] | None = None,
     patch: str | None = None,
     owner_user_id: str | None = None,
+    head_sha: str | None = None,
+    base_sha: str | None = None,
 ) -> PullRequest:
     row = session.get(PullRequest, pr_id)
     if row is None:
@@ -237,6 +239,8 @@ def upsert_pull_request(
             risk_score=risk_score,
             payload=payload,
             owner_user_id=owner_user_id,
+            head_sha=head_sha,
+            base_sha=base_sha,
         )
         session.add(row)
     else:
@@ -245,6 +249,10 @@ def upsert_pull_request(
         row.payload = payload
         if owner_user_id is not None:
             row.owner_user_id = owner_user_id
+        if head_sha is not None:
+            row.head_sha = head_sha
+        if base_sha is not None:
+            row.base_sha = base_sha
 
     if diff_files is not None or patch is not None:
         diff_row = session.get(PullRequestDiff, pr_id)
@@ -280,4 +288,10 @@ def _pr_dict(row: PullRequest, repo: Repository | None = None) -> dict:
         data["sourceType"] = repo.source_type or SOURCE_TYPE_GITHUB
         data["repositoryType"] = getattr(repo, "repository_type", None) or "owned"
         data["managed"] = bool(getattr(repo, "managed", True))
+    if row.head_sha:
+        data["headSha"] = row.head_sha
+    if row.base_sha:
+        data["baseSha"] = row.base_sha
+    if row.analysis_version:
+        data["analysisVersion"] = row.analysis_version
     return data

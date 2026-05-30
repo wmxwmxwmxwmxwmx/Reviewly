@@ -36,9 +36,8 @@ def test_pull_request_opened_triggers_sync(client: TestClient, monkeypatch: pyte
         ) as sync_mock,
         patch(
             "app.services.analysis_orchestrator.enqueue_analysis",
-            return_value="job-test",
+            return_value={"jobId": "job-test", "queued": True, "cacheHit": False},
         ),
-        patch("app.services.analysis_orchestrator.schedule_analysis_background"),
     ):
         r = client.post(
             "/api/webhooks/github",

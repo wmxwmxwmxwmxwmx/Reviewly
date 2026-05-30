@@ -122,6 +122,25 @@ export interface ImportPullRequestResult {
   repoId: string
   source: "cache" | "github_app" | "github_public" | string
   repositoryCreated: boolean
+  analysisJobId?: string
+  analysisQueued?: boolean
+  analysisCacheHit?: boolean
+}
+
+export type AnalysisJobPhase =
+  | "queued"
+  | "fetching_diff"
+  | "scanning"
+  | "generating_summary"
+  | "saving_results"
+  | "completed"
+
+export interface StartAnalysisResponse {
+  jobId: string
+  queued: boolean
+  cacheHit: boolean
+  cached: boolean
+  analysisVersion?: string
 }
 
 export interface StartRepoAnalyzeResponse {
@@ -241,6 +260,9 @@ export interface AnalysisJob {
   progress: number
   chunkIndex: number
   chunkTotal: number
+  phase?: AnalysisJobPhase
+  cacheHit?: boolean
+  analysisVersion?: string
   error?: string
   createdAt: string
   completedAt?: string
@@ -443,11 +465,19 @@ export interface DashboardRecentReview {
   jobId: string
 }
 
+export interface DashboardAnalysisCache {
+  hitRate: number
+  savedTimeMs: number
+  savedTimeLabel: string
+  estimatedCostSavedUsd: number
+}
+
 export interface DashboardStats {
   pendingPrs: number
   securityIssues: number
   qualityScore: number
   avgReviewHours: number
+  analysisCache?: DashboardAnalysisCache
   recentActivity: DashboardActivity[]
   topRepos: DashboardRepoHealth[]
   summary?: {

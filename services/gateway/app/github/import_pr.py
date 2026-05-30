@@ -14,6 +14,7 @@ from app.github import sync
 from app.integrations.github.app_auth import get_installation_id_for_repo
 from app.github.url_parser import parse_github_pr_url
 from app.repositories import pull_requests as pr_repo
+from app.services import analysis_orchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +26,22 @@ def _import_result(
     *,
     repository_created: bool,
 ) -> dict[str, str | bool]:
-    return {
+    out: dict[str, str | bool] = {
         "prId": pr_id,
         "repoId": repo_id,
         "source": source,
         "repositoryCreated": repository_created,
     }
+    try:
+        analysis = analysis_orchestrator.enqueue_analysis(pr_id)
+        if analysis:
+            if analysis.get("jobId"):
+                out["analysisJobId"] = str(analysis["jobId"])
+            out["analysisQueued"] = bool(analysis.get("queued"))
+            out["analysisCacheHit"] = bool(analysis.get("cacheHit"))
+    except Exception:
+        logger.exception("import_pull_request_by_url analysis enqueue failed prId=%s", pr_id)
+    return out
 
 
 def _repo_id_for_pr(session: Session, pr_id: str) -> str:

@@ -80,15 +80,10 @@ async def handle_event(session: Session, event: str, payload: dict[str, Any]) ->
                     installation_id=inst_str,
                 )
                 if pr_id and action in ("opened", "synchronize"):
-                    from app.services.analysis_orchestrator import (
-                        enqueue_analysis,
-                        schedule_analysis_background,
-                    )
+                    from app.services.analysis_orchestrator import enqueue_analysis
 
                     try:
-                        job_id = enqueue_analysis(pr_id)
-                        if job_id:
-                            schedule_analysis_background(job_id)
+                        enqueue_analysis(pr_id)
                     except Exception:
                         logger.exception(
                             "Webhook analysis enqueue failed pr_id=%s action=%s",
