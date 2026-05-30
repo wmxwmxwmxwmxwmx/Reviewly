@@ -154,6 +154,15 @@ export const zh = {
     repoAnalysisTitle: "AI 分析结果",
     expandAnalysis: "展开",
     collapseAnalysis: "收起",
+    removeRepo: "取消管理",
+    removeRepoTitle: "确认取消管理此仓库？",
+    removeRepoDescription:
+      "取消后，PRism 中该仓库的同步记录、PR 与分析结果将被永久删除，不可恢复。GitHub 上的仓库本身不会被删除。",
+    removeRepoRecoverConnected:
+      "这是您 GitHub 账户下的仓库，取消后可通过「同步 GitHub 仓库」重新添加。",
+    removeRepoRecoverExternal: "这是通过 URL 导入的外部仓库，取消后可通过「添加仓库」重新导入。",
+    removeRepoConfirm: "确认取消管理",
+    removeRepoSuccess: "已取消管理",
   },
   architecture: {
     scanGraph: "扫描依赖图",

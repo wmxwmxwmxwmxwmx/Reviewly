@@ -15,10 +15,22 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronRight,
+  Trash2,
 } from "lucide-react"
 
 import { AddRepoDialog } from "@/features/prism/components/add-repo-dialog"
 import { SummaryMarkdown } from "@/features/prism/components/summary-markdown"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import {
   Collapsible,
   CollapsibleContent,
@@ -54,10 +66,12 @@ export function ReposView() {
     syncError,
     analyzingRepoId,
     analysisErrorsByRepoId,
+    removingRepoId,
     sync,
     importRepo,
     refresh,
     analyzeRepository,
+    removeRepo,
   } = useReposStore()
 
   const connectedRepos = useMemo(
@@ -163,8 +177,10 @@ export function ReposView() {
                 repo={repo}
                 idx={idx}
                 analyzingRepoId={analyzingRepoId}
+                removingRepoId={removingRepoId}
                 analysisErrorsByRepoId={analysisErrorsByRepoId}
                 analyzeRepository={analyzeRepository}
+                removeRepo={removeRepo}
               />
             ))}
           </div>
@@ -183,8 +199,10 @@ export function ReposView() {
                 repo={repo}
                 idx={idx}
                 analyzingRepoId={analyzingRepoId}
+                removingRepoId={removingRepoId}
                 analysisErrorsByRepoId={analysisErrorsByRepoId}
                 analyzeRepository={analyzeRepository}
+                removeRepo={removeRepo}
                 isExternal
               />
             ))}
@@ -199,31 +217,49 @@ function RepoCard({
   repo,
   idx,
   analyzingRepoId,
+  removingRepoId,
   analysisErrorsByRepoId,
   analyzeRepository,
+  removeRepo,
   isExternal = false,
 }: {
   repo: Repository
   idx: number
   analyzingRepoId: string | null
+  removingRepoId: string | null
   analysisErrorsByRepoId: Record<string, string>
   analyzeRepository: (repoId: string) => Promise<void>
+  removeRepo: (repoId: string) => Promise<void>
   isExternal?: boolean
 }) {
   const health = repo.healthScore
   const isAnalyzing = analyzingRepoId === repo.id
+  const isRemoving = removingRepoId === repo.id
   const analysisError = analysisErrorsByRepoId[repo.id]
   const analysisContent = repo.aiAnalysis?.content
   const hasAnalysis = Boolean(analysisContent)
   const showAnalysisPanel = isAnalyzing || hasAnalysis || Boolean(analysisError)
   const isPrivateRepo = repo.isPrivate === true
   const [analysisOpen, setAnalysisOpen] = useState(hasAnalysis)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   useEffect(() => {
     if (hasAnalysis) {
       setAnalysisOpen(true)
     }
   }, [hasAnalysis])
+
+  const handleRemove = async () => {
+    try {
+      await removeRepo(repo.id)
+      setConfirmOpen(false)
+      toast({ title: zh.repos.removeRepoSuccess })
+    } catch {
+      /* error surfaced via syncError in parent */
+    }
+  }
+
+  const removeDisabled = Boolean(analyzingRepoId) || Boolean(removingRepoId)
 
   return (
     <motion.div
@@ -232,7 +268,8 @@ function RepoCard({
       transition={{ delay: idx * 0.05 }}
       className="p-4 rounded-lg bg-surface-2 border border-border hover:border-ai-blue/50 transition-colors"
     >
-      <div className="min-w-0">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             {repo.avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -315,6 +352,56 @@ function RepoCard({
             </span>
           </div>
         </div>
+
+        <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <AlertDialogTrigger asChild>
+            <button
+              type="button"
+              disabled={removeDisabled}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md text-risk-high bg-risk-high/10 hover:bg-risk-high/20 border border-risk-high/25 shrink-0 disabled:opacity-50"
+            >
+              {isRemoving ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="w-3.5 h-3.5" />
+              )}
+              {zh.repos.removeRepo}
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{zh.repos.removeRepoTitle}</AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2 text-left">
+                  <p>{zh.repos.removeRepoDescription}</p>
+                  <p>
+                    {isExternal
+                      ? zh.repos.removeRepoRecoverExternal
+                      : zh.repos.removeRepoRecoverConnected}
+                  </p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{zh.common.cancel}</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={isRemoving}
+                className="bg-risk-high hover:bg-risk-high/90"
+                onClick={(event) => {
+                  event.preventDefault()
+                  void handleRemove()
+                }}
+              >
+                {isRemoving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  zh.repos.removeRepoConfirm
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
 
       <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground flex-wrap">
         {repo.stars != null && (
