@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useMemo } from "react"
-import { Loader2, Sparkles } from "lucide-react"
+import { Loader2, GitPullRequest } from "lucide-react"
 
 import type { Repository } from "@reviewly/shared"
 
@@ -77,7 +77,7 @@ export function ExternalRepoOnboardDialog({
       <AlertDialogContent className="bg-panel border-border sm:max-w-lg">
         <AlertDialogHeader>
           <div className="flex items-start gap-3">
-            <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-ai-blue" />
+            <GitPullRequest className="mt-0.5 h-5 w-5 shrink-0 text-ai-blue" />
             <div className="space-y-2 min-w-0">
               <AlertDialogTitle className="text-foreground text-left">
                 {zh.externalRepoOnboard.title}

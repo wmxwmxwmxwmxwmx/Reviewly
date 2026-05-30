@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { AlertCircle, CheckCircle2, ChevronRight, Cpu, Zap } from "lucide-react"
+import { AlertCircle, CheckCircle2, ChevronRight, Cpu, Activity } from "lucide-react"
 
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { useAuth } from "@/features/prism/contexts/auth-context"
@@ -135,7 +135,7 @@ export function SidebarFooter({ onOpenSettings, onNavigate }: SidebarFooterProps
       </button>
 
       <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-surface-2">
-        <Zap className="w-3.5 h-3.5 text-risk-medium shrink-0" />
+        <Activity className="w-3.5 h-3.5 text-risk-medium shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="text-[11px] font-medium text-foreground">{zh.sidebar.monthlyUsage}</div>
           <div className="text-[10px] text-muted-foreground">

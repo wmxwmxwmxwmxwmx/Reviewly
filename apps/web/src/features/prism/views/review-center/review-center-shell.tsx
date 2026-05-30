@@ -96,7 +96,7 @@ export function ReviewCenterShell({
           <AiReviewOverview
             embedded
             pendingOnly
-            title="我的待审批"
+            title="待我评审"
             subtitle="等待您评审或正在评审中的 PR"
             repoId={repoId ?? undefined}
             onSelectPr={onSelectPr}
@@ -156,9 +156,9 @@ export function ReviewCenterShell({
             </button>
           )}
           <div>
-            <h1 className="text-lg font-semibold text-foreground">AI 评审中心</h1>
+            <h1 className="text-lg font-semibold text-foreground">代码评审中心</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              企业级 Pull Request Review Center
+              {zh.pageSubtitle.aiReview}
             </p>
           </div>
         </div>

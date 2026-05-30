@@ -1,11 +1,16 @@
 """B5–B9 domain REST APIs."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.core.errors import api_error
+from app.core.errors import SCHEMA_OUTDATED_MESSAGE, api_error
+
+logger = logging.getLogger(__name__)
 from app.db.deps import get_db
 from app.repositories import analysis as analysis_repo
 from app.repositories import governance as governance_repo
@@ -128,31 +133,53 @@ def performance_finding_delete(finding_id: str, db: Session = Depends(get_db)) -
 
 
 class GovernanceRuleBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     rule: str = Field(min_length=1, max_length=1024)
     severity: str = "medium"
     enabled: bool = True
     description: str | None = None
-    match_type: str = Field(default="keyword", validation_alias="matchType")
+    match_type: str = Field(default="keyword", alias="matchType")
     keywords: list[str] | str = Field(default_factory=list)
-    file_patterns: list[str] | str = Field(default_factory=list, validation_alias="filePatterns")
-    finding_types: list[str] = Field(default_factory=list, validation_alias="findingTypes")
-    finding_severities: list[str] = Field(default_factory=list, validation_alias="findingSeverities")
-
-    model_config = {"populate_by_name": True}
+    file_patterns: list[str] | str = Field(default_factory=list, alias="filePatterns")
+    finding_types: list[str] = Field(default_factory=list, alias="findingTypes")
+    finding_severities: list[str] = Field(default_factory=list, alias="findingSeverities")
 
 
 class GovernanceRulePatchBody(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     rule: str | None = Field(default=None, min_length=1, max_length=1024)
     severity: str | None = None
     enabled: bool | None = None
     description: str | None = None
-    match_type: str | None = Field(default=None, validation_alias="matchType")
+    match_type: str | None = Field(default=None, alias="matchType")
     keywords: list[str] | str | None = None
-    file_patterns: list[str] | str | None = Field(default=None, validation_alias="filePatterns")
-    finding_types: list[str] | None = Field(default=None, validation_alias="findingTypes")
-    finding_severities: list[str] | None = Field(default=None, validation_alias="findingSeverities")
+    file_patterns: list[str] | str | None = Field(default=None, alias="filePatterns")
+    finding_types: list[str] | None = Field(default=None, alias="findingTypes")
+    finding_severities: list[str] | None = Field(default=None, alias="findingSeverities")
 
-    model_config = {"populate_by_name": True}
+
+def _map_governance_db_error(exc: Exception) -> None:
+    if isinstance(exc, HTTPException):
+        raise exc
+    if isinstance(exc, ValueError):
+        raise api_error(str(exc), 400) from exc
+    if isinstance(exc, (OperationalError, ProgrammingError)):
+        logger.exception("Database schema error during governance rule operation")
+        raise api_error(SCHEMA_OUTDATED_MESSAGE, 503, code="SCHEMA_OUTDATED") from exc
+    if isinstance(exc, IntegrityError):
+        logger.exception("Database integrity error during governance rule operation")
+        raise api_error("治理规则保存失败，请重试", 409) from exc
+    if isinstance(exc, SQLAlchemyError):
+        logger.exception("Database error during governance rule operation")
+        raise api_error(
+            "数据库连接或查询失败，请确认 PostgreSQL 已启动并重启 Gateway",
+            503,
+            code="DATABASE_UNAVAILABLE",
+        ) from exc
+    logger.exception("Unexpected error during governance rule operation")
+    raise api_error("治理规则操作失败，请稍后重试", 500, code="GOVERNANCE_ERROR") from exc
 
 
 @router.get("/governance/rules")
@@ -160,12 +187,18 @@ def governance_rules(
     include_disabled: bool = Query(False, alias="includeDisabled"),
     db: Session = Depends(get_db),
 ) -> list:
-    return governance_repo.list_rule_definitions(db, include_disabled=include_disabled)
+    try:
+        return governance_repo.list_rule_definitions(db, include_disabled=include_disabled)
+    except Exception as exc:
+        _map_governance_db_error(exc)
 
 
 @router.get("/governance/rules/{rule_id}")
 def governance_rule_get(rule_id: str, db: Session = Depends(get_db)) -> dict:
-    row = governance_repo.get_rule(db, rule_id)
+    try:
+        row = governance_repo.get_rule(db, rule_id)
+    except Exception as exc:
+        _map_governance_db_error(exc)
     if not row:
         raise api_error("治理规则不存在", 404)
     return row
@@ -174,9 +207,12 @@ def governance_rule_get(rule_id: str, db: Session = Depends(get_db)) -> dict:
 @router.post("/governance/rules")
 def governance_rule_create(body: GovernanceRuleBody, db: Session = Depends(get_db)) -> dict:
     try:
-        return governance_repo.create_rule(db, body.model_dump(by_alias=True))
-    except ValueError as exc:
-        raise api_error(str(exc), 400) from exc
+        return governance_repo.create_rule(
+            db,
+            body.model_dump(by_alias=True, exclude_none=True),
+        )
+    except Exception as exc:
+        _map_governance_db_error(exc)
 
 
 @router.patch("/governance/rules/{rule_id}")
@@ -185,13 +221,17 @@ def governance_rule_update(
     body: GovernanceRulePatchBody,
     db: Session = Depends(get_db),
 ) -> dict:
-    patch = {k: v for k, v in body.model_dump(by_alias=True).items() if v is not None}
+    patch = {
+        k: v
+        for k, v in body.model_dump(by_alias=True, exclude_none=True).items()
+        if v is not None
+    }
     if not patch:
         raise api_error("没有可更新的字段", 400)
     try:
         row = governance_repo.update_rule(db, rule_id, patch)
-    except ValueError as exc:
-        raise api_error(str(exc), 400) from exc
+    except Exception as exc:
+        _map_governance_db_error(exc)
     if not row:
         raise api_error("治理规则不存在", 404)
     return row
@@ -199,7 +239,11 @@ def governance_rule_update(
 
 @router.delete("/governance/rules/{rule_id}")
 def governance_rule_delete(rule_id: str, db: Session = Depends(get_db)) -> dict:
-    if not governance_repo.delete_rule(db, rule_id):
+    try:
+        deleted = governance_repo.delete_rule(db, rule_id)
+    except Exception as exc:
+        _map_governance_db_error(exc)
+    if not deleted:
         raise api_error("治理规则不存在", 404)
     return {"ok": True}
 

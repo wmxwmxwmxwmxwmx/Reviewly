@@ -20,10 +20,10 @@ export type ReviewCenterTab =
 
 const TABS: { key: ReviewCenterTab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: "dashboard", label: "工作台", icon: LayoutDashboard },
-  { key: "pending", label: "我的待审批", icon: ClipboardCheck },
+  { key: "pending", label: "待我评审", icon: ClipboardCheck },
   { key: "all", label: "全部 PR", icon: GitPullRequest },
-  { key: "rules", label: "审批规则", icon: ScrollText },
-  { key: "stats", label: "数据统计", icon: BarChart3 },
+  { key: "rules", label: "治理规则", icon: ScrollText },
+  { key: "stats", label: "质量分析", icon: BarChart3 },
   { key: "settings", label: "设置", icon: Settings },
 ]
 

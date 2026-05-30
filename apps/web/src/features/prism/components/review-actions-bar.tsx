@@ -217,7 +217,7 @@ export function ReviewActionsBar({
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <h3 className="text-sm font-semibold text-foreground">人工审批</h3>
+          <h3 className="text-sm font-semibold text-foreground">人工评审</h3>
           <span
             className={cn(
               "text-[10px] px-2 py-0.5 rounded-full border font-medium",
@@ -355,7 +355,7 @@ export function ReviewActionsBar({
           <Textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="输入审批意见…"
+            placeholder="输入评审意见…"
             rows={4}
           />
           <DialogFooter>

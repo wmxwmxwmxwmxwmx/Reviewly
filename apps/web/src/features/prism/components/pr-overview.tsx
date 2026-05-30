@@ -219,7 +219,7 @@ export function PROverview({ prData, analysisScores }: PROverviewProps) {
           <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
             <ScoreBar label="安全评分" score={securityScore} icon={Shield} color="text-risk-high" />
             <ScoreBar label="性能评分" score={performanceScore} icon={TrendingUp} color="text-ai-blue" />
-            <ScoreBar label="可维护性" score={maintainabilityScore} icon={Wrench} color="text-risk-medium" />
+            <ScoreBar label="可维护问题" score={maintainabilityScore} icon={Wrench} color="text-risk-medium" />
             <div className="flex items-center gap-2.5">
               <Rocket className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <div className="flex-1">

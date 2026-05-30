@@ -1,7 +1,7 @@
 import type { ReviewStatus } from "@reviewly/shared"
 
 export const REVIEW_STATUS_LABELS: Record<ReviewStatus, string> = {
-  OPEN: "等待评审",
+  OPEN: "待评审",
   IN_REVIEW: "评审中",
   CHANGES_REQUESTED: "待修改",
   APPROVED: "已通过",

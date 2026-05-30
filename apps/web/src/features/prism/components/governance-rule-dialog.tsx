@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { formatPrismApiError } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
 
 const MATCH_TYPES: { value: GovernanceMatchType; label: string; hint: string }[] = [
@@ -93,7 +94,7 @@ export function GovernanceRuleDialog({
       })
       onOpenChange(false)
     } catch (e: unknown) {
-      setFormError(e instanceof Error ? e.message : "保存失败")
+      setFormError(formatPrismApiError(e, "保存失败"))
     } finally {
       setSaving(false)
     }

@@ -216,7 +216,7 @@ export function AiReviewOverview({
               </button>
             )}
             <div>
-              <h1 className="text-lg font-semibold text-foreground">AI 评审中心</h1>
+              <h1 className="text-lg font-semibold text-foreground">代码评审中心</h1>
               <p className="text-xs text-muted-foreground mt-0.5">{zh.pageSubtitle.aiReview}</p>
             </div>
           </div>
@@ -285,6 +285,7 @@ export function AiReviewOverview({
           <div className="flex flex-col items-center justify-center py-16 text-center rounded-lg border border-dashed border-border bg-surface-2/50">
             <GitPullRequest className="w-10 h-10 text-muted-foreground/50 mb-3" />
             <p className="text-sm text-muted-foreground">{zh.aiReview.historyEmpty}</p>
+            <p className="text-xs text-muted-foreground/80 mt-1">{zh.aiReview.historyEmptyHint}</p>
             <Button
               type="button"
               size="sm"

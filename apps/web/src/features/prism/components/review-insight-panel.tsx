@@ -138,7 +138,7 @@ export function ReviewInsightPanel({
             ) : (
               <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
             )}
-            <span className="text-xs font-semibold text-foreground">审批历史</span>
+            <span className="text-xs font-semibold text-foreground">评审历史</span>
           </button>
           {activityOpen ? (
             <div className="px-3 pb-3 border-t border-border pt-2">

@@ -13,6 +13,7 @@ from app.core.dev_errors import dev_error_payload
 from app.db.models import Base
 from app.db.seed_loader import load_seed_if_empty
 from app.db.session import SessionLocal, engine
+from app.repositories import governance as governance_repo
 
 logger = logging.getLogger(__name__)
 
@@ -79,20 +80,41 @@ def _run_alembic_upgrade() -> bool:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
+    app.state.ready = False
     _run_alembic_upgrade()
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
+        governance_repo.ensure_governance_schema(db)
         if settings.prism_seed_db:
             load_seed_if_empty(db)
     finally:
         db.close()
+    app.state.ready = True
+    logger.info("Gateway startup complete (ready for API traffic)")
     yield
+    app.state.ready = False
+    logger.info("Gateway shutting down")
 
 
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+app.state.ready = False
 app.include_router(api_router)
+
+
+@app.middleware("http")
+async def gateway_readiness(request: Request, call_next):
+    """Reject API calls until migrations and schema bootstrap finish (avoids startup race 500s)."""
+    if request.url.path.startswith("/api/") and not getattr(request.app.state, "ready", False):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "Gateway 正在启动，请稍候再试",
+                "code": "GATEWAY_STARTING",
+            },
+        )
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -119,9 +141,11 @@ def root() -> dict:
 
 
 @app.get("/health")
-def health() -> dict:
+def health(request: Request) -> dict:
+    ready = bool(getattr(request.app.state, "ready", False))
     payload: dict = {
-        "status": "ok" if migration_status in ("ok", "skipped", "unknown") else "degraded",
+        "status": "ok" if ready and migration_status in ("ok", "skipped", "unknown") else "degraded",
+        "ready": ready,
         "database": settings.database_url.split("://")[0],
         "migrations": migration_status,
     }

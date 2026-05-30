@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import { motion } from "framer-motion"
-import { Gauge, Search, Zap, ChevronLeft, ChevronRight } from "lucide-react"
+import { Gauge, Search, ChevronLeft, ChevronRight } from "lucide-react"
 
 import { PerformanceFindingsTable, perfSeverityConfig } from "@/features/prism/components/performance-findings-table"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
@@ -223,7 +223,7 @@ export function PerformanceView() {
       <div className="rounded-lg border border-border overflow-hidden">
         <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-risk-medium" />
+            <Gauge className="w-4 h-4 text-risk-medium" />
             <span className="text-sm font-medium text-foreground">{zh.performance.findingsTitle}</span>
             <span className="text-xs text-muted-foreground">{zh.common.recordsCount(total, loading)}</span>
           </div>

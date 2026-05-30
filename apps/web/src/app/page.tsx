@@ -68,7 +68,7 @@ function PRismPageContent() {
         )}
 
         {activeView === "ai-review" ? (
-          <ErrorBoundary section="AI 评审" key={`ai-review-${prId ?? "workspace"}`}>
+          <ErrorBoundary section="代码评审" key={`ai-review-${prId ?? "workspace"}`}>
             <AiReviewWorkspace
               prId={prId}
               reviewTab={reviewTab}

@@ -15,21 +15,21 @@ export function ReviewCenterRulesView() {
     {
       icon: Shield,
       title: "安全门禁",
-      description: "所有合并前必须通过 AI 规则扫描与人工审批双重确认。",
+      description: "所有合并前必须通过 AI 规则扫描与人工评审双重确认。",
     },
     {
       icon: AlertTriangle,
       title: "要求修改",
-      description: "审批人可提交「要求修改」，PR 状态将变为 CHANGES_REQUESTED。",
+      description: "评审人可提交「要求修改」，PR 状态将变为 CHANGES_REQUESTED。",
     },
   ]
 
   return (
     <div className="p-5 space-y-6 max-w-3xl">
       <div>
-        <h2 className="text-base font-semibold text-foreground">审批规则</h2>
+        <h2 className="text-base font-semibold text-foreground">治理规则</h2>
         <p className="text-[12px] text-muted-foreground mt-1">
-          企业级 PR 评审门禁与流转策略
+          统一管理团队研发规范与质量门禁
         </p>
       </div>
 

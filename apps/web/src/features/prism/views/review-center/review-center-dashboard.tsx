@@ -118,7 +118,7 @@ export function ReviewCenterDashboardView({
   }
 
   if (error || !data) {
-    return <p className="py-12 text-center text-sm text-risk-high">{error ?? "暂无数据"}</p>
+    return <p className="py-12 text-center text-sm text-risk-high">{error ?? "暂无评审记录"}</p>
   }
 
   const isEmpty =
@@ -137,7 +137,8 @@ export function ReviewCenterDashboardView({
 
       {isEmpty ? (
         <div className="rounded-lg border border-dashed border-border bg-surface-2/40 px-4 py-6 text-center">
-          <p className="text-sm text-muted-foreground">暂无进行中的 PR，可通过右上角「导入 PR」开始评审。</p>
+          <p className="text-sm text-muted-foreground">暂无评审记录</p>
+          <p className="text-xs text-muted-foreground/80 mt-1">导入 Pull Request 后即可开始评审</p>
         </div>
       ) : null}
 
@@ -170,14 +171,14 @@ export function ReviewCenterDashboardView({
           onClick={() => onNavigate({ tab: "all", prFilter: "high-risk" })}
         />
         <MetricCard
-          label="本周审批数量"
+          label="本周评审数量"
           value={data.weeklyApprovals}
           icon={CheckCircle2}
           accent="text-risk-low"
           onClick={() => onNavigate({ tab: "stats" })}
         />
         <MetricCard
-          label="AI 发现问题"
+          label="发现风险"
           value={data.aiFindingsThisWeek}
           icon={Bot}
           accent="text-ai-purple"

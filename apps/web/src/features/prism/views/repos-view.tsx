@@ -139,7 +139,7 @@ export function ReposView() {
         <div>
           <h1 className="text-lg font-semibold text-foreground">{zh.nav.repos}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {zh.pageSubtitle.repos} · 同步合并请求后进入 AI 评审
+            {zh.pageSubtitle.repos} · 同步合并请求后进入代码评审
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">

@@ -9,8 +9,8 @@ import './globals.css'
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: 'PRism — AI 智能代码评审平台',
-  description: '企业级 AI 合并请求智能评审平台，深度代码安全分析、风险评估与架构洞察',
+  title: 'PRism — 企业级代码评审平台',
+  description: '企业级 Pull Request 代码评审平台，质量分析、风险治理与团队协作',
   generator: 'PRism',
 }
 

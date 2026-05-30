@@ -44,7 +44,7 @@ export function ReviewCenterStatsView() {
   }
 
   if (error || !data) {
-    return <p className="py-12 text-center text-sm text-risk-high">{error ?? "暂无数据"}</p>
+    return <p className="py-12 text-center text-sm text-risk-high">{error ?? "暂无评审记录"}</p>
   }
 
   const maxTrend = Math.max(1, ...data.dailyTrend.map((d) => d.analysisCount))
@@ -52,15 +52,15 @@ export function ReviewCenterStatsView() {
   return (
     <div className="p-5 space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-foreground">数据统计</h2>
-        <p className="text-[12px] text-muted-foreground mt-1">评审效率与 AI 用量分析</p>
+        <h2 className="text-base font-semibold text-foreground">质量分析</h2>
+        <p className="text-[12px] text-muted-foreground mt-1">查看团队代码质量趋势与风险分布</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: "本周分析次数", value: data.weeklyAnalysisCount },
-          { label: "AI 调用次数", value: data.aiCalls },
-          { label: "Token 消耗", value: data.totalTokens.toLocaleString() },
+          { label: "评审次数", value: data.weeklyAnalysisCount },
+          { label: "AI 分析次数", value: data.aiCalls },
+          { label: "Token 用量", value: data.totalTokens.toLocaleString() },
           { label: "AI 成本 (CNY)", value: `¥${(data.costCny + monthlyUsage.costCny).toFixed(2)}` },
           { label: "通过率", value: `${(data.approvalRate * 100).toFixed(1)}%` },
           { label: "驳回率", value: `${(data.rejectionRate * 100).toFixed(1)}%` },
@@ -78,7 +78,7 @@ export function ReviewCenterStatsView() {
       </div>
 
       <div className="rounded-lg border border-border bg-card p-4">
-        <h3 className="text-sm font-semibold mb-4">近 7 日分析趋势</h3>
+        <h3 className="text-sm font-semibold mb-4">近 7 日评审趋势</h3>
         <div className="flex items-end gap-2 h-32">
           {data.dailyTrend.map((point) => (
             <div key={point.date} className="flex-1 flex flex-col items-center gap-1 min-w-0">

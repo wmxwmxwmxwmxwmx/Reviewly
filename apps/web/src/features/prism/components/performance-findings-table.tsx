@@ -2,7 +2,7 @@
 
 import { Fragment } from "react"
 import { motion } from "framer-motion"
-import { ChevronRight, Loader2, Zap } from "lucide-react"
+import { ChevronRight, Loader2, Gauge } from "lucide-react"
 
 import type { PerformanceCenterFinding } from "@reviewly/shared"
 
@@ -232,7 +232,7 @@ export function PerformanceFindingsTable({
                         {isOptimizing ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
                         ) : (
-                          <Zap className="w-3 h-3" />
+                          <Gauge className="w-3 h-3" />
                         )}
                         {isOptimizing
                           ? zh.performance.optimizing

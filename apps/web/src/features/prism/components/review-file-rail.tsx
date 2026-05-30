@@ -8,7 +8,7 @@ import {
   FileCode,
   Info,
   TriangleAlert,
-  Zap,
+  PlayCircle,
 } from "lucide-react"
 import type { AnalysisFinding, PullRequest, ReviewStatus } from "@reviewly/shared"
 
@@ -164,7 +164,7 @@ export function ReviewFileRail({
                 onClick={onAnalyze}
                 className="inline-flex items-center gap-1.5 text-[11px] font-medium text-ai-blue hover:underline"
               >
-                <Zap className="w-3.5 h-3.5" />
+                <PlayCircle className="w-3.5 h-3.5" />
                 {zh.common.startAnalyze}
               </button>
             ) : null}

@@ -49,13 +49,13 @@ export function ReviewTimeline({ prId, refreshKey = 0 }: ReviewTimelineProps) {
     return (
       <div className="flex items-center gap-2 py-4 text-[11px] text-muted-foreground">
         <Loader2 className="w-4 h-4 animate-spin" />
-        加载审批历史…
+        加载评审历史…
       </div>
     )
   }
 
   if (items.length === 0) {
-    return <p className="text-[11px] text-muted-foreground py-2">暂无审批历史</p>
+    return <p className="text-[11px] text-muted-foreground py-2">暂无评审历史</p>
   }
 
   return (

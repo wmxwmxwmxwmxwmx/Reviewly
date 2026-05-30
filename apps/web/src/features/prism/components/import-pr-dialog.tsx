@@ -61,7 +61,7 @@ export function ImportPRDialog({
 
         <div className="space-y-2 py-1">
           <label className="text-xs font-medium text-muted-foreground">
-            {zh.common.importPrUrl}
+            {zh.common.importPrInputHint}
           </label>
           <div
             className={cn(
