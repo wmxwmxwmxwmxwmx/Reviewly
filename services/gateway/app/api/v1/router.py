@@ -11,6 +11,7 @@ from app.api.v1 import (
     placeholders,
     repository_jobs,
     repos,
+    review_center,
     security_explain,
     webhooks,
 )
@@ -23,6 +24,7 @@ api_router.include_router(architecture.router)
 api_router.include_router(repos.router)
 api_router.include_router(repository_jobs.router)
 api_router.include_router(data.router)
+api_router.include_router(review_center.router)
 api_router.include_router(domain.router)
 api_router.include_router(security_explain.router)
 api_router.include_router(performance_optimize.router)

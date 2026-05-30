@@ -12,7 +12,7 @@ import {
   Star,
   Trash2,
 } from "lucide-react"
-import type { PullRequestListItem } from "@reviewly/shared"
+import type { PullRequestListItem, ReviewStatus } from "@reviewly/shared"
 
 import {
   AlertDialog,
@@ -27,6 +27,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { EditPRDialog } from "@/features/prism/components/edit-pr-dialog"
 import { ImportPRDialog } from "@/features/prism/components/import-pr-dialog"
+import { ReviewStatusTabs } from "@/features/prism/components/review-status-tabs"
+import {
+  REVIEW_STATUS_LABELS,
+  reviewStatusBadgeClass,
+} from "@/features/prism/lib/review-status-utils"
 import { usePullRequests } from "@/hooks/use-pull-requests"
 import { useToast } from "@/hooks/use-toast"
 import { deletePullRequest, patchPullRequest } from "@/lib/api/pull-requests"
@@ -70,6 +75,12 @@ interface AiReviewOverviewProps {
   importing: boolean
   onImport: (url: string) => Promise<void>
   reloadToken?: number
+  embedded?: boolean
+  title?: string
+  subtitle?: string
+  repoId?: string
+  pendingOnly?: boolean
+  initialStatus?: ReviewStatus | "ALL"
 }
 
 export function AiReviewOverview({
@@ -80,13 +91,26 @@ export function AiReviewOverview({
   importing,
   onImport,
   reloadToken = 0,
+  embedded = false,
+  title,
+  subtitle,
+  repoId,
+  pendingOnly = false,
+  initialStatus = "ALL",
 }: AiReviewOverviewProps) {
   const { toast } = useToast()
-  const { items, loading, error, reload } = usePullRequests({
+  const [statusFilter, setStatusFilter] = useState<ReviewStatus | "ALL">(
+    pendingOnly ? "OPEN" : initialStatus,
+  )
+  const [search, setSearch] = useState("")
+  const { items, statusCounts, loading, error, reload } = usePullRequests({
     includeExternal: "true",
     limit: "100",
+    includeCounts: "true",
+    repoId: repoId || undefined,
+    reviewStatus: statusFilter !== "ALL" ? statusFilter : undefined,
+    search: search.trim() || undefined,
   })
-  const [search, setSearch] = useState("")
   const [editPr, setEditPr] = useState<PullRequestListItem | null>(null)
   const [deletePr, setDeletePr] = useState<PullRequestListItem | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -97,24 +121,18 @@ export function AiReviewOverview({
   }, [reloadToken, reload])
 
   const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase()
-    const list = needle
-      ? items.filter((pr) => {
-          const title = prDisplayTitle(pr).toLowerCase()
-          return (
-            title.includes(needle) ||
-            pr.repo.toLowerCase().includes(needle) ||
-            String(pr.number).includes(needle)
-          )
-        })
-      : items
-
+    let list = items
+    if (pendingOnly) {
+      list = list.filter(
+        (pr) => pr.reviewStatus === "OPEN" || pr.reviewStatus === "IN_REVIEW",
+      )
+    }
     return [...list].sort((a, b) => {
       const favDiff = Number(Boolean(b.favorite)) - Number(Boolean(a.favorite))
       if (favDiff !== 0) return favDiff
       return (b.updatedAt || "").localeCompare(a.updatedAt || "")
     })
-  }, [items, search])
+  }, [items, pendingOnly])
 
   const toggleFavorite = useCallback(
     async (pr: PullRequestListItem) => {
@@ -163,40 +181,44 @@ export function AiReviewOverview({
         onImport={onImport}
       />
 
-      <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-border bg-panel/95 backdrop-blur-sm shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          {onMenuClick && (
-            <button
-              type="button"
-              onClick={onMenuClick}
-              className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-accent transition-colors shrink-0 lg:hidden"
-              aria-label="打开菜单"
-            >
-              <Menu className="w-5 h-5 text-foreground" />
-            </button>
-          )}
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">{zh.nav.aiReview}</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">{zh.pageSubtitle.aiReview}</p>
+      {!embedded && (
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-border bg-panel/95 backdrop-blur-sm shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {onMenuClick && (
+              <button
+                type="button"
+                onClick={onMenuClick}
+                className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-accent transition-colors shrink-0 lg:hidden"
+                aria-label="打开菜单"
+              >
+                <Menu className="w-5 h-5 text-foreground" />
+              </button>
+            )}
+            <div>
+              <h1 className="text-lg font-semibold text-foreground">AI 评审中心</h1>
+              <p className="text-xs text-muted-foreground mt-0.5">{zh.pageSubtitle.aiReview}</p>
+            </div>
           </div>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => onImportOpenChange(true)}
+            className="bg-ai-blue hover:bg-sky-300 text-primary-foreground shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            {zh.aiReview.importButton}
+          </Button>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => onImportOpenChange(true)}
-          className="bg-ai-blue hover:bg-sky-300 text-primary-foreground shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          {zh.aiReview.importButton}
-        </Button>
-      </div>
+      )}
 
       <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-4 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">{zh.aiReview.historyTitle}</h2>
+            <h2 className="text-sm font-semibold text-foreground">
+              {title ?? zh.aiReview.historyTitle}
+            </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {loading ? zh.common.loading : `${filtered.length} 条记录`}
+              {subtitle ?? (loading ? zh.common.loading : `${filtered.length} 条记录`)}
             </p>
           </div>
           <div className="relative w-full sm:w-72">
@@ -205,11 +227,19 @@ export function AiReviewOverview({
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={zh.aiReview.historySearchPlaceholder}
+              placeholder="搜索标题、编号、仓库、作者…"
               className="w-full h-9 pl-8 pr-3 text-sm bg-surface-2 border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ai-blue"
             />
           </div>
         </div>
+
+        {!pendingOnly && (
+          <ReviewStatusTabs
+            active={statusFilter}
+            counts={statusCounts}
+            onChange={setStatusFilter}
+          />
+        )}
 
         {loading && (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
@@ -260,11 +290,21 @@ export function AiReviewOverview({
                 )}
               >
                 <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                     <GitPullRequest className="w-4 h-4 shrink-0 text-ai-blue" />
                     <span className="text-[11px] font-mono text-muted-foreground truncate">
                       {pr.repo} · #{pr.number}
                     </span>
+                    {pr.reviewStatus ? (
+                      <span
+                        className={cn(
+                          "text-[9px] px-1.5 py-0.5 rounded border font-medium",
+                          reviewStatusBadgeClass(pr.reviewStatus),
+                        )}
+                      >
+                        {REVIEW_STATUS_LABELS[pr.reviewStatus]}
+                      </span>
+                    ) : null}
                   </div>
                   <button
                     type="button"

@@ -57,12 +57,15 @@ export type NavParams = {
   status?: string
   /** Open AI review list without restoring last reviewed PR from session. */
   aiReviewList?: boolean
+  /** Review center sub-tab: dashboard | pending | all | rules | stats | settings */
+  reviewTab?: string
 }
 
 interface NavigationContextValue {
   activeView: NavView
   prId: string | null
   repoId: string | null
+  reviewTab: string | null
   findingsTab: FindingsTab
   findingId: string | null
   navigate: (view: NavView, params?: NavParams) => void
@@ -107,6 +110,7 @@ function buildQuery(
   if (params?.tab) qs.set("tab", params.tab)
   if (params?.findingId) qs.set("findingId", params.findingId)
   if (params?.status) qs.set("status", params.status)
+  if (params?.reviewTab) qs.set("reviewTab", params.reviewTab)
 
   return qs.toString()
 }
@@ -127,6 +131,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const findingsTab: FindingsTab =
     tabParam === "security" || tabParam === "performance" ? tabParam : "all"
   const findingId = searchParams.get("findingId")
+  const reviewTab = searchParams.get("reviewTab")
 
   const prId =
     activeView === "ai-review" && urlPrId && !isLegacyDemoPrId(urlPrId) ? urlPrId : null
@@ -170,8 +175,8 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   )
 
   const contextValue = useMemo(
-    () => ({ activeView, prId, repoId, findingsTab, findingId, navigate }),
-    [activeView, prId, repoId, findingsTab, findingId, navigate],
+    () => ({ activeView, prId, repoId, reviewTab, findingsTab, findingId, navigate }),
+    [activeView, prId, repoId, reviewTab, findingsTab, findingId, navigate],
   )
 
   return (

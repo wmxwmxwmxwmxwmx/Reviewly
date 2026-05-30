@@ -1,22 +1,40 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { ArrowLeft, Menu } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { ExternalRepoOnboardDialog } from "@/features/prism/components/external-repo-onboard-dialog"
-import { AiReviewOverview } from "@/features/prism/views/ai-review-overview"
+import type { ReviewCenterTab } from "@/features/prism/components/review-center-nav"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { AIReviewView } from "@/features/prism/views/ai-review-view"
+import { ReviewCenterShell } from "@/features/prism/views/review-center/review-center-shell"
 import { useImportPrByUrl } from "@/hooks/use-import-pr-by-url"
 import { usePullRequest } from "@/hooks/use-pull-request"
 import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
 import { useToast } from "@/hooks/use-toast"
 import { zh } from "@/lib/i18n/zh"
 
+const REVIEW_TABS: ReviewCenterTab[] = [
+  "dashboard",
+  "pending",
+  "all",
+  "rules",
+  "stats",
+  "settings",
+]
+
+function parseReviewTab(value: string | null): ReviewCenterTab {
+  if (value && (REVIEW_TABS as string[]).includes(value)) {
+    return value as ReviewCenterTab
+  }
+  return "dashboard"
+}
+
 interface AiReviewWorkspaceProps {
   prId: string | null
+  reviewTab?: string | null
   onMenuClick?: () => void
   aiPanelOpen?: boolean
   onToggleAIPanel?: () => void
@@ -24,6 +42,7 @@ interface AiReviewWorkspaceProps {
 
 export function AiReviewWorkspace({
   prId,
+  reviewTab: reviewTabParam,
   onMenuClick,
   aiPanelOpen = true,
   onToggleAIPanel,
@@ -34,6 +53,14 @@ export function AiReviewWorkspace({
   const { toast } = useToast()
   const [importOpen, setImportOpen] = useState(false)
   const [historyReloadToken, setHistoryReloadToken] = useState(0)
+  const [centerTab, setCenterTab] = useState<ReviewCenterTab>(
+    parseReviewTab(reviewTabParam ?? null),
+  )
+  const [filterRepoId, setFilterRepoId] = useState<string | null>(urlRepoId)
+
+  useEffect(() => {
+    setCenterTab(parseReviewTab(reviewTabParam ?? null))
+  }, [reviewTabParam])
 
   const bumpHistory = useCallback(() => {
     setHistoryReloadToken((n) => n + 1)
@@ -63,18 +90,38 @@ export function AiReviewWorkspace({
 
   useRunningTask("aiReview", importing)
 
-  const overviewRepoId = currentPr?.repoId ?? urlRepoId ?? undefined
+  const overviewRepoId = currentPr?.repoId ?? filterRepoId ?? urlRepoId ?? undefined
 
   const handleSelectPr = useCallback(
     (id: string) => {
-      navigate("ai-review", { prId: id, repoId: overviewRepoId })
+      navigate("ai-review", { prId: id, repoId: overviewRepoId, reviewTab: centerTab })
     },
-    [navigate, overviewRepoId],
+    [navigate, overviewRepoId, centerTab],
   )
 
   const handleBackToList = useCallback(() => {
-    navigate("ai-review", { aiReviewList: true, repoId: overviewRepoId })
-  }, [navigate, overviewRepoId])
+    navigate("ai-review", {
+      aiReviewList: true,
+      repoId: overviewRepoId,
+      reviewTab: centerTab,
+    })
+  }, [navigate, overviewRepoId, centerTab])
+
+  const handleTabChange = useCallback(
+    (tab: ReviewCenterTab) => {
+      setCenterTab(tab)
+      navigate("ai-review", { aiReviewList: true, repoId: filterRepoId ?? undefined, reviewTab: tab })
+    },
+    [navigate, filterRepoId],
+  )
+
+  const handleRepoChange = useCallback(
+    (repoId: string | null) => {
+      setFilterRepoId(repoId)
+      navigate("ai-review", { aiReviewList: true, repoId: repoId ?? undefined, reviewTab: centerTab })
+    },
+    [navigate, centerTab],
+  )
 
   const handleImport = useCallback(
     async (url: string) => {
@@ -94,7 +141,9 @@ export function AiReviewWorkspace({
           }}
           onOnboarded={() => void refreshRepos()}
         />
-        <AiReviewOverview
+        <ReviewCenterShell
+          activeTab={centerTab}
+          onTabChange={handleTabChange}
           onMenuClick={onMenuClick}
           onSelectPr={handleSelectPr}
           importOpen={importOpen}
@@ -102,6 +151,8 @@ export function AiReviewWorkspace({
           importing={importing}
           onImport={handleImport}
           reloadToken={historyReloadToken}
+          repoId={filterRepoId ?? urlRepoId}
+          onRepoChange={handleRepoChange}
         />
       </>
     )
@@ -138,7 +189,7 @@ export function AiReviewWorkspace({
           className="text-muted-foreground hover:text-foreground -ml-2"
         >
           <ArrowLeft className="w-4 h-4" />
-          {zh.aiReview.backToList}
+          返回评审中心
         </Button>
         {currentPr ? (
           <span className="text-sm text-muted-foreground truncate hidden sm:inline">

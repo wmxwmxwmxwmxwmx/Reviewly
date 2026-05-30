@@ -134,6 +134,7 @@ class PullRequest(Base):
     display_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     favorite: Mapped[bool] = mapped_column(Boolean, default=False)
+    review_status: Mapped[str] = mapped_column(String(32), default="OPEN", index=True)
 
     analysis_jobs: Mapped[list[AnalysisJob]] = relationship(back_populates="pull_request")
 
@@ -277,5 +278,36 @@ class ActivityEvent(Base):
     pull_request_id: Mapped[str | None] = mapped_column(
         String(64), ForeignKey("pull_requests.id"), nullable=True
     )
+    payload: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ReviewComment(Base):
+    __tablename__ = "review_comments"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    pull_request_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("pull_requests.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("auth_users.id", ondelete="SET NULL"), nullable=True
+    )
+    user_name: Mapped[str] = mapped_column(String(255), default="")
+    comment_type: Mapped[str] = mapped_column(String(32))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ReviewTimelineEvent(Base):
+    __tablename__ = "review_timeline_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    pull_request_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("pull_requests.id", ondelete="CASCADE"), index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(64))
+    actor: Mapped[str] = mapped_column(String(255))
+    actor_type: Mapped[str] = mapped_column(String(16), default="system")
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
     payload: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

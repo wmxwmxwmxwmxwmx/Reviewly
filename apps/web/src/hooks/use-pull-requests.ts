@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react"
 
-import { fetchPullRequests } from "@/lib/api/pull-requests"
+import { fetchPullRequestsWithCounts } from "@/lib/api/review-center"
 import { PrismApiError } from "@/lib/api/client"
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
-import type { PullRequest } from "@reviewly/shared"
+import type { PullRequest, ReviewStatusCounts } from "@reviewly/shared"
 
 export function usePullRequests(filters?: Record<string, string | undefined>) {
   const [items, setItems] = useState<PullRequest[]>([])
+  const [statusCounts, setStatusCounts] = useState<ReviewStatusCounts | undefined>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const filterKey = JSON.stringify(filters ?? {})
@@ -18,8 +19,17 @@ export function usePullRequests(filters?: Record<string, string | undefined>) {
       setLoading(true)
       setError(null)
       try {
-        const res = await fetchPullRequests(filters, signal)
+        const useCounts = filters?.includeCounts === "true"
+        const res = useCounts
+          ? await fetchPullRequestsWithCounts(filters, signal)
+          : await import("@/lib/api/pull-requests").then((m) =>
+              m.fetchPullRequests(filters, signal),
+            )
         setItems(res.items)
+        if (useCounts) {
+          const counts = (res as { statusCounts?: ReviewStatusCounts }).statusCounts
+          if (counts) setStatusCounts(counts)
+        }
       } catch (e: unknown) {
         if (isAbortError(e)) return
         setError(e instanceof PrismApiError ? e.message : "加载失败")
@@ -43,5 +53,5 @@ export function usePullRequests(filters?: Record<string, string | undefined>) {
     return () => ac.abort()
   }, [load])
 
-  return { items, loading, error, reload }
+  return { items, statusCounts, loading, error, reload }
 }

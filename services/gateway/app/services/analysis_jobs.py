@@ -145,6 +145,10 @@ async def run_job(session: Session, job_id: str) -> None:
         payload={"jobId": job_id},
     )
 
+    from app.repositories.review_center import record_ai_analysis_complete
+
+    record_ai_analysis_complete(session, pr_id)
+
     if job_row and job_row.analysis_version:
         cache.record_cache_event(
             session,

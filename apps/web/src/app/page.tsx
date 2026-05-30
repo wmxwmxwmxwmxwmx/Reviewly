@@ -16,7 +16,7 @@ import { StandardView } from "@/features/prism/components/view-registry"
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/error-boundary"
 function PRismPageContent() {
-  const { activeView, prId, navigate } = useNavigation()
+  const { activeView, prId, reviewTab, navigate } = useNavigation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [aiPanelOpen, setAiPanelOpen] = useState(true)
 
@@ -80,6 +80,7 @@ function PRismPageContent() {
           <ErrorBoundary section="AI 评审" key={`ai-review-${prId ?? "workspace"}`}>
             <AiReviewWorkspace
               prId={prId}
+              reviewTab={reviewTab}
               onMenuClick={() => setSidebarOpen(true)}
               aiPanelOpen={aiPanelOpen}
               onToggleAIPanel={() => setAiPanelOpen((open) => !open)}

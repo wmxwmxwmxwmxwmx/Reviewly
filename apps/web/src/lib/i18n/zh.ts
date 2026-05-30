@@ -2,7 +2,7 @@ export const zh = {
   nav: {
     dashboard: "概览",
     pullRequests: "合并请求",
-    aiReview: "AI 评审",
+    aiReview: "AI 评审中心",
     findings: "风险中心",
     security: "安全问题",
     performance: "性能问题",
@@ -15,7 +15,7 @@ export const zh = {
   pageSubtitle: {
     dashboard: "掌握待办 PR、开放风险与近期研发动态",
     pullRequests: "浏览开放合并请求，按风险筛选并进入评审",
-    aiReview: "对比代码改动与发现项，获取 AI 评审摘要与建议",
+    aiReview: "企业级 PR 评审中心：AI 分析、人工审批、流转与统计",
     findings: "汇总安全与性能风险，按严重程度优先处理",
     security: "汇总各 PR 的安全风险，按严重程度优先处理",
     performance: "发现本次改动可能的性能隐患，并获取优化建议",

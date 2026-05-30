@@ -227,6 +227,91 @@ export interface RepoAnalyzeContext {
   contextWarnings?: string[]
 }
 
+export type ReviewStatus =
+  | "OPEN"
+  | "IN_REVIEW"
+  | "CHANGES_REQUESTED"
+  | "APPROVED"
+  | "MERGED"
+  | "CLOSED"
+
+export type ReviewCommentType = "COMMENT" | "APPROVE" | "REQUEST_CHANGES"
+
+export interface ReviewComment {
+  id: string
+  prId: string
+  userId?: string | null
+  userName: string
+  type: ReviewCommentType
+  content: string
+  createdAt: string
+}
+
+export interface ReviewTimelineEvent {
+  id: string
+  prId: string
+  eventType: string
+  actor: string
+  actorType: "user" | "ai" | "system"
+  content?: string | null
+  payload?: Record<string, unknown> | null
+  createdAt: string
+}
+
+export interface ReviewStatusCounts {
+  ALL: number
+  OPEN: number
+  IN_REVIEW: number
+  CHANGES_REQUESTED: number
+  APPROVED: number
+  MERGED: number
+  CLOSED: number
+}
+
+export interface ReviewCenterDashboard {
+  pendingReview: number
+  inReview: number
+  assignedToMe: number
+  myCreated: number
+  highRisk: number
+  weeklyApprovals: number
+  aiFindingsThisWeek: number
+  statusCounts: ReviewStatusCounts
+}
+
+export interface ReviewCenterStats {
+  weeklyAnalysisCount: number
+  aiCalls: number
+  totalTokens: number
+  costCny: number
+  approvalRate: number
+  rejectionRate: number
+  avgApprovalHours: number
+  highRiskCount: number
+  dailyTrend: { date: string; analysisCount: number }[]
+}
+
+export interface RepoReviewGroupItem {
+  id: string
+  name: string
+  fullName: string
+  prCount: number
+  language?: string | null
+}
+
+export interface RepoReviewGroup {
+  id: string
+  label: string
+  repos: RepoReviewGroupItem[]
+}
+
+export interface ApprovalCheckResult {
+  blocked: boolean
+  reasons: string[]
+  securityScore?: number
+  criticalCount?: number
+}
+
 export interface PullRequestListItem {
   id: string
   repoId: string
@@ -235,6 +320,7 @@ export interface PullRequestListItem {
   title: string
   author: string
   state: "open" | "closed" | "merged"
+  reviewStatus?: ReviewStatus
   riskLevel: "critical" | "high" | "medium" | "low"
   riskScore: number
   updatedAt: string

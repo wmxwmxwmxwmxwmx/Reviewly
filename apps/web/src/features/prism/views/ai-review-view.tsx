@@ -33,6 +33,9 @@ import { formatPrismApiError, PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { AdoptRepoBanner } from "@/features/prism/components/adopt-repo-banner"
+import { AiReviewerCard } from "@/features/prism/components/ai-reviewer-card"
+import { ReviewActionsBar } from "@/features/prism/components/review-actions-bar"
+import { ReviewTimeline } from "@/features/prism/components/review-timeline"
 import { PrArchitectureImpact } from "@/features/prism/components/pr-architecture-impact"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -92,6 +95,7 @@ export function AIReviewView({
     cached.activePanelTab ?? "risks",
   )
   const [governanceRefreshKey, setGovernanceRefreshKey] = useState(0)
+  const [reviewTimelineKey, setReviewTimelineKey] = useState(0)
   const [runUsage, setRunUsage] = useState<AiUsageMetrics | undefined>(aiSummary?.usage)
 
   const analyzeAbortRef = useRef<AbortController | null>(null)
@@ -568,6 +572,24 @@ ${diffContext || "（无 diff 内容）"}`,
 
           <div className="p-5 space-y-4">
             {pr ? (
+              <>
+                <AiReviewerCard
+                  securityScore={pr.securityScore}
+                  performanceScore={pr.performanceScore}
+                  maintainabilityScore={pr.maintainabilityScore}
+                  riskScore={pr.riskScore}
+                  mergeRecommendation={latest?.mergeRecommendation}
+                  criticalCount={findings.filter((f) => f.severity === "critical").length}
+                  aiSummary={generatedSummary ?? latest?.summary}
+                />
+                <ReviewActionsBar
+                  prId={prId}
+                  onUpdated={() => setReviewTimelineKey((k) => k + 1)}
+                />
+              </>
+            ) : null}
+
+            {pr ? (
               <PROverview prData={pr} analysisScores={analysisScores} />
             ) : prError ? (
               <p className="text-xs text-risk-high">{prError}</p>
@@ -618,6 +640,13 @@ ${diffContext || "（无 diff 内容）"}`,
               analyzing={scanning}
               chunkProgress={scanning ? chunkProgress : undefined}
             />
+
+            {pr ? (
+              <div className="rounded-lg border border-border bg-card p-4">
+                <h3 className="text-sm font-semibold text-foreground mb-4">审批历史</h3>
+                <ReviewTimeline prId={prId} refreshKey={reviewTimelineKey} />
+              </div>
+            ) : null}
           </div>
         </main>
       </div>

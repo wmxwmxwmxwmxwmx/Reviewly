@@ -93,6 +93,8 @@ def list_pull_requests(
     risk: str | None = None,
     author: str | None = None,
     state: str | None = None,
+    review_status: str | None = None,
+    search: str | None = None,
     include_external: bool = False,
     user_id: str | None = None,
     team_ids: list[str] | None = None,
@@ -130,6 +132,25 @@ def list_pull_requests(
         items = [p for p in items if author.lower() in p.get("author", "").lower()]
     if state:
         items = [p for p in items if p.get("state") == state]
+    if review_status and review_status != "ALL":
+        items = [p for p in items if p.get("reviewStatus") == review_status]
+    if search:
+        needle = search.strip().lower()
+        if needle:
+
+            def _matches(p: dict) -> bool:
+                haystack = " ".join(
+                    [
+                        str(p.get("title") or ""),
+                        str(p.get("displayName") or ""),
+                        str(p.get("repo") or ""),
+                        str(p.get("author") or ""),
+                        str(p.get("number") or ""),
+                    ]
+                ).lower()
+                return needle in haystack
+
+            items = [p for p in items if _matches(p)]
     items.sort(key=lambda p: p.get("updatedAt") or "", reverse=True)
     items.sort(key=lambda p: not bool(p.get("favorite")))
     return items
@@ -331,8 +352,12 @@ def upsert_pull_request(
     head_sha: str | None = None,
     base_sha: str | None = None,
 ) -> PullRequest:
+    from app.repositories.review_center import map_github_state_to_review_status, record_pr_created
+
+    mapped_status = map_github_state_to_review_status(state)
     row = session.get(PullRequest, pr_id)
-    if row is None:
+    is_new = row is None
+    if is_new:
         row = PullRequest(
             id=pr_id,
             repository_id=repository_id,
@@ -344,6 +369,7 @@ def upsert_pull_request(
             owner_user_id=owner_user_id,
             head_sha=head_sha,
             base_sha=base_sha,
+            review_status=mapped_status,
         )
         session.add(row)
     else:
@@ -356,6 +382,10 @@ def upsert_pull_request(
             row.head_sha = head_sha
         if base_sha is not None:
             row.base_sha = base_sha
+        if mapped_status in ("MERGED", "CLOSED"):
+            row.review_status = mapped_status
+        elif not row.review_status:
+            row.review_status = mapped_status
 
     if diff_files is not None or patch is not None:
         diff_row = session.get(PullRequestDiff, pr_id)
@@ -373,6 +403,9 @@ def upsert_pull_request(
                 diff_row.patch = patch
 
     session.flush()
+    if is_new:
+        record_pr_created(session, pr_id, str(payload.get("author") or "未知作者"))
+        session.flush()
     return row
 
 
@@ -404,4 +437,5 @@ def _pr_dict(row: PullRequest, repo: Repository | None = None) -> dict:
     if row.note:
         data["note"] = row.note
     data["favorite"] = bool(row.favorite)
+    data["reviewStatus"] = row.review_status or "OPEN"
     return data

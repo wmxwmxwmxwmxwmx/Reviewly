@@ -208,9 +208,12 @@ def pull_requests(
     risk: str | None = None,
     author: str | None = None,
     state: str | None = None,
+    review_status: str | None = Query(None, alias="reviewStatus"),
+    search: str | None = None,
     cursor: str | None = None,
     limit: int = Query(default=50, le=100),
     include_external: bool = Query(default=False, alias="includeExternal"),
+    include_counts: bool = Query(default=False, alias="includeCounts"),
 ) -> dict:
     user_id, team_ids = _resolve_user_scope(db, user)
     items = pr_repo.list_pull_requests(
@@ -220,11 +223,20 @@ def pull_requests(
         risk=risk,
         author=author,
         state=state,
+        review_status=review_status,
+        search=search,
         include_external=include_external,
         user_id=user_id,
         team_ids=team_ids,
     )
-    return {"items": items[:limit], "cursor": cursor, "hasMore": len(items) > limit}
+    result: dict = {"items": items[:limit], "cursor": cursor, "hasMore": len(items) > limit}
+    if include_counts:
+        from app.repositories import review_center as rc_repo
+
+        result["statusCounts"] = rc_repo.count_by_review_status(
+            db, repo_id=repo_id, user_id=user_id, team_ids=team_ids
+        )
+    return result
 
 
 @router.post("/pull-requests/import")
