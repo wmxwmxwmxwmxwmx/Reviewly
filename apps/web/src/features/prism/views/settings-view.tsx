@@ -280,16 +280,16 @@ export function SettingsView() {
           <span className="text-sm font-medium text-foreground">安全设置</span>
           {security.twoFactorEnabled && (
             <span className="ml-auto text-[11px] px-2 py-0.5 rounded-full border text-risk-low border-risk-low/30 bg-risk-low/10">
-              2FA 已启用
+              会话锁定已启用
             </span>
           )}
         </div>
         <div className="divide-y divide-border">
           <div className="px-4 py-3 flex items-center justify-between gap-4">
             <div>
-              <span className="text-sm text-foreground">双因素认证</span>
+              <span className="text-sm text-foreground">{zh.settings.sessionLock}</span>
               <p className="text-xs text-muted-foreground mt-0.5">
-                启用后，会话锁定需输入 6 位 PIN 解锁
+                {zh.settings.sessionLockHint}
               </p>
             </div>
             <button

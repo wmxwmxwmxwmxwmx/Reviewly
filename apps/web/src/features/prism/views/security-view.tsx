@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils"
 
 const SEVERITY_OPTIONS = ["", "critical", "high", "medium", "low"] as const
 
+/** Hidden from sidebar; URL `?view=security` redirects via navigation-context. */
 export function SecurityView() {
   const { navigate } = useNavigation()
   const { repos } = useReposStore()

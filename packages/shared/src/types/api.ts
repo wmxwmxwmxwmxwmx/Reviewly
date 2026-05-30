@@ -350,6 +350,52 @@ export interface PerformanceFindingsPage {
   pageSize: number
 }
 
+/** Unified findings center row (security + performance). */
+export interface UnifiedFinding {
+  id: string
+  findingType: "security" | "performance"
+  typeLabel: string
+  repo: string
+  repoId?: string
+  prNumber: number
+  pullRequestId?: string | null
+  file: string
+  line: number
+  severity: "critical" | "high" | "medium" | "low"
+  rule: string
+  description: string
+  suggestion: string
+  status?: "open" | "ignored" | "resolved"
+  title?: string
+  discoveredAt?: string | null
+  aiInsight?: AiPersistedContent | null
+}
+
+export interface FindingsStats {
+  total: number
+  critical: number
+  high: number
+  medium: number
+  low: number
+}
+
+export interface FindingsTrendPoint {
+  date: string
+  count: number
+}
+
+export interface FindingsPage {
+  items: UnifiedFinding[]
+  total: number
+  page: number
+  pageSize: number
+  stats: FindingsStats
+  trends: {
+    last7Days: FindingsTrendPoint[]
+    last30Days: FindingsTrendPoint[]
+  }
+}
+
 export interface ArchitectureFinding extends AnalysisFinding {
   type: "architecture"
 }

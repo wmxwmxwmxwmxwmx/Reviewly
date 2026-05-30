@@ -33,6 +33,7 @@ import { PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { AdoptRepoBanner } from "@/features/prism/components/adopt-repo-banner"
+import { PrArchitectureImpact } from "@/features/prism/components/pr-architecture-impact"
 import { ExternalRepoOnboardDialog } from "@/features/prism/components/external-repo-onboard-dialog"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -97,7 +98,7 @@ export function AIReviewView({
   const [governanceRefreshKey, setGovernanceRefreshKey] = useState(0)
 
   const analyzeAbortRef = useRef<AbortController | null>(null)
-  const handleRescanRef = useRef<(() => Promise<void>) | null>(null)
+  const handleRescanRef = useRef<((options?: { force?: boolean }) => Promise<void>) | null>(null)
 
   const { refresh: refreshRepos } = useReposStore()
   const {
@@ -572,6 +573,15 @@ ${diffContext || "（无 diff 内容）"}`,
               error={summaryError}
               onGoToSettings={() => navigate("settings")}
             />
+
+            {pr?.repoId && (
+              <PrArchitectureImpact
+                repoId={pr.repoId}
+                diffFiles={diffFiles}
+                loadingDiff={diffLoading}
+                onOpenArchitecture={() => navigate("architecture", { repoId: pr.repoId })}
+              />
+            )}
 
             {diffError && (
               <p className="text-xs text-risk-high">

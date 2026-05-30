@@ -52,10 +52,10 @@ export function DashboardView() {
         : type.includes("review") || type.includes("analysis")
           ? "medium"
           : "low"
-      const target: NavView = type.includes("security")
-        ? "security"
+      const target: NavView = type.includes("security") || type.includes("performance")
+        ? "findings"
         : type.includes("pr-opened") || type.includes("pr-merged")
-          ? "pull-requests"
+          ? "repos"
           : "ai-review"
       return {
         severity,
@@ -63,6 +63,12 @@ export function DashboardView() {
         action: "查看详情",
         target,
         pullRequestId: activity.pullRequestId,
+        findingsTab:
+          type.includes("performance")
+            ? ("performance" as const)
+            : type.includes("security")
+              ? ("security" as const)
+              : undefined,
       }
     })
   }, [activities])
@@ -70,9 +76,14 @@ export function DashboardView() {
   const navigateFromInsight = (
     target: NavView,
     pullRequestId?: string,
+    findingsTab?: "security" | "performance",
   ) => {
-    if (pullRequestId && (target === "ai-review" || target === "security")) {
+    if (pullRequestId && target === "ai-review") {
       navigate(target, { prId: pullRequestId })
+      return
+    }
+    if (target === "findings") {
+      navigate("findings", { tab: findingsTab ?? "security" })
       return
     }
     navigate(target)
@@ -87,7 +98,7 @@ export function DashboardView() {
     <div className="p-5 space-y-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">总览面板</h1>
+          <h1 className="text-lg font-semibold text-foreground">{zh.nav.dashboard}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.dashboard}</p>
         </div>
         <button
@@ -418,7 +429,13 @@ export function DashboardView() {
                 <span className="flex-1 text-sm text-muted-foreground">{insight.message}</span>
                 <button
                   type="button"
-                  onClick={() => navigateFromInsight(insight.target, insight.pullRequestId)}
+                  onClick={() =>
+                    navigateFromInsight(
+                      insight.target,
+                      insight.pullRequestId,
+                      insight.findingsTab,
+                    )
+                  }
                   className="text-xs text-ai-blue hover:underline"
                 >
                   {insight.action}

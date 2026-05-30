@@ -52,7 +52,7 @@ export function SessionLockOverlay() {
             <h2 className="text-base font-semibold text-foreground">会话已锁定</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
               {requiresPin
-                ? "因长时间无操作，请输入双因素验证码以继续"
+                ? "因长时间无操作，请输入 PIN 解锁会话以继续"
                 : "因长时间无操作，请确认后继续工作"}
             </p>
           </div>

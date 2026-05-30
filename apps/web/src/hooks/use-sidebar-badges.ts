@@ -11,17 +11,15 @@ import {
 export interface SidebarBadgeState {
   pullRequests: string | null
   aiReview: string | null
-  security: string | null
+  findings: string | null
   governance: string | null
-  performance: string | null
 }
 
 const defaultBadges: SidebarBadgeState = {
   pullRequests: null,
   aiReview: null,
-  security: null,
+  findings: null,
   governance: null,
-  performance: null,
 }
 
 const defaultRunningTasks = {
@@ -58,6 +56,13 @@ export function useSidebarBadges() {
     return totals
   }, [serverCounts, clientCounts])
 
+  const findingsOpenCount = useMemo(() => {
+    const summary = dashboard?.summary
+    const security = summary?.securityCount ?? dashboard?.securityIssues ?? 0
+    const performance = summary?.performanceCount ?? 0
+    return security + performance
+  }, [dashboard])
+
   const hasRunningTasks = useMemo(
     () => MODULES.some((module) => totalCounts[module] > 0),
     [totalCounts],
@@ -75,14 +80,15 @@ export function useSidebarBadges() {
     if (!dashboard) {
       return defaultBadges
     }
+    const findingsTaskCount = totalCounts.security + totalCounts.performance
+    const findingsBadgeCount = Math.max(findingsOpenCount, findingsTaskCount)
     return {
       pullRequests: toBadge(totalCounts.pullRequests),
       aiReview: toBadge(totalCounts.aiReview),
-      security: toBadge(totalCounts.security),
+      findings: toBadge(findingsBadgeCount),
       governance: toBadge(totalCounts.governance),
-      performance: toBadge(totalCounts.performance),
     }
-  }, [dashboard, totalCounts])
+  }, [dashboard, totalCounts, findingsOpenCount])
 
   return { badges, error: dashboardError, loading }
 }

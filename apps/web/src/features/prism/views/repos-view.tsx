@@ -136,8 +136,10 @@ export function ReposView() {
     <div className="p-5 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">仓库管理</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.repos}</p>
+          <h1 className="text-lg font-semibold text-foreground">{zh.nav.repos}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {zh.pageSubtitle.repos} · 同步合并请求后进入 AI 评审
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <AddRepoDialog importing={importing} onImport={handleImport} />

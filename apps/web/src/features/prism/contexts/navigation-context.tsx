@@ -19,16 +19,19 @@ const DEFAULT_VIEW: NavView = "dashboard"
 
 const NAV_VIEWS: NavView[] = [
   "dashboard",
-  "pull-requests",
+  "repos",
   "ai-review",
+  "findings",
+  "settings",
+  "pull-requests",
   "security",
   "performance",
   "architecture",
   "governance",
-  "repos",
   "team",
-  "settings",
 ]
+
+export type FindingsTab = "all" | "security" | "performance"
 
 function isNavView(value: string | null): value is NavView {
   return value !== null && (NAV_VIEWS as string[]).includes(value)
@@ -38,17 +41,28 @@ function isLegacyDemoPrId(prId: string | null | undefined): boolean {
   return prId === LEGACY_DEMO_PR_ID
 }
 
+function legacyViewRedirect(view: NavView): { view: NavView; tab?: FindingsTab } | null {
+  if (view === "security") return { view: "findings", tab: "security" }
+  if (view === "performance") return { view: "findings", tab: "performance" }
+  return null
+}
+
 export type NavParams = {
   prId?: string
   repoId?: string
   file?: string
   line?: string
+  tab?: FindingsTab
+  findingId?: string
+  status?: string
 }
 
 interface NavigationContextValue {
   activeView: NavView
   prId: string | null
   repoId: string | null
+  findingsTab: FindingsTab
+  findingId: string | null
   navigate: (view: NavView, params?: NavParams) => void
 }
 
@@ -85,6 +99,9 @@ function buildQuery(
   if (params?.repoId) qs.set("repoId", params.repoId)
   if (params?.file) qs.set("file", params.file)
   if (params?.line) qs.set("line", params.line)
+  if (params?.tab) qs.set("tab", params.tab)
+  if (params?.findingId) qs.set("findingId", params.findingId)
+  if (params?.status) qs.set("status", params.status)
 
   return qs.toString()
 }
@@ -94,10 +111,17 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams()
   const { lastReviewedPrId, clearLastReviewedPrIdIfLegacy } = useAIReviewSession()
 
-  const viewParam = searchParams.get("view")
+  const rawViewParam = searchParams.get("view")
+  const legacy = rawViewParam && isNavView(rawViewParam) ? legacyViewRedirect(rawViewParam) : null
+
+  const viewParam = legacy?.view ?? rawViewParam
   const activeView = isNavView(viewParam) ? viewParam : DEFAULT_VIEW
   const urlPrId = searchParams.get("prId")
   const repoId = searchParams.get("repoId")
+  const tabParam = searchParams.get("tab")
+  const findingsTab: FindingsTab =
+    tabParam === "security" || tabParam === "performance" ? tabParam : "all"
+  const findingId = searchParams.get("findingId")
 
   const prId =
     activeView === "ai-review"
@@ -109,6 +133,15 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     clearLastReviewedPrIdIfLegacy()
   }, [clearLastReviewedPrIdIfLegacy])
+
+  useEffect(() => {
+    if (legacy) {
+      const qs = new URLSearchParams(searchParams.toString())
+      qs.set("view", legacy.view)
+      if (legacy.tab) qs.set("tab", legacy.tab)
+      router.replace(`/?${qs.toString()}`)
+    }
+  }, [legacy, router, searchParams])
 
   useEffect(() => {
     const hasView = Boolean(searchParams.get("view"))
@@ -136,8 +169,8 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   )
 
   const contextValue = useMemo(
-    () => ({ activeView, prId, repoId, navigate }),
-    [activeView, prId, repoId, navigate],
+    () => ({ activeView, prId, repoId, findingsTab, findingId, navigate }),
+    [activeView, prId, repoId, findingsTab, findingId, navigate],
   )
 
   return (

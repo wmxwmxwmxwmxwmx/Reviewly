@@ -2,6 +2,7 @@
 
 import type { NavView } from "@/features/prism/components/sidebar"
 import { DashboardView } from "@/features/prism/views/dashboard-view"
+import { FindingsView } from "@/features/prism/views/findings-view"
 import { PRListView } from "@/features/prism/views/pr-list-view"
 import { SecurityView } from "@/features/prism/views/security-view"
 import { PerformanceView } from "@/features/prism/views/performance-view"
@@ -15,6 +16,8 @@ export function StandardView({ view }: { view: Exclude<NavView, "ai-review"> }) 
   switch (view) {
     case "dashboard":
       return <DashboardView />
+    case "findings":
+      return <FindingsView />
     case "pull-requests":
       return <PRListView />
     case "security":

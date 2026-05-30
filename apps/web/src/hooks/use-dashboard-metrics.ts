@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { Clock, Gauge, GitPullRequest, Shield } from "lucide-react"
+import { Clock, GitPullRequest, Shield } from "lucide-react"
 
 import type { DashboardStats } from "@reviewly/shared"
 
@@ -24,11 +24,13 @@ export function useDashboardMetrics(dashboard: DashboardStats | null, loading: b
     const summary = d?.summary
     const pending = summary?.openPrCount ?? d?.pendingPrs ?? 0
     const security = summary?.securityCount ?? d?.securityIssues ?? 0
-    const highRisk = summary?.highRiskCount ?? 0
     const performance = summary?.performanceCount ?? 0
+    const openRisks = security + performance
+    const highRisk = summary?.highRiskCount ?? 0
     const avgMs = d?.analysisTiming?.avgDurationMs ?? 0
     const avgHours =
       d?.avgReviewHours ?? (avgMs > 0 ? Math.round((avgMs / 3_600_000) * 10) / 10 : 0)
+    const runningAi = d?.runningTasks?.aiReview ?? 0
 
     return [
       {
@@ -41,20 +43,22 @@ export function useDashboardMetrics(dashboard: DashboardStats | null, loading: b
       },
       {
         icon: Shield,
-        label: "安全问题",
-        value: String(security),
-        change: security > 0 ? "需关注" : "—",
-        trend: security > 0 ? "up" : "down",
+        label: "开放风险",
+        value: String(openRisks),
+        change:
+          security > 0 || performance > 0
+            ? `${security} 安全 · ${performance} 性能`
+            : "—",
+        trend: openRisks > 0 ? "up" : "down",
         color: "text-risk-high",
       },
       {
-        icon: Gauge,
-        label: "代码质量",
-        value: String(d?.qualityScore ?? "—"),
-        suffix: "/100",
-        change: performance > 0 ? `${performance} 性能` : "—",
-        trend: "up",
-        color: "text-risk-low",
+        icon: Shield,
+        label: "分析任务",
+        value: String(d?.analysisTiming?.completedCount ?? runningAi),
+        change: runningAi > 0 ? `${runningAi} 进行中` : "—",
+        trend: runningAi > 0 ? "up" : "down",
+        color: "text-ai-purple",
       },
       {
         icon: Clock,
@@ -63,7 +67,7 @@ export function useDashboardMetrics(dashboard: DashboardStats | null, loading: b
         suffix: avgHours > 0 ? "h" : undefined,
         change:
           d?.analysisTiming?.completedCount != null
-            ? `${d.analysisTiming.completedCount} 次`
+            ? `${d.analysisTiming.completedCount} 次完成`
             : "—",
         trend: "down",
         color: "text-foreground",

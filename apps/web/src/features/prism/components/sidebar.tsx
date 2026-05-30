@@ -3,14 +3,9 @@
 import { motion } from "framer-motion"
 import {
   LayoutDashboard,
-  GitPullRequest,
   BrainCircuit,
-  Shield,
-  Gauge,
-  Network,
-  GitBranch,
+  AlertTriangle,
   BookOpen,
-  Users,
   Settings,
   ChevronRight,
 } from "lucide-react"
@@ -20,28 +15,34 @@ import { useSidebarBadges } from "@/hooks/use-sidebar-badges"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
-export type NavView =
+/** Primary sidebar entries shown to users. */
+export type PrimaryNavView =
   | "dashboard"
-  | "pull-requests"
+  | "repos"
   | "ai-review"
+  | "findings"
+  | "settings"
+
+/** Legacy / deep-link views kept routable but hidden from sidebar. */
+export type HiddenNavView =
+  | "pull-requests"
   | "security"
   | "performance"
   | "architecture"
   | "governance"
-  | "repos"
   | "team"
-  | "settings"
 
-const navItems: { icon: typeof LayoutDashboard; label: string; view: NavView }[] = [
+export type NavView = PrimaryNavView | HiddenNavView
+
+const primaryNavItems: {
+  icon: typeof LayoutDashboard
+  label: string
+  view: PrimaryNavView
+}[] = [
   { icon: LayoutDashboard, label: zh.nav.dashboard, view: "dashboard" },
-  { icon: GitPullRequest, label: zh.nav.pullRequests, view: "pull-requests" },
-  { icon: BrainCircuit, label: zh.nav.aiReview, view: "ai-review" },
-  { icon: Shield, label: zh.nav.security, view: "security" },
-  { icon: Gauge, label: zh.nav.performance, view: "performance" },
-  { icon: Network, label: zh.nav.architecture, view: "architecture" },
-  { icon: GitBranch, label: zh.nav.governance, view: "governance" },
   { icon: BookOpen, label: zh.nav.repos, view: "repos" },
-  { icon: Users, label: zh.nav.team, view: "team" },
+  { icon: BrainCircuit, label: zh.nav.aiReview, view: "ai-review" },
+  { icon: AlertTriangle, label: zh.nav.findings, view: "findings" },
   { icon: Settings, label: zh.nav.settings, view: "settings" },
 ]
 
@@ -56,6 +57,10 @@ interface SidebarProps {
 export function Sidebar({ className, activeView, onViewChange, mobile, onClose }: SidebarProps) {
   const hydrated = useHydrated()
   const { badges } = useSidebarBadges()
+
+  const sidebarActive =
+    primaryNavItems.find((i) => i.view === activeView)?.view ??
+    (activeView === "security" || activeView === "performance" ? "findings" : null)
 
   return (
     <aside
@@ -97,22 +102,16 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
 
       <nav className="flex-1 overflow-y-auto py-3 px-2">
         <ul className="space-y-0.5">
-          {navItems.map((item) => {
-            const isActive = item.view === activeView
+          {primaryNavItems.map((item) => {
+            const isActive = sidebarActive === item.view
             const badge =
-              item.view === "pull-requests"
-                ? badges.pullRequests
-                : item.view === "ai-review"
-                  ? badges.aiReview
-                  : item.view === "security"
-                    ? badges.security
-                    : item.view === "governance"
-                      ? badges.governance
-                      : item.view === "performance"
-                        ? badges.performance
-                        : null
+              item.view === "ai-review"
+                ? badges.aiReview
+                : item.view === "findings"
+                  ? badges.findings
+                  : null
             return (
-              <li key={item.label}>
+              <li key={item.view}>
                 <motion.button
                   onClick={() => onViewChange(item.view)}
                   className={cn(
