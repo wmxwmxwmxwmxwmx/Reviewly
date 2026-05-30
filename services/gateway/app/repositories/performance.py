@@ -40,11 +40,14 @@ def list_performance_findings(session: Session) -> list[dict[str, Any]]:
     return [_finding_to_api(r) for r in rows]
 
 
-def get_performance_stats(session: Session) -> dict[str, Any]:
-    findings = list_performance_findings(session)
-    high = sum(1 for f in findings if f.get("severity") in ("critical", "high"))
+def get_performance_stats(session: Session, *, repo: str | None = None) -> dict[str, Any]:
+    if repo:
+        items, _ = list_performance_findings_filtered(session, repo=repo, page=1, page_size=10_000)
+    else:
+        items = list_performance_findings(session)
+    high = sum(1 for f in items if f.get("severity") in ("critical", "high"))
     return {
-        "openFindings": len(findings),
+        "openFindings": len(items),
         "avgImpact": "high" if high > 2 else "medium" if high else "low",
         "status": "ok",
     }

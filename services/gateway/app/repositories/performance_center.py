@@ -13,6 +13,7 @@ from app.repositories.ai_persisted import extract_from_payload
 from app.repositories.security_center import extract_file_context
 from app.repositories.seed_filter import (
     exclude_seed_findings,
+    exclude_seed_repositories,
     is_seed_pull_request,
     is_seed_repository,
     only_stats_eligible_findings,
@@ -114,6 +115,15 @@ def list_performance_findings_filtered(
 ) -> tuple[list[dict[str, Any]], int]:
     severities = [s.strip() for s in severity.split(",") if s.strip()] if severity else None
 
+    if repo:
+        repo_exists = session.scalar(
+            exclude_seed_repositories(
+                select(func.count()).select_from(Repository).where(Repository.full_name == repo)
+            )
+        )
+        if not repo_exists:
+            return [], 0
+
     base = (
         select(AnalysisFinding, PullRequest, Repository)
         .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
@@ -131,7 +141,7 @@ def list_performance_findings_filtered(
     if severities:
         base = base.where(AnalysisFinding.severity.in_(severities))
     if repo:
-        base = base.where(Repository.full_name.ilike(f"%{repo}%"))
+        base = base.where(Repository.full_name == repo)
     if q:
         pattern = f"%{q}%"
         base = base.where(

@@ -7,8 +7,6 @@ import { Gauge, Search, Zap, ChevronLeft, ChevronRight } from "lucide-react"
 import { PerformanceFindingsTable, perfSeverityConfig } from "@/features/prism/components/performance-findings-table"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { usePerformanceCenter } from "@/hooks/use-performance-center"
-import { useReposStore } from "@/features/prism/contexts/repos-context"
-import { isStatsEligibleRepo } from "@/lib/repos-utils"
 import { zh } from "@/lib/i18n/zh"
 import { formatPerfType, PERF_TYPE_FILTER_OPTIONS } from "@/lib/perf-type-labels"
 import { cn } from "@/lib/utils"
@@ -17,7 +15,6 @@ const SEVERITY_OPTIONS = ["", "critical", "high", "medium", "low"] as const
 
 export function PerformanceView() {
   const { navigate } = useNavigation()
-  const { repos } = useReposStore()
   const {
     items,
     total,
@@ -28,6 +25,7 @@ export function PerformanceView() {
     loading,
     error,
     reload,
+    managedRepos,
     severityFilter,
     setSeverityFilter,
     typeFilter,
@@ -149,12 +147,10 @@ export function PerformanceView() {
             <select
               value={repoFilter}
               onChange={(e) => setRepoFilter(e.target.value)}
-              className="ml-2 h-7 text-xs bg-surface-2 border border-border rounded-md px-2 text-foreground"
+              disabled={managedRepos.length === 0}
+              className="ml-2 h-7 text-xs bg-surface-2 border border-border rounded-md px-2 text-foreground disabled:opacity-50"
             >
-              <option value="">{zh.common.allRepos}</option>
-              {repos
-                .filter(isStatsEligibleRepo)
-                .map((r) => (
+              {managedRepos.map((r) => (
                 <option key={r.id} value={r.fullName}>
                   {r.fullName}
                 </option>
@@ -187,6 +183,21 @@ export function PerformanceView() {
         </div>
       )}
 
+      {!loading && managedRepos.length === 0 && (
+        <div className="rounded-lg border border-border bg-surface-2 px-4 py-8 text-center space-y-3">
+          <p className="text-sm text-muted-foreground">{zh.dashboard.noReposHint}</p>
+          <button
+            type="button"
+            onClick={() => navigate("repos")}
+            className="text-xs font-medium text-ai-blue hover:underline"
+          >
+            {zh.dashboard.goToRepos}
+          </button>
+        </div>
+      )}
+
+      {managedRepos.length > 0 && (
+      <>
       <div className="grid grid-cols-3 gap-3">
         {metrics.map((metric, i) => (
           <motion.div
@@ -256,6 +267,8 @@ export function PerformanceView() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   )
 }

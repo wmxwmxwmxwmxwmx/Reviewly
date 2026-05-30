@@ -7,6 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import AnalysisFinding, AnalysisJob, PullRequest, Repository
+from app.repositories import repository_jobs as rjob_repo
 from app.repositories import settings as settings_repo
 from app.repositories.seed_filter import (
     exclude_seed_findings,
@@ -17,6 +18,25 @@ from app.repositories.seed_filter import (
     only_stats_eligible_repositories,
 )
 from app.services.activity_log import list_recent
+
+
+def _count_active_analysis_jobs(session: Session) -> int:
+    count = session.scalar(
+        select(func.count())
+        .select_from(AnalysisJob)
+        .where(AnalysisJob.status.in_(("pending", "running")))
+    )
+    return int(count or 0)
+
+
+def _running_tasks(session: Session) -> dict[str, int]:
+    return {
+        "pullRequests": rjob_repo.count_active_jobs_by_types(session, ["sync_prs"]),
+        "aiReview": _count_active_analysis_jobs(session),
+        "security": rjob_repo.count_active_jobs_by_types(session, ["security"]),
+        "governance": 0,
+        "performance": rjob_repo.count_active_jobs_by_types(session, ["performance"]),
+    }
 
 
 def _risk_level_from_pr(pr: PullRequest) -> str:
@@ -93,6 +113,7 @@ def _empty_dashboard(session: Session) -> dict:
             "recent": [],
         },
         "weeklySummary": settings_repo.get_dashboard_weekly_summary(session),
+        "runningTasks": _running_tasks(session),
     }
 
 
@@ -279,6 +300,7 @@ def _enrich_dashboard(
             "recent": timing_recent[:5],
         },
         "weeklySummary": settings_repo.get_dashboard_weekly_summary(session),
+        "runningTasks": _running_tasks(session),
     }
 
 

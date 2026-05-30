@@ -37,8 +37,9 @@ function buildQuery(params: PerformanceFindingsQuery): string {
   return s ? `?${s}` : ""
 }
 
-export function fetchPerformanceStats(signal?: AbortSignal) {
-  return apiFetch<PerformanceStats>("/api/performance/stats", { signal })
+export function fetchPerformanceStats(options?: { repo?: string; signal?: AbortSignal }) {
+  const qs = options?.repo ? `?repo=${encodeURIComponent(options.repo)}` : ""
+  return apiFetch<PerformanceStats>(`/api/performance/stats${qs}`, { signal: options?.signal })
 }
 
 export function fetchPerformanceFindings(params: PerformanceFindingsQuery = {}) {

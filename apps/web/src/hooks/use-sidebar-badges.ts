@@ -1,10 +1,12 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo } from "react"
 
 import { useDashboardContext } from "@/features/prism/contexts/dashboard-context"
-import { PrismApiError } from "@/lib/api/client"
-import { fetchGovernanceViolations } from "@/lib/api/governance"
+import {
+  useRunningTasksStore,
+  type RunningTaskModule,
+} from "@/features/prism/contexts/running-tasks-context"
 
 export interface SidebarBadgeState {
   pullRequests: string | null
@@ -22,44 +24,65 @@ const defaultBadges: SidebarBadgeState = {
   performance: null,
 }
 
+const defaultRunningTasks = {
+  pullRequests: 0,
+  aiReview: 0,
+  security: 0,
+  governance: 0,
+  performance: 0,
+}
+
+const MODULES: RunningTaskModule[] = [
+  "pullRequests",
+  "aiReview",
+  "security",
+  "governance",
+  "performance",
+]
+
+function toBadge(count: number): string | null {
+  return count > 0 ? String(count) : null
+}
+
 export function useSidebarBadges() {
-  const { data: dashboard, error: dashboardError, loading } = useDashboardContext()
-  const [governanceCount, setGovernanceCount] = useState<number | null>(null)
-  const [govError, setGovError] = useState<string | null>(null)
+  const { data: dashboard, error: dashboardError, loading, refetch } = useDashboardContext()
+  const clientCounts = useRunningTasksStore()
+
+  const serverCounts = dashboard?.runningTasks ?? defaultRunningTasks
+
+  const totalCounts = useMemo(() => {
+    const totals = { ...defaultRunningTasks }
+    for (const module of MODULES) {
+      totals[module] = (serverCounts[module] ?? 0) + (clientCounts[module] ?? 0)
+    }
+    return totals
+  }, [serverCounts, clientCounts])
+
+  const hasRunningTasks = useMemo(
+    () => MODULES.some((module) => totalCounts[module] > 0),
+    [totalCounts],
+  )
 
   useEffect(() => {
-    const ac = new AbortController()
-    setGovError(null)
-    fetchGovernanceViolations(ac.signal)
-      .then((violationsList) => setGovernanceCount(violationsList.length))
-      .catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === "AbortError") return
-        setGovError(e instanceof PrismApiError ? e.message : "加载失败")
-        setGovernanceCount(null)
-      })
-    return () => ac.abort()
-  }, [dashboard])
+    if (!hasRunningTasks) return
+    const id = window.setInterval(() => {
+      void refetch()
+    }, 3000)
+    return () => window.clearInterval(id)
+  }, [hasRunningTasks, refetch])
 
   const badges = useMemo<SidebarBadgeState>(() => {
     if (!dashboard) {
       return defaultBadges
     }
-    const summary = dashboard.summary
     return {
-      pullRequests:
-        (summary?.openPrCount ?? dashboard.pendingPrs) > 0
-          ? String(summary?.openPrCount ?? dashboard.pendingPrs)
-          : null,
-      aiReview: (summary?.highRiskCount ?? 0) > 0 ? String(summary?.highRiskCount) : null,
-      security:
-        (summary?.securityCount ?? dashboard.securityIssues) > 0
-          ? String(summary?.securityCount ?? dashboard.securityIssues)
-          : null,
-      governance: governanceCount !== null && governanceCount > 0 ? String(governanceCount) : null,
-      performance:
-        (summary?.performanceCount ?? 0) > 0 ? String(summary?.performanceCount) : null,
+      pullRequests: toBadge(totalCounts.pullRequests),
+      aiReview: toBadge(totalCounts.aiReview),
+      security: toBadge(totalCounts.security),
+      governance: toBadge(totalCounts.governance),
+      performance: toBadge(totalCounts.performance),
     }
-  }, [dashboard, governanceCount])
+  }, [dashboard, totalCounts])
 
-  return { badges, error: dashboardError ?? govError, loading }
+  return { badges, error: dashboardError, loading }
 }

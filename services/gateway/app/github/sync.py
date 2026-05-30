@@ -136,7 +136,6 @@ async def _persist_pull_request(
         )
         pr_payload["commits"] = commits_n
     mapped_files = [pr_files_repo.map_github_file(f) for f in gh_files]
-    pr_files_repo.replace_files(session, pr_id, mapped_files)
     diff_files = pr_files_repo.to_diff_view_rows(mapped_files)
     if not diff_files:
         diff_files = await engine.parse_diff(patch)
@@ -153,6 +152,7 @@ async def _persist_pull_request(
         patch=patch,
         owner_user_id=owner_user_id,
     )
+    pr_files_repo.replace_files(session, pr_id, mapped_files)
     session.commit()
     return pr_id
 
@@ -272,7 +272,6 @@ async def sync_installation(session: Session, installation_id: str) -> dict[str,
             )
             pr_payload["commits"] = commit_count
             mapped_files = [pr_files_repo.map_github_file(f) for f in gh_files]
-            pr_files_repo.replace_files(session, pr_id, mapped_files)
             diff_files = pr_files_repo.to_diff_view_rows(mapped_files)
             if not diff_files:
                 diff_files = await engine.parse_diff(patch)
@@ -288,6 +287,7 @@ async def sync_installation(session: Session, installation_id: str) -> dict[str,
                 diff_files=diff_files,
                 patch=patch,
             )
+            pr_files_repo.replace_files(session, pr_id, mapped_files)
             synced_prs += 1
 
     session.commit()

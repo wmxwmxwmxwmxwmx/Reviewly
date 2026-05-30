@@ -288,7 +288,7 @@ export const zh = {
       "点击右上角「开始分析」，将基于当前 PR 的代码差异与规则扫描结果生成评审摘要。",
     goToSettings: "前往系统设置",
     severityFilterAll: "全部",
-    aiReviewEmptyHint: "从合并请求列表选择一条 PR 开始评审",
+    aiReviewEmptyHint: "粘贴 GitHub PR 链接，或从合并请求列表选择 PR 开始评审",
   },
   sidebar: {
     githubConnected: "GitHub 已连接",

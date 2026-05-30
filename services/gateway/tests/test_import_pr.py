@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
+from app.core.errors import SCHEMA_OUTDATED_MESSAGE
 from app.github.url_parser import parse_github_pr_url
 from app.mock.seed import DEFAULT_PR_ID
 
@@ -198,6 +199,12 @@ def test_import_pull_request_public_api(client: TestClient) -> None:
     assert body["rollbackComplexity"] in ("high", "medium", "low")
     assert isinstance(body["securityScore"], int)
 
+    diff = client.get(f"/api/pull-requests/{data['prId']}/diff")
+    assert diff.status_code == 200
+    diff_files = diff.json()
+    assert isinstance(diff_files, list)
+    assert len(diff_files) >= 1
+
 
 def test_import_pull_request_falls_back_when_installation_lookup_raises(
     client: TestClient,
@@ -259,3 +266,26 @@ def test_import_pull_request_falls_back_when_installation_lookup_raises(
     assert r.status_code == 200
     assert r.json()["source"] == "github_public"
     assert r.json()["prId"] == "pr-999002"
+
+
+def _api_error_message(body: dict) -> str:
+    if isinstance(body.get("error"), str):
+        return body["error"]
+    detail = body.get("detail")
+    if isinstance(detail, dict) and isinstance(detail.get("error"), str):
+        return detail["error"]
+    return ""
+
+
+def test_import_pull_request_returns_503_when_migrations_failed(client: TestClient) -> None:
+    with patch("app.main.migration_status", "failed"):
+        r = client.post(
+            "/api/pull-requests/import",
+            json={"url": "https://github.com/obra/superpowers/pull/1646"},
+        )
+
+    assert r.status_code == 503
+    body = r.json()
+    assert _api_error_message(body) == SCHEMA_OUTDATED_MESSAGE
+    code = body.get("code") or (body.get("detail") or {}).get("code")
+    assert code == "SCHEMA_OUTDATED"

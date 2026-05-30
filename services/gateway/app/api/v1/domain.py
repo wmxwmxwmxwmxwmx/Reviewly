@@ -70,8 +70,11 @@ def security_finding_delete(finding_id: str, db: Session = Depends(get_db)) -> d
 
 
 @router.get("/performance/stats")
-def performance_stats(db: Session = Depends(get_db)) -> dict:
-    return performance_repo.get_performance_stats(db)
+def performance_stats(
+    repo: str | None = None,
+    db: Session = Depends(get_db),
+) -> dict:
+    return performance_repo.get_performance_stats(db, repo=repo)
 
 
 @router.get("/performance/findings")

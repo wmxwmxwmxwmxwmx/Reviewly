@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { AiPersistedContent, SecurityCenterFinding } from "@reviewly/shared"
 
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
+import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
 import { PrismApiError } from "@/lib/api/client"
 import {
   explainSecurityFinding,
@@ -56,6 +57,8 @@ export function useSecurityCenter() {
   const [explainText, setExplainText] = useState("")
   const [explainError, setExplainError] = useState<string | null>(null)
   const explainAbort = useRef<AbortController | null>(null)
+
+  useRunningTask("security", explainingId !== null)
 
   useEffect(() => {
     const t = setTimeout(() => setSearchQuery(searchInput.trim()), 300)

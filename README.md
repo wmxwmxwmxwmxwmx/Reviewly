@@ -64,7 +64,15 @@ alembic upgrade head
 .venv\Scripts\python -m uvicorn app.main:app --port 3001 --reload --reload-dir app --reload-exclude "data/*"
 ```
 
-拉取含数据库变更的代码后，若 Dashboard 返回「服务器内部错误」，请先执行 `alembic upgrade head`。
+拉取含数据库变更的代码后，若 Dashboard 或 PR URL 导入返回「服务器内部错误」，请先执行：
+
+```bash
+cd services/gateway
+python scripts/repair_migration_drift.py   # 修复 alembic 版本与 schema 漂移（可选）
+alembic upgrade head
+```
+
+然后重启 Gateway，并确认 `GET http://localhost:3001/health` 中 `migrations` 为 `ok`。
 
 ### C++ 引擎（可选）
 

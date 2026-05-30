@@ -14,6 +14,7 @@ import {
 import type { Repository, SyncRepositoriesResponse } from "@reviewly/shared"
 
 import { useAISettings, estimateCostCny } from "@/features/prism/contexts/ai-settings-context"
+import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
 import { extractApiErrorMessage, parseFetchJson, PrismApiError } from "@/lib/api/client"
 import { getAuthToken } from "@/lib/auth/storage"
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
@@ -155,6 +156,8 @@ export function ReposProvider({ children }: { children: ReactNode }) {
     importRepo: importRepoMutation,
     syncRepos: syncReposMutation,
   } = useReposSync(refresh)
+
+  useRunningTask("pullRequests", syncing)
 
   const sync = useCallback(async () => {
     setSyncError(null)

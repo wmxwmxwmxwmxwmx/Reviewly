@@ -16,7 +16,7 @@ export function usePerformance() {
   useEffect(() => {
     const ac = new AbortController()
     setLoading(true)
-    fetchPerformanceStats(ac.signal)
+    fetchPerformanceStats({ signal: ac.signal })
       .then(setStats)
       .catch((e: unknown) => {
         if (isAbortError(e)) return

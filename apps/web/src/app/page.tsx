@@ -8,14 +8,14 @@ import { SecuritySettingsProvider } from "@/features/prism/contexts/security-set
 import { SessionLockOverlay } from "@/features/prism/components/session-lock-overlay"
 import { AIReviewSessionProvider } from "@/features/prism/contexts/ai-review-session-context"
 import { ReposProvider } from "@/features/prism/contexts/repos-context"
+import { RunningTasksProvider } from "@/features/prism/contexts/running-tasks-context"
 import { DashboardProvider } from "@/features/prism/contexts/dashboard-context"
 import { NavigationProvider, useNavigation } from "@/features/prism/contexts/navigation-context"
+import { AiReviewLanding } from "@/features/prism/components/ai-review-landing"
 import { AIReviewView } from "@/features/prism/views/ai-review-view"
 import { StandardView } from "@/features/prism/components/view-registry"
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/error-boundary"
-import { zh } from "@/lib/i18n/zh"
-
 function PRismPageContent() {
   const { activeView, prId, navigate } = useNavigation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -84,20 +84,7 @@ function PRismPageContent() {
             />
           </ErrorBoundary>
         ) : activeView === "ai-review" ? (
-          <main className="flex flex-1 flex-col items-center justify-center gap-3 p-5 text-center">
-            <div>
-              <h1 className="text-lg font-semibold text-foreground">{zh.nav.aiReview}</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.aiReview}</p>
-            </div>
-            <p className="text-sm text-muted-foreground">{zh.common.aiReviewEmptyHint}</p>
-            <button
-              type="button"
-              onClick={() => navigate("pull-requests")}
-              className="text-sm font-medium text-white bg-ai-blue px-4 py-2 rounded-md hover:bg-sky-300 transition-colors"
-            >
-              前往 PR 列表
-            </button>
-          </main>
+          <AiReviewLanding />
         ) : (
           <main className="flex-1 overflow-y-auto">
             <ErrorBoundary section="当前视图" key={activeView}>
@@ -130,16 +117,18 @@ export default function PRismPage() {
           }
         >
           <AIReviewSessionProvider>
-            <ReposProvider>
-              <DashboardProvider>
+            <RunningTasksProvider>
+              <ReposProvider>
+                <DashboardProvider>
                 <NavigationProvider>
                   <ErrorBoundary section="PRism">
                     <PRismPageContent />
                     <SessionLockOverlay />
                   </ErrorBoundary>
                 </NavigationProvider>
-              </DashboardProvider>
-            </ReposProvider>
+                </DashboardProvider>
+              </ReposProvider>
+            </RunningTasksProvider>
           </AIReviewSessionProvider>
         </Suspense>
       </SecuritySettingsProvider>

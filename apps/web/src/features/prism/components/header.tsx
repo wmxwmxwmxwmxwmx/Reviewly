@@ -7,7 +7,6 @@ import {
   ArrowRight,
   Loader2,
   CheckCircle2,
-  AlertTriangle,
   Zap,
   Menu,
   PanelRight,
@@ -200,11 +199,6 @@ export function Header({
                   {syncLabel ?? zh.common.importingPrHint}
                 </span>
               </>
-            ) : importError ? (
-              <>
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-risk-high" />
-                <span className="text-risk-high truncate">{importError}</span>
-              </>
             ) : syncLooksSuccessful ? (
               <>
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-risk-low" />
@@ -228,7 +222,7 @@ export function Header({
                   {scanning ? "规则扫描中…" : "AI 摘要生成中…"}
                 </span>
               </div>
-            ) : hasAnalysis ? (
+            ) : hasAnalysis && !importError ? (
               <div className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <div className="w-1.5 h-1.5 rounded-full bg-risk-low" />
                 <span>{zh.common.analyzeDone}</span>

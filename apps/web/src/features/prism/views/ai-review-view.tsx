@@ -21,7 +21,8 @@ import {
   chatCompletionStream,
   patchPrAiSummary,
 } from "@/lib/api/ai-chat"
-import { importPullRequestByUrl } from "@/lib/api/pull-requests"
+import { useImportPrByUrl, PENDING_AUTO_ANALYZE_KEY } from "@/hooks/use-import-pr-by-url"
+import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
 import {
   buildBoundedDiffContext,
   buildFindingsContext,
@@ -33,8 +34,6 @@ import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { AdoptRepoBanner } from "@/features/prism/components/adopt-repo-banner"
 import { Skeleton } from "@/components/ui/skeleton"
-
-const PENDING_AUTO_ANALYZE_KEY = "prism:pending-auto-analyze"
 
 interface AIReviewViewProps {
   prId: string
@@ -82,8 +81,6 @@ export function AIReviewView({
   const [scanning, setScanning] = useState(false)
   const [summaryStreaming, setSummaryStreaming] = useState(false)
   const analyzing = scanning || summaryStreaming
-  const [importing, setImporting] = useState(false)
-  const [importError, setImportError] = useState<string | null>(null)
   const [syncLabel, setSyncLabel] = useState(cached.syncLabel ?? zh.common.analyzeReady)
   const [chunkProgress, setChunkProgress] = useState({ current: 0, total: 1 })
   const [generatedSummary, setGeneratedSummary] = useState<string | undefined>(
@@ -99,6 +96,31 @@ export function AIReviewView({
 
   const analyzeAbortRef = useRef<AbortController | null>(null)
   const handleRescanRef = useRef<(() => Promise<void>) | null>(null)
+
+  const { importing, importError, handleImportUrl } = useImportPrByUrl({
+    currentPrId: prId,
+    onBeforeImport: () => {
+      setAnalysisError(null)
+      setSyncLabel(zh.common.importingPrHint)
+    },
+    onImportSuccess: (result) => {
+      if (result.source === "cache") {
+        setSyncLabel(zh.common.loaded)
+      } else if (result.source === "github_app") {
+        setSyncLabel(zh.common.syncedFromGithub)
+      } else {
+        setSyncLabel(zh.common.importedFromGithub)
+      }
+    },
+    onImportError: () => {
+      setSyncLabel(zh.common.analyzeReady)
+    },
+    onSamePrImport: () => {
+      void handleRescanRef.current?.()
+    },
+  })
+
+  useRunningTask("aiReview", analyzing || importing)
 
   useEffect(() => {
     setLastReviewedPrId(prId)
@@ -158,42 +180,6 @@ export function AIReviewView({
     sessionHasData,
     patchSession,
   ])
-
-  const handleImportUrl = useCallback(
-    async (url: string) => {
-      setImporting(true)
-      setImportError(null)
-      setAnalysisError(null)
-      setSyncLabel(zh.common.importingPrHint)
-      try {
-        const result = await importPullRequestByUrl(url)
-        if (result.source === "cache") {
-          setSyncLabel(zh.common.loaded)
-        } else if (result.source === "github_app") {
-          setSyncLabel(zh.common.syncedFromGithub)
-        } else {
-          setSyncLabel(zh.common.importedFromGithub)
-        }
-        if (result.prId !== prId) {
-          sessionStorage.setItem(PENDING_AUTO_ANALYZE_KEY, result.prId)
-          navigate("ai-review", { prId: result.prId })
-        } else {
-          void handleRescanRef.current?.()
-        }
-      } catch (error) {
-        const message =
-          error instanceof PrismApiError
-            ? error.message
-            : error instanceof Error
-              ? error.message
-              : zh.common.importFailed
-        setImportError(message)
-      } finally {
-        setImporting(false)
-      }
-    },
-    [navigate, prId],
-  )
 
   const diffBudget = useMemo(
     () => buildBoundedDiffContext(diffFiles, PROMPT_BUDGET),

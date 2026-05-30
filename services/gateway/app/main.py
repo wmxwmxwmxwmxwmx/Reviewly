@@ -15,33 +15,51 @@ from app.db.session import SessionLocal, engine
 
 logger = logging.getLogger(__name__)
 
+migration_status: str = "unknown"
+migration_error: str | None = None
 
-def _run_alembic_upgrade() -> None:
+
+def _run_alembic_upgrade() -> bool:
     """Apply pending DB migrations (same as `alembic upgrade head` in dev-gateway.ps1)."""
+    global migration_status, migration_error
+
     try:
         from alembic import command
         from alembic.config import Config
     except ImportError:
+        migration_status = "skipped"
+        migration_error = "Alembic not installed"
         logger.warning("Alembic not installed; skipping database migrations")
-        return
+        return False
 
     gateway_dir = Path(__file__).resolve().parents[1]
     ini_path = gateway_dir / "alembic.ini"
     if not ini_path.is_file():
-        logger.warning("alembic.ini not found at %s; skipping migrations", ini_path)
-        return
+        migration_status = "skipped"
+        migration_error = f"alembic.ini not found at {ini_path}"
+        logger.warning("%s; skipping migrations", migration_error)
+        return False
 
     prev_cwd = os.getcwd()
     try:
         os.chdir(gateway_dir)
         cfg = Config(str(ini_path))
         command.upgrade(cfg, "head")
+        migration_status = "ok"
+        migration_error = None
         logger.info("Database migrations applied (alembic upgrade head)")
+        return True
     except Exception as exc:
-        logger.warning(
-            "Alembic upgrade failed: %s. Run `cd services/gateway && alembic upgrade head` manually.",
+        migration_status = "failed"
+        migration_error = str(exc)
+        logger.error(
+            "Alembic upgrade failed: %s. Run `cd services/gateway && alembic upgrade head` "
+            "or `python scripts/repair_migration_drift.py` then retry.",
             exc,
         )
+        if settings.prism_fail_on_migration_error or settings.debug:
+            raise
+        return False
     finally:
         os.chdir(prev_cwd)
 
@@ -70,7 +88,14 @@ def root() -> dict:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "database": settings.database_url.split("://")[0]}
+    payload: dict = {
+        "status": "ok" if migration_status in ("ok", "skipped", "unknown") else "degraded",
+        "database": settings.database_url.split("://")[0],
+        "migrations": migration_status,
+    }
+    if migration_error:
+        payload["migrationError"] = migration_error
+    return payload
 
 
 @app.exception_handler(RequestValidationError)

@@ -449,6 +449,13 @@ export interface DashboardStats {
     }[]
   }
   weeklySummary?: AiPersistedContent | null
+  runningTasks?: {
+    pullRequests: number
+    aiReview: number
+    security: number
+    governance: number
+    performance: number
+  }
 }
 
 export interface WeeklySummaryResponse {

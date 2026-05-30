@@ -1,8 +1,9 @@
 import os
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -27,6 +28,15 @@ _test_engine = create_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+
+
+@event.listens_for(_test_engine, "connect")
+def _set_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
 TestingSession = sessionmaker(bind=_test_engine, autoflush=False, autocommit=False)
 
 db_session.engine = _test_engine
@@ -59,8 +69,13 @@ def client() -> TestClient:
 
     app.dependency_overrides[get_db] = override_get_db
 
-    with TestClient(app, raise_server_exceptions=True) as test_client:
-        yield test_client
+    with patch("app.main._run_alembic_upgrade", return_value=True):
+        with TestClient(app, raise_server_exceptions=True) as test_client:
+            import app.main as main_module
+
+            main_module.migration_status = "ok"
+            main_module.migration_error = None
+            yield test_client
 
     app.dependency_overrides.clear()
 

@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     prism_auth_bypass: bool = False
     prism_allow_legacy_sync: bool = False
     prism_repo_cache_dir: str = "./data/repo-cache"
+    prism_fail_on_migration_error: bool = False
     architecture_scan_max_files: int = 8000
     architecture_scan_max_edges: int = 25000
     repo_cache_ttl_hours: int = 24

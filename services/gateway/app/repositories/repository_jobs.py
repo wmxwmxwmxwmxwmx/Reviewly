@@ -6,7 +6,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import RepositoryJob
@@ -151,3 +151,17 @@ def get_active_job_for_repo(session: Session, repository_id: str) -> dict[str, A
     if row is None:
         return None
     return _job_to_api(row)
+
+
+def count_active_jobs_by_types(session: Session, job_types: list[str]) -> int:
+    if not job_types:
+        return 0
+    count = session.scalar(
+        select(func.count())
+        .select_from(RepositoryJob)
+        .where(
+            RepositoryJob.status.in_((JOB_STATUS_PENDING, JOB_STATUS_RUNNING)),
+            RepositoryJob.job_type.in_(job_types),
+        )
+    )
+    return int(count or 0)

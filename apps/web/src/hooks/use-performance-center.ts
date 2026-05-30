@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { AiPersistedContent, PerformanceCenterFinding } from "@reviewly/shared"
 
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
+import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
+import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { PrismApiError } from "@/lib/api/client"
 import {
   fetchPerformanceFindings,
@@ -14,6 +16,7 @@ import {
   type PerformanceStats,
 } from "@/lib/api/performance"
 import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
+import { repoManagementDisplayOrder } from "@/lib/repos-utils"
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 
 const PAGE_SIZE = 10
@@ -33,6 +36,12 @@ function buildAiOptimization(
 
 export function usePerformanceCenter() {
   const { settings } = useAISettings()
+  const { repos, loading: reposLoading } = useReposStore()
+  const managedRepos = useMemo(() => repoManagementDisplayOrder(repos), [repos])
+  const managedRepoNames = useMemo(
+    () => new Set(managedRepos.map((repo) => repo.fullName)),
+    [managedRepos],
+  )
   const [items, setItems] = useState<PerformanceCenterFinding[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -61,6 +70,11 @@ export function usePerformanceCenter() {
   const setFiltersOpen = (filtersOpen: boolean) => setViewState({ filtersOpen })
   const setExpandedFindingId = (expandedFindingId: string | null) =>
     setViewState({ expandedFindingId })
+  const effectiveRepoFilter = useMemo(() => {
+    if (managedRepos.length === 0) return ""
+    if (repoFilter && managedRepoNames.has(repoFilter)) return repoFilter
+    return managedRepos[0].fullName
+  }, [managedRepos, managedRepoNames, repoFilter])
   const [searchQuery, setSearchQuery] = useState("")
 
   const [optimizingId, setOptimizingId] = useState<string | null>(null)
@@ -68,16 +82,36 @@ export function usePerformanceCenter() {
   const [optimizeError, setOptimizeError] = useState<string | null>(null)
   const optimizeAbort = useRef<AbortController | null>(null)
 
+  useRunningTask("performance", optimizingId !== null)
+
   useEffect(() => {
     const t = setTimeout(() => setSearchQuery(searchInput.trim()), 300)
     return () => clearTimeout(t)
   }, [searchInput])
 
   useEffect(() => {
+    if (reposLoading || managedRepos.length === 0) return
+    if (repoFilter !== effectiveRepoFilter) {
+      setRepoFilter(effectiveRepoFilter)
+    }
+  }, [reposLoading, managedRepos.length, repoFilter, effectiveRepoFilter, setRepoFilter])
+
+  useEffect(() => {
     setPage(1)
-  }, [severityFilter, typeFilter, repoFilter, searchQuery])
+  }, [severityFilter, typeFilter, effectiveRepoFilter, searchQuery])
 
   const load = useCallback(async (signal: AbortSignal) => {
+    if (reposLoading) return
+    if (managedRepos.length === 0) {
+      setItems([])
+      setTotal(0)
+      setStats(null)
+      setLoading(false)
+      setError(null)
+      return
+    }
+    if (!effectiveRepoFilter) return
+
     setLoading(true)
     setError(null)
     try {
@@ -85,13 +119,13 @@ export function usePerformanceCenter() {
         fetchPerformanceFindings({
           severity: severityFilter || undefined,
           type: typeFilter || undefined,
-          repo: repoFilter || undefined,
+          repo: effectiveRepoFilter,
           q: searchQuery || undefined,
           page,
           pageSize: PAGE_SIZE,
           signal,
         }),
-        fetchPerformanceStats(signal),
+        fetchPerformanceStats({ repo: effectiveRepoFilter, signal }),
       ])
       setItems(findingsRes.items)
       setTotal(findingsRes.total)
@@ -102,7 +136,15 @@ export function usePerformanceCenter() {
     } finally {
       if (shouldApplyResult(signal)) setLoading(false)
     }
-  }, [severityFilter, typeFilter, repoFilter, searchQuery, page])
+  }, [
+    reposLoading,
+    managedRepos.length,
+    severityFilter,
+    typeFilter,
+    effectiveRepoFilter,
+    searchQuery,
+    page,
+  ])
 
   useEffect(() => {
     const ac = new AbortController()
@@ -234,9 +276,10 @@ export function usePerformanceCenter() {
     totalPages,
     setPage,
     stats,
-    loading,
+    loading: loading || reposLoading,
     error,
     reload,
+    managedRepos,
     severityFilter,
     setSeverityFilter,
     typeFilter,

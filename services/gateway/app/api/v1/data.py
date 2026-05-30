@@ -1,9 +1,12 @@
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
 
+import logging
+
 from app.core.config import settings
-from app.core.errors import api_error
+from app.core.errors import SCHEMA_OUTDATED_MESSAGE, api_error
 from app.core.security import get_optional_user
 from app.db.models import AuthUser
 from app.repositories import auth_users as auth_users_repo
@@ -20,6 +23,8 @@ from app.services import analysis_jobs
 from app.services import dashboard_summary
 
 router = APIRouter(prefix="/api", tags=["data"])
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_user_scope(
@@ -203,8 +208,20 @@ async def import_pull_request(
     db: Session = Depends(get_db),
     user: AuthUser | None = Depends(get_optional_user),
 ) -> dict:
+    from app.main import migration_status
+
+    if migration_status == "failed":
+        raise api_error(SCHEMA_OUTDATED_MESSAGE, 503, code="SCHEMA_OUTDATED")
+
     user_id = user.id if user and not settings.prism_auth_bypass else None
-    return await import_pull_request_by_url(db, body.resolved_url(), user_id=user_id)
+    try:
+        return await import_pull_request_by_url(db, body.resolved_url(), user_id=user_id)
+    except (OperationalError, ProgrammingError):
+        logger.exception("Database schema error during PR import")
+        raise api_error(SCHEMA_OUTDATED_MESSAGE, 503, code="SCHEMA_OUTDATED")
+    except IntegrityError:
+        logger.exception("Database integrity error during PR import")
+        raise api_error("PR 数据写入失败，请重试或联系管理员", 409, code="IMPORT_INTEGRITY_ERROR")
 
 
 @router.get("/pull-requests/{pr_id}")
