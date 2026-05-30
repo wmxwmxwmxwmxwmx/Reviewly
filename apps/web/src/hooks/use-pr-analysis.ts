@@ -1,7 +1,8 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import type { AnalysisFinding, AnalysisJob, AnalysisSummary } from "@reviewly/shared"
+import type { AiPersistedContent } from "@reviewly/shared"
 
 import { PrismApiError } from "@/lib/api/client"
 import {
@@ -13,6 +14,7 @@ export type PrAnalysisInitialState = {
   findings?: AnalysisFinding[]
   latest?: AnalysisSummary | null
   job?: AnalysisJob | null
+  aiSummary?: AiPersistedContent | null
 }
 
 function isAbortError(error: unknown): boolean {
@@ -30,23 +32,38 @@ export function usePrAnalysis(
     initial?.latest ?? null,
   )
   const [job, setJob] = useState<AnalysisJob | null>(initial?.job ?? null)
+  const [aiSummary, setAiSummary] = useState<AiPersistedContent | null>(
+    initial?.aiSummary ?? null,
+  )
   const [loadingPersisted, setLoadingPersisted] = useState(false)
   const [persistError, setPersistError] = useState<string | null>(null)
+
+  const persistGenerationRef = useRef(0)
+  const loadAbortRef = useRef<AbortController | null>(null)
+
+  const abortLoad = useCallback(() => {
+    loadAbortRef.current?.abort()
+    loadAbortRef.current = null
+  }, [])
 
   const loadPersisted = useCallback(
     async (signal?: AbortSignal) => {
       if (signal?.aborted) return null
 
+      const generation = persistGenerationRef.current
       setLoadingPersisted(true)
       setPersistError(null)
 
       try {
         const result = await loadPersistedAnalysis(prId, signal)
-        if (signal?.aborted) return null
+        if (signal?.aborted || generation !== persistGenerationRef.current) {
+          return null
+        }
 
         if (result) {
           setLatest(result.latest)
           setFindings(result.findings)
+          setAiSummary(result.aiSummary)
         }
         return result
       } catch (error) {
@@ -62,7 +79,7 @@ export function usePrAnalysis(
         setPersistError(message)
         throw error
       } finally {
-        if (!signal?.aborted) {
+        if (!signal?.aborted && generation === persistGenerationRef.current) {
           setLoadingPersisted(false)
         }
       }
@@ -75,6 +92,9 @@ export function usePrAnalysis(
       onProgress?: (job: AnalysisJob) => void
       signal?: AbortSignal
     }) => {
+      persistGenerationRef.current += 1
+      abortLoad()
+
       const result = await runPullRequestAnalysis(prId, options)
       setJob(result.job)
       setLatest(result.latest)
@@ -82,13 +102,14 @@ export function usePrAnalysis(
       setPersistError(null)
       return result
     },
-    [prId],
+    [prId, abortLoad],
   )
 
   const reset = useCallback(() => {
     setFindings([])
     setLatest(null)
     setJob(null)
+    setAiSummary(null)
     setPersistError(null)
   }, [])
 
@@ -96,13 +117,16 @@ export function usePrAnalysis(
     findings,
     latest,
     job,
+    aiSummary,
     loadingPersisted,
     persistError,
     loadPersisted,
     runAnalysis,
     reset,
+    abortLoad,
     setFindings,
     setLatest,
     setJob,
+    setAiSummary,
   }
 }

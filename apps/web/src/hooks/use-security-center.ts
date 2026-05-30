@@ -97,6 +97,12 @@ export function useSecurityCenter() {
     return () => ac.abort()
   }, [load])
 
+  useEffect(() => {
+    return () => {
+      explainAbort.current?.abort()
+    }
+  }, [])
+
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(total / PAGE_SIZE)),
     [total],
@@ -118,35 +124,47 @@ export function useSecurityCenter() {
 
       let accumulated = ""
 
-      await explainSecurityFinding(findingId, {
-        signal: ac.signal,
-        onDelta: (delta) => {
-          accumulated += delta
-          setExplainText((prev) => prev + delta)
-        },
-        onError: (msg) => setExplainError(msg),
-        onDone: async () => {
+      try {
+        await explainSecurityFinding(findingId, {
+          signal: ac.signal,
+          onDelta: (delta) => {
+            accumulated += delta
+            setExplainText((prev) => prev + delta)
+          },
+          onError: (msg) => {
+            setExplainError(msg)
+            setExplainingId((id) => (id === findingId ? null : id))
+          },
+          onDone: async () => {
+            setExplainingId((id) => (id === findingId ? null : id))
+            if (!accumulated.trim()) return
+            try {
+              const insight = buildAiInsight(
+                accumulated,
+                settings.model,
+                settings.provider,
+              )
+              await patchSecurityFinding(findingId, { aiInsight: insight })
+              setItems((prev) =>
+                prev.map((item) =>
+                  item.id === findingId ? { ...item, aiInsight: insight } : item,
+                ),
+              )
+            } catch (e: unknown) {
+              setExplainError(
+                e instanceof PrismApiError ? e.message : "保存解读失败",
+              )
+            }
+          },
+        })
+      } catch (e: unknown) {
+        if (e instanceof DOMException && e.name === "AbortError") {
           setExplainingId((id) => (id === findingId ? null : id))
-          if (!accumulated.trim()) return
-          try {
-            const insight = buildAiInsight(
-              accumulated,
-              settings.model,
-              settings.provider,
-            )
-            await patchSecurityFinding(findingId, { aiInsight: insight })
-            setItems((prev) =>
-              prev.map((item) =>
-                item.id === findingId ? { ...item, aiInsight: insight } : item,
-              ),
-            )
-          } catch (e: unknown) {
-            setExplainError(
-              e instanceof PrismApiError ? e.message : "保存解读失败",
-            )
-          }
-        },
-      })
+          return
+        }
+        setExplainError(e instanceof Error ? e.message : "解读失败")
+        setExplainingId((id) => (id === findingId ? null : id))
+      }
     },
     [settings.model, settings.provider],
   )

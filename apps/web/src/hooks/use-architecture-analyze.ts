@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
@@ -13,6 +13,7 @@ export function useArchitectureAnalyze(repoId: string | null) {
   const [content, setContent] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const analyzeAbort = useRef<AbortController | null>(null)
 
   const cached = repoId
     ? repos.find((r) => r.id === repoId)?.aiArchitectureAnalysis?.content
@@ -22,8 +23,19 @@ export function useArchitectureAnalyze(repoId: string | null) {
     setContent(cached ?? "")
   }, [repoId, cached])
 
+  useEffect(() => {
+    return () => {
+      analyzeAbort.current?.abort()
+    }
+  }, [])
+
   const analyze = useCallback(async () => {
     if (!repoId) return
+
+    analyzeAbort.current?.abort()
+    const ac = new AbortController()
+    analyzeAbort.current = ac
+
     setLoading(true)
     setError(null)
     setContent("")
@@ -32,12 +44,15 @@ export function useArchitectureAnalyze(repoId: string | null) {
 
     try {
       await streamArchitectureAnalyze(repoId, {
+        signal: ac.signal,
         onDelta: (delta) => {
           accumulated += delta
           setContent((prev) => prev + delta)
         },
         onError: (msg) => setError(msg),
       })
+
+      if (ac.signal.aborted) return
 
       if (accumulated.trim()) {
         await saveRepoArchitectureAnalysis(repoId, {
@@ -48,9 +63,12 @@ export function useArchitectureAnalyze(repoId: string | null) {
         await refreshRepos()
       }
     } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === "AbortError") return
       setError(e instanceof Error ? e.message : "分析失败")
     } finally {
-      setLoading(false)
+      if (!ac.signal.aborted) {
+        setLoading(false)
+      }
     }
   }, [repoId, settings.model, settings.provider, refreshRepos])
 

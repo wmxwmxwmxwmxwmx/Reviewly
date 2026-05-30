@@ -177,7 +177,7 @@ export function ReposProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({
             provider: settings.provider,
             model: settings.model,
-            apiKey: settings.apiKey,
+            ...(settings.apiKey.trim() ? { apiKey: settings.apiKey.trim() } : {}),
             messages: [
               {
                 role: "system",

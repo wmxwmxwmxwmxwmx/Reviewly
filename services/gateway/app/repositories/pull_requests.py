@@ -97,6 +97,27 @@ def get_diff(session: Session, pr_id: str) -> list[dict]:
     return deepcopy(diff_row.files)
 
 
+def get_ai_summary(session: Session, pr_id: str) -> dict | None:
+    row = session.get(PullRequest, pr_id)
+    if row is None or not row.payload:
+        return None
+    raw = row.payload.get("aiSummary")
+    if not isinstance(raw, dict) or not raw.get("content"):
+        return None
+    return deepcopy(raw)
+
+
+def save_ai_summary(session: Session, pr_id: str, summary: dict) -> dict | None:
+    row = session.get(PullRequest, pr_id)
+    if row is None:
+        return None
+    payload = deepcopy(row.payload) if row.payload else {}
+    payload["aiSummary"] = summary
+    row.payload = payload
+    session.commit()
+    return deepcopy(summary)
+
+
 def upsert_pull_request(
     session: Session,
     *,

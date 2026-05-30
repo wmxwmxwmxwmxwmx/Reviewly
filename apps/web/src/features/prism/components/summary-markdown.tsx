@@ -261,10 +261,29 @@ function renderBlock(block: MarkdownBlock, key: string) {
 interface SummaryMarkdownProps {
   content: string
   className?: string
+  /** preview: plain text during streaming; full: parse markdown */
+  mode?: "preview" | "full"
 }
 
-export function SummaryMarkdown({ content, className }: SummaryMarkdownProps) {
-  const blocks = parseBlocks(content)
+export function SummaryMarkdown({
+  content,
+  className,
+  mode = "full",
+}: SummaryMarkdownProps) {
+  if (mode === "preview") {
+    return (
+      <pre
+        className={cn(
+          "text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap font-sans",
+          className,
+        )}
+      >
+        {content}
+      </pre>
+    )
+  }
+
+  const blocks = parseBlocks(normalizeMarkdownTables(content))
 
   return (
     <div className={cn("space-y-0.5", className)}>

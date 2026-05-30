@@ -38,6 +38,15 @@ class RepoAiAnalysisBody(BaseModel):
     provider: str | None = None
 
 
+class PrAiSummaryBody(BaseModel):
+    content: str = Field(min_length=1)
+    model: str | None = None
+    provider: str | None = None
+    analyzed_at: str | None = Field(default=None, validation_alias="analyzedAt")
+
+    model_config = {"populate_by_name": True}
+
+
 @router.get("/dashboard")
 def dashboard(
     db: Session = Depends(get_db),
@@ -204,6 +213,40 @@ def analysis_latest(pr_id: str, db: Session = Depends(get_db)) -> dict:
     if not summary:
         raise api_error("暂无分析结果", 404)
     return summary
+
+
+@router.get("/pull-requests/{pr_id}/ai-summary")
+def get_pr_ai_summary(pr_id: str, db: Session = Depends(get_db)) -> dict:
+    if pr_repo.get_pull_request(db, pr_id) is None:
+        raise api_error("合并请求不存在", 404)
+    summary = pr_repo.get_ai_summary(db, pr_id)
+    if not summary:
+        raise api_error("暂无 AI 摘要", 404)
+    return summary
+
+
+@router.patch("/pull-requests/{pr_id}/ai-summary")
+def patch_pr_ai_summary(
+    pr_id: str,
+    body: PrAiSummaryBody,
+    db: Session = Depends(get_db),
+) -> dict:
+    if pr_repo.get_pull_request(db, pr_id) is None:
+        raise api_error("合并请求不存在", 404)
+    from datetime import datetime, timezone
+
+    payload = {
+        "content": body.content.strip(),
+        "analyzedAt": body.analyzed_at or datetime.now(timezone.utc).isoformat(),
+    }
+    if body.model:
+        payload["model"] = body.model.strip()
+    if body.provider:
+        payload["provider"] = body.provider.strip()
+    saved = pr_repo.save_ai_summary(db, pr_id, payload)
+    if saved is None:
+        raise api_error("保存失败", 500)
+    return saved
 
 
 @router.post("/pull-requests/{pr_id}/analysis")

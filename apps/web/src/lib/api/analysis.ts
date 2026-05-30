@@ -1,6 +1,8 @@
 import type { AnalysisFinding, AnalysisJob, AnalysisSummary } from "@reviewly/shared"
+import type { AiPersistedContent } from "@reviewly/shared"
 
 import { apiFetch, PrismApiError } from "./client"
+import { fetchPrAiSummary } from "./ai-chat"
 
 export function startAnalysis(prId: string) {
   return apiFetch<{ jobId: string }>(`/api/pull-requests/${prId}/analysis`, { method: "POST" })
@@ -74,13 +76,18 @@ export async function runPullRequestAnalysis(
 export async function loadPersistedAnalysis(
   prId: string,
   signal?: AbortSignal,
-): Promise<{ latest: AnalysisSummary; findings: AnalysisFinding[] } | null> {
+): Promise<{
+  latest: AnalysisSummary
+  findings: AnalysisFinding[]
+  aiSummary: AiPersistedContent | null
+} | null> {
   try {
-    const [latest, findings] = await Promise.all([
+    const [latest, findings, aiSummary] = await Promise.all([
       fetchLatestAnalysis(prId, signal),
       fetchFindings(prId, signal),
+      fetchPrAiSummary(prId, signal).catch(() => null),
     ])
-    return { latest, findings }
+    return { latest, findings, aiSummary }
   } catch (error) {
     if (error instanceof PrismApiError && error.status === 404) {
       return null

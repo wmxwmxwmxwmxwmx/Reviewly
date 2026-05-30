@@ -20,11 +20,17 @@ function StreamingText({ text, streaming }: StreamingTextProps) {
   if (streaming && !text.trim()) {
     return <p className="text-[11px] text-muted-foreground">正在生成分析…</p>
   }
-  return <SummaryMarkdown content={text} />
+  return (
+    <SummaryMarkdown
+      content={text}
+      mode={streaming ? "preview" : "full"}
+    />
+  )
 }
 
 interface AISummaryProps {
-  streaming: boolean
+  scanning?: boolean
+  streaming?: boolean
   model?: string
   generatedSummary?: string
   jobSummary?: string
@@ -35,7 +41,8 @@ interface AISummaryProps {
 }
 
 export function AISummary({
-  streaming,
+  scanning = false,
+  streaming = false,
   model = "claude-opus-4.6",
   generatedSummary,
   jobSummary,
@@ -49,6 +56,7 @@ export function AISummary({
     Boolean(error?.includes("系统设置") || error?.includes("API 密钥"))
   const [fullOpen, setFullOpen] = useState(Boolean(generatedSummary || jobSummary || error || hasAnalysis))
   const summaryText = generatedSummary ?? jobSummary
+  const busy = scanning || streaming
 
   return (
     <motion.div
@@ -65,7 +73,7 @@ export function AISummary({
         <div className="flex items-center gap-2.5 flex-1">
           <div className="relative">
             <BrainCircuit className="w-4 h-4 text-ai-blue" />
-            {streaming && (
+            {busy && (
               <motion.div
                 className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-ai-blue"
                 animate={{ opacity: [1, 0.3, 1] }}
@@ -74,7 +82,7 @@ export function AISummary({
             )}
           </div>
           <span className="text-sm font-semibold text-foreground">AI 摘要分析</span>
-          {streaming && (
+          {busy && (
             <div className="flex items-center gap-1 ml-1">
               <div className="thinking-dot w-1.5 h-1.5 rounded-full bg-ai-blue" />
               <div className="thinking-dot w-1.5 h-1.5 rounded-full bg-ai-blue" />
@@ -115,8 +123,10 @@ export function AISummary({
               )}
               {summaryText ? (
                 <StreamingText text={summaryText} streaming={streaming} />
+              ) : scanning ? (
+                <p className="text-[11px] text-muted-foreground">正在执行规则扫描…</p>
               ) : streaming ? (
-                <p className="text-[11px] text-muted-foreground">正在执行规则扫描并生成 AI 摘要…</p>
+                <p className="text-[11px] text-muted-foreground">正在生成 AI 摘要…</p>
               ) : restoring ? (
                 <p className="text-[11px] text-muted-foreground">{zh.common.restoreAnalysis}</p>
               ) : hasAnalysis ? (

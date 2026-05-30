@@ -109,6 +109,12 @@ export function usePerformanceCenter() {
     return () => ac.abort()
   }, [load])
 
+  useEffect(() => {
+    return () => {
+      optimizeAbort.current?.abort()
+    }
+  }, [])
+
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total])
 
   const groupedByType = useMemo(() => {
@@ -134,35 +140,47 @@ export function usePerformanceCenter() {
 
       let accumulated = ""
 
-      await optimizePerformanceFinding(findingId, {
-        signal: ac.signal,
-        onDelta: (delta) => {
-          accumulated += delta
-          setOptimizeText((prev) => prev + delta)
-        },
-        onError: (msg) => setOptimizeError(msg),
-        onDone: async () => {
+      try {
+        await optimizePerformanceFinding(findingId, {
+          signal: ac.signal,
+          onDelta: (delta) => {
+            accumulated += delta
+            setOptimizeText((prev) => prev + delta)
+          },
+          onError: (msg) => {
+            setOptimizeError(msg)
+            setOptimizingId((id) => (id === findingId ? null : id))
+          },
+          onDone: async () => {
+            setOptimizingId((id) => (id === findingId ? null : id))
+            if (!accumulated.trim()) return
+            try {
+              const aiOptimization = buildAiOptimization(
+                accumulated,
+                settings.model,
+                settings.provider,
+              )
+              await patchPerformanceFinding(findingId, { aiOptimization })
+              setItems((prev) =>
+                prev.map((item) =>
+                  item.id === findingId ? { ...item, aiOptimization } : item,
+                ),
+              )
+            } catch (e: unknown) {
+              setOptimizeError(
+                e instanceof PrismApiError ? e.message : "保存优化方案失败",
+              )
+            }
+          },
+        })
+      } catch (e: unknown) {
+        if (e instanceof DOMException && e.name === "AbortError") {
           setOptimizingId((id) => (id === findingId ? null : id))
-          if (!accumulated.trim()) return
-          try {
-            const aiOptimization = buildAiOptimization(
-              accumulated,
-              settings.model,
-              settings.provider,
-            )
-            await patchPerformanceFinding(findingId, { aiOptimization })
-            setItems((prev) =>
-              prev.map((item) =>
-                item.id === findingId ? { ...item, aiOptimization } : item,
-              ),
-            )
-          } catch (e: unknown) {
-            setOptimizeError(
-              e instanceof PrismApiError ? e.message : "保存优化方案失败",
-            )
-          }
-        },
-      })
+          return
+        }
+        setOptimizeError(e instanceof Error ? e.message : "优化失败")
+        setOptimizingId((id) => (id === findingId ? null : id))
+      }
     },
     [settings.model, settings.provider],
   )

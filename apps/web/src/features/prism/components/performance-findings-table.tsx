@@ -106,18 +106,23 @@ function PerformanceOptimizeInline({
         </div>
       )}
 
-      {displayText && !isOptimizing && !optimizeError && (
+      {(displayText && !optimizeError) && (
         <div className="space-y-2">
           <div className="prose prose-invert max-w-none text-sm max-h-80 overflow-y-auto">
-            <SummaryMarkdown content={displayText} />
+            <SummaryMarkdown
+              content={displayText}
+              mode={isOptimizing ? "preview" : "full"}
+            />
           </div>
-          <button
-            type="button"
-            onClick={onRegenerate}
-            className="text-xs text-ai-blue hover:underline"
-          >
-            {zh.actions.regenerate}
-          </button>
+          {!isOptimizing && (
+            <button
+              type="button"
+              onClick={onRegenerate}
+              className="text-xs text-ai-blue hover:underline"
+            >
+              {zh.actions.regenerate}
+            </button>
+          )}
         </div>
       )}
     </div>

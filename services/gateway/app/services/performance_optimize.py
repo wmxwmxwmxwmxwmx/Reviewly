@@ -24,16 +24,11 @@ SYSTEM_PROMPT = """你是资深性能工程师。根据 PR Diff 中的性能 fin
 def _build_user_message(ctx: dict[str, Any]) -> str:
     finding = ctx.get("finding") or ctx
     parts = [
-        f"类型: {ctx.get('type', '')}",
-        f"严重度: {ctx.get('severity', '')}",
-        f"仓库: {ctx.get('repo', '')} PR #{ctx.get('prNumber', '')}",
-        f"文件: {ctx.get('file', '')}:{ctx.get('line', '')}",
-        f"描述: {ctx.get('description', '')}",
-        f"已有建议: {ctx.get('suggestion', '')}",
         f"\nFinding JSON:\n{json.dumps(finding, ensure_ascii=False, indent=2)}",
     ]
-    if ctx.get("codeContext"):
-        parts.append(f"\n代码上下文:\n```\n{ctx['codeContext']}\n```")
+    code_context = ctx.get("codeContext")
+    if code_context:
+        parts.append(f"\n代码上下文:\n```\n{str(code_context)[:3000]}\n```")
     if ctx.get("patchExcerpt"):
         parts.append(f"\nPatch 摘要:\n```diff\n{ctx['patchExcerpt'][:2000]}\n```")
     return "\n".join(parts)

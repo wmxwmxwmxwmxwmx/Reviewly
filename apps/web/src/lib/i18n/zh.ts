@@ -203,6 +203,8 @@ export const zh = {
     analyzeReady: "尚未分析",
     analyzeDone: "分析完成",
     startAnalyze: "开始分析",
+    regenerateSummary: "重新生成摘要",
+    rescanAnalyze: "重新扫描",
     loadPr: "加载 PR",
     syncComplete: "同步完成",
     loaded: "已加载",

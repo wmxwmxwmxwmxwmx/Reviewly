@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { AnalysisFinding } from "@reviewly/shared"
 import { Loader2 } from "lucide-react"
 import { Header } from "@/features/prism/components/header"
@@ -17,7 +17,16 @@ import { estimateCostCny, useAISettings } from "@/features/prism/contexts/ai-set
 import { usePullRequest } from "@/hooks/use-pull-request"
 import { usePullRequestDiff } from "@/hooks/use-pull-request-diff"
 import { usePrAnalysis } from "@/hooks/use-pr-analysis"
+import {
+  chatCompletionStream,
+  patchPrAiSummary,
+} from "@/lib/api/ai-chat"
 import { importPullRequestByUrl } from "@/lib/api/pull-requests"
+import {
+  buildBoundedDiffContext,
+  buildFindingsContext,
+  PROMPT_BUDGET,
+} from "@/lib/ai/prompt-budget"
 import { PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
@@ -27,34 +36,6 @@ interface AIReviewViewProps {
   onMenuClick?: () => void
   aiPanelOpen?: boolean
   onToggleAIPanel?: () => void
-}
-
-function buildDiffContext(files: ReturnType<typeof usePullRequestDiff>["files"]) {
-  return files
-    .slice(0, 4)
-    .map((file) => {
-      const lines = file.chunks.flatMap((chunk) => [
-        chunk.header,
-        ...chunk.lines.map((line) =>
-          `${line.type === "add" ? "+" : line.type === "delete" ? "-" : " "}${line.content}`,
-        ),
-      ])
-      return `文件：${file.path}\n语言：${file.language}\n风险等级：${file.riskLevel}\n${lines.join("\n")}`
-    })
-    .join("\n\n---\n\n")
-}
-
-function buildFindingsContext(findings: AnalysisFinding[]) {
-  if (findings.length === 0) {
-    return "（规则扫描未发现结构化风险项，请仅依据 Diff 做评审。）"
-  }
-
-  return findings
-    .map(
-      (f) =>
-        `- [${f.severity}] ${f.file}:${f.line} ${f.title}\n  ${f.description}\n  修复建议：${f.fixSuggestion}`,
-    )
-    .join("\n")
 }
 
 export function AIReviewView({
@@ -79,24 +60,29 @@ export function AIReviewView({
     findings,
     latest,
     job,
+    aiSummary,
     loadingPersisted,
     persistError,
     loadPersisted,
     runAnalysis,
+    abortLoad,
     setJob,
+    setAiSummary,
   } = usePrAnalysis(prId, {
     findings: cached.findings,
     latest: cached.latest,
     job: cached.job,
   })
 
-  const [analyzing, setAnalyzing] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [summaryStreaming, setSummaryStreaming] = useState(false)
+  const analyzing = scanning || summaryStreaming
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const [syncLabel, setSyncLabel] = useState(cached.syncLabel ?? zh.common.analyzeReady)
   const [chunkProgress, setChunkProgress] = useState({ current: 0, total: 1 })
   const [generatedSummary, setGeneratedSummary] = useState<string | undefined>(
-    cached.generatedSummary,
+    cached.generatedSummary ?? aiSummary?.content,
   )
   const [analysisError, setAnalysisError] = useState<string | null>(
     cached.analysisError ?? null,
@@ -106,17 +92,30 @@ export function AIReviewView({
   )
   const [governanceRefreshKey, setGovernanceRefreshKey] = useState(0)
 
+  const analyzeAbortRef = useRef<AbortController | null>(null)
+
   useEffect(() => {
     setLastReviewedPrId(prId)
   }, [prId, setLastReviewedPrId])
 
   useEffect(() => {
+    abortLoad()
     const controller = new AbortController()
-    void loadPersisted(controller.signal).catch(() => {
+    void loadPersisted(controller.signal).then((result) => {
+      if (result?.aiSummary?.content) {
+        setGeneratedSummary(result.aiSummary.content)
+      }
+    }).catch(() => {
       /* persistError 已由 hook 记录 */
     })
     return () => controller.abort()
-  }, [prId, loadPersisted])
+  }, [prId, loadPersisted, abortLoad])
+
+  useEffect(() => {
+    return () => {
+      analyzeAbortRef.current?.abort()
+    }
+  }, [])
 
   const sessionHasData = hasCachedSession(prId)
 
@@ -185,23 +184,16 @@ export function AIReviewView({
     [navigate, prId],
   )
 
-  const diffTotal = useMemo(() => Math.max(diffFiles.length, 1), [diffFiles.length])
-  const approxContextChars = useMemo(
-    () =>
-      diffFiles.reduce(
-        (sum, file) =>
-          sum +
-          file.chunks.reduce(
-            (chunkSum, chunk) =>
-              chunkSum + chunk.lines.reduce((lineSum, line) => lineSum + line.content.length, 0),
-            0,
-          ),
-        0,
-      ),
+  const diffBudget = useMemo(
+    () => buildBoundedDiffContext(diffFiles, PROMPT_BUDGET),
     [diffFiles],
   )
+  const diffTotal = useMemo(() => Math.max(diffFiles.length, 1), [diffFiles.length])
+  const approxContextChars = diffBudget.charCount
+
+  const hasFindings = findings.length > 0
   const hasAnalysis =
-    findings.length > 0 ||
+    hasFindings ||
     Boolean(generatedSummary) ||
     Boolean(latest?.summary) ||
     sessionHasData
@@ -212,19 +204,143 @@ export function AIReviewView({
     !latest?.summary &&
     findings.length === 0
 
-  const handleAnalyze = async () => {
+  const persistGeneratedSummary = useCallback(
+    async (content: string, signal?: AbortSignal) => {
+      const payload = {
+        content,
+        analyzedAt: new Date().toISOString(),
+        model: settings.model,
+        provider: settings.provider,
+      }
+      const saved = await patchPrAiSummary(prId, payload, signal)
+      setAiSummary(saved)
+    },
+    [prId, settings.model, settings.provider, setAiSummary],
+  )
+
+  const generateSummary = useCallback(
+    async (
+      activeFindings: AnalysisFinding[],
+      jobSummary: string | undefined,
+      signal: AbortSignal,
+    ) => {
+      if (!hasApiKey || !pr) return
+
+      setSummaryStreaming(true)
+      setGeneratedSummary(undefined)
+
+      const diffContext = diffBudget.context
+      const findingsContext = buildFindingsContext(activeFindings)
+
+      const messages = [
+        {
+          role: "system" as const,
+          content:
+            "你是 PRism 的资深代码评审 AI。请用中文输出结构化 PR 评审摘要（Markdown），重点关注安全、性能、架构、破坏性变更和是否建议合并。必须仅基于用户提供的 Diff 与 findings，禁止编造未出现的文件或问题。",
+        },
+        {
+          role: "user" as const,
+          content: `请评审这个合并请求。
+
+PR 标题：${pr.title}
+仓库：${pr.repo}
+分支：${pr.sourceBranch} -> ${pr.targetBranch}
+变更规模：${pr.filesChanged} 文件，+${pr.additions} -${pr.deletions}
+${diffBudget.truncated ? "\n（Diff 已按上下文预算截断，请基于可见部分评审）\n" : ""}
+
+规则扫描 findings：
+${findingsContext}
+
+Diff 摘要：
+${diffContext || "（无 diff 内容）"}`,
+        },
+      ]
+
+      let accumulated = ""
+
+      try {
+        await chatCompletionStream(
+          {
+            provider: settings.provider,
+            model: settings.model,
+            apiKey: settings.apiKey.trim() || undefined,
+            messages,
+          },
+          {
+            signal,
+            onDelta: (delta) => {
+              accumulated += delta
+              setGeneratedSummary(accumulated)
+            },
+            onError: (msg) => {
+              throw new Error(msg)
+            },
+          },
+        )
+
+        const finalSummary = accumulated.trim() || jobSummary || "模型未返回内容。"
+        setGeneratedSummary(finalSummary)
+
+        if (!signal.aborted && finalSummary) {
+          await persistGeneratedSummary(finalSummary, signal)
+        }
+
+        recordUsage({
+          provider: settings.provider,
+          model: settings.model,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: Math.ceil(finalSummary.length / 4),
+          costCny: estimateCostCny(settings.provider, Math.ceil(finalSummary.length / 4)),
+          latencyMs: 0,
+        })
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return
+        }
+        const message = error instanceof Error ? error.message : "AI 摘要生成失败"
+        setAnalysisError(message)
+        if (jobSummary) {
+          setGeneratedSummary(jobSummary)
+        }
+        throw error
+      } finally {
+        if (!signal.aborted) {
+          setSummaryStreaming(false)
+        }
+      }
+    },
+    [
+      hasApiKey,
+      pr,
+      diffBudget,
+      settings.provider,
+      settings.model,
+      settings.apiKey,
+      persistGeneratedSummary,
+      recordUsage,
+    ],
+  )
+
+  const handleRescan = useCallback(async () => {
     if (analyzing || prLoading || diffLoading || !pr) return
 
-    setAnalyzing(true)
+    analyzeAbortRef.current?.abort()
+    abortLoad()
+    const ac = new AbortController()
+    analyzeAbortRef.current = ac
+
+    setScanning(true)
+    setSummaryStreaming(false)
+    setGeneratedSummary(undefined)
     setAnalysisError(null)
     setChunkProgress({ current: 0, total: diffTotal })
 
-    let jobFindings: AnalysisFinding[] = []
-    let jobSummary: string | undefined
     const errors: string[] = []
 
     try {
       const result = await runAnalysis({
+        signal: ac.signal,
         onProgress: (activeJob) => {
           setJob(activeJob)
           setChunkProgress({
@@ -233,108 +349,92 @@ export function AIReviewView({
           })
         },
       })
-      jobFindings = result.findings
-      jobSummary = result.latest.summary
+
       setJob(result.job)
       setChunkProgress({
         current: result.job.chunkTotal || diffTotal,
         total: Math.max(result.job.chunkTotal, diffTotal),
       })
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : "规则扫描任务失败")
-    }
 
-    let nextGeneratedSummary = generatedSummary
+      setGovernanceRefreshKey((k) => k + 1)
 
-    setGovernanceRefreshKey((k) => k + 1)
-
-    if (!hasApiKey) {
-      if (jobSummary) {
-        setGeneratedSummary(jobSummary)
+      if (!hasApiKey) {
+        if (result.latest.summary) {
+          setGeneratedSummary(result.latest.summary)
+        }
+        setAnalysisError("规则扫描与治理检查已完成。填写 API 密钥后可生成 AI 摘要。")
+        return
       }
+
+      try {
+        await generateSummary(result.findings, result.latest.summary, ac.signal)
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          errors.push(error instanceof Error ? error.message : "AI 摘要生成失败")
+        }
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return
+      }
+      errors.push(error instanceof Error ? error.message : "规则扫描任务失败")
+    } finally {
+      setScanning(false)
+      setSummaryStreaming(false)
       if (errors.length > 0) {
         setAnalysisError(errors.join("；"))
-      } else if (!hasApiKey) {
-        setAnalysisError("规则扫描与治理检查已完成。填写 API 密钥后可生成 AI 摘要。")
       }
-      setAnalyzing(false)
+      setGovernanceRefreshKey((k) => k + 1)
+    }
+  }, [
+    analyzing,
+    prLoading,
+    diffLoading,
+    pr,
+    abortLoad,
+    diffTotal,
+    runAnalysis,
+    setJob,
+    hasApiKey,
+    generateSummary,
+  ])
+
+  const handleRegenerateSummary = useCallback(async () => {
+    if (analyzing || prLoading || diffLoading || !pr) return
+    if (!hasFindings && !latest?.summary) {
+      void handleRescan()
       return
     }
 
+    analyzeAbortRef.current?.abort()
+    abortLoad()
+    const ac = new AbortController()
+    analyzeAbortRef.current = ac
+
+    setAnalysisError(null)
+    setGeneratedSummary(undefined)
+
     try {
-      const diffContext = buildDiffContext(diffFiles)
-      const findingsContext = buildFindingsContext(jobFindings)
-
-      const response = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: settings.provider,
-          model: settings.model,
-          apiKey: settings.apiKey,
-          messages: [
-            {
-              role: "system",
-              content:
-                "你是 PRism 的资深代码评审 AI。请用中文输出结构化 PR 评审摘要（Markdown），重点关注安全、性能、架构、破坏性变更和是否建议合并。必须仅基于用户提供的 Diff 与 findings，禁止编造未出现的文件或问题。",
-            },
-            {
-              role: "user",
-              content: `请评审这个合并请求。
-
-PR 标题：${pr.title}
-仓库：${pr.repo}
-分支：${pr.sourceBranch} -> ${pr.targetBranch}
-变更规模：${pr.filesChanged} 文件，+${pr.additions} -${pr.deletions}
-
-规则扫描 findings：
-${findingsContext}
-
-Diff 摘要：
-${diffContext || "（无 diff 内容）"}`,
-            },
-          ],
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        const errMsg =
-          typeof data?.error === "string"
-            ? data.error
-            : data?.detail?.error ?? "AI 摘要生成失败"
-        throw new Error(errMsg)
-      }
-
-      const totalTokens = Number(data?.usage?.totalTokens) || 0
-      nextGeneratedSummary = data?.content || jobSummary || "模型未返回内容。"
-      setGeneratedSummary(nextGeneratedSummary)
-
-      recordUsage({
-        provider: settings.provider,
-        model: settings.model,
-        promptTokens: Number(data?.usage?.promptTokens) || 0,
-        completionTokens: Number(data?.usage?.completionTokens) || 0,
-        totalTokens,
-        costCny: estimateCostCny(settings.provider, totalTokens),
-        latencyMs: Number(data?.latencyMs) || 0,
-      })
+      await generateSummary(findings, latest?.summary, ac.signal)
     } catch (error) {
-      errors.push(error instanceof Error ? error.message : "AI 摘要生成失败")
-      if (jobSummary) {
-        nextGeneratedSummary = jobSummary
-        setGeneratedSummary(jobSummary)
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        setAnalysisError(error instanceof Error ? error.message : "AI 摘要生成失败")
       }
     }
+  }, [
+    analyzing,
+    prLoading,
+    diffLoading,
+    pr,
+    hasFindings,
+    latest?.summary,
+    handleRescan,
+    abortLoad,
+    findings,
+    generateSummary,
+  ])
 
-    if (errors.length > 0) {
-      setAnalysisError(errors.join("；"))
-    }
-
-    setAnalyzing(false)
-    setGovernanceRefreshKey((k) => k + 1)
-  }
+  const handleAnalyze = hasFindings ? handleRegenerateSummary : handleRescan
 
   const analysisScores = latest
     ? {
@@ -373,8 +473,11 @@ ${diffContext || "（无 diff 内容）"}`,
             <Header
               prData={pr}
               analyzing={analyzing}
+              scanning={scanning}
               hasAnalysis={hasAnalysis}
+              hasFindings={hasFindings}
               onAnalyze={handleAnalyze}
+              onRescan={hasFindings ? handleRescan : undefined}
               onImportUrl={handleImportUrl}
               importing={importing}
               importError={importError}
@@ -400,7 +503,8 @@ ${diffContext || "（无 diff 内容）"}`,
             ) : null}
 
             <AISummary
-              streaming={analyzing}
+              scanning={scanning}
+              streaming={summaryStreaming}
               model={settings.model}
               generatedSummary={generatedSummary}
               jobSummary={latest?.summary}
@@ -430,8 +534,8 @@ ${diffContext || "（无 diff 内容）"}`,
             <DiffViewer
               files={diffFiles}
               loading={diffLoading}
-              analyzing={analyzing}
-              chunkProgress={analyzing ? chunkProgress : undefined}
+              analyzing={scanning}
+              chunkProgress={scanning ? chunkProgress : undefined}
             />
           </div>
         </main>

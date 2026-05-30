@@ -1,6 +1,7 @@
 import type { AiPersistedContent, SecurityCenterFinding, SecurityFindingsPage } from "@reviewly/shared"
 
 import { apiFetch } from "./client"
+import { postSse } from "./sse-reader"
 
 export type SaveFindingAiPayload = {
   content: string
@@ -70,59 +71,9 @@ export async function explainSecurityFinding(
     onDone?: () => void
   },
 ): Promise<void> {
-  const res = await fetch(`/api/security/findings/${findingId}/explain`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ stream: true }),
-    signal: options.signal,
-  })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    const msg =
-      typeof err === "object" && err && "detail" in err
-        ? String((err as { detail?: { error?: string } }).detail?.error ?? res.statusText)
-        : res.statusText
-    options.onError?.(msg)
-    return
-  }
-
-  const reader = res.body?.getReader()
-  if (!reader) {
-    options.onError?.("无法读取响应流")
-    return
-  }
-
-  const decoder = new TextDecoder()
-  let buffer = ""
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const parts = buffer.split("\n\n")
-    buffer = parts.pop() ?? ""
-
-    for (const part of parts) {
-      for (const line of part.split("\n")) {
-        if (!line.startsWith("data: ")) continue
-        const data = line.slice(6).trim()
-        if (data === "[DONE]") {
-          options.onDone?.()
-          return
-        }
-        try {
-          const parsed = JSON.parse(data) as { delta?: string; error?: string }
-          if (parsed.error) {
-            options.onError?.(parsed.error)
-            return
-          }
-          if (parsed.delta) options.onDelta(parsed.delta)
-        } catch {
-          /* ignore malformed chunks */
-        }
-      }
-    }
-  }
-  options.onDone?.()
+  await postSse(
+    `/api/security/findings/${findingId}/explain`,
+    { stream: true },
+    options,
+  )
 }

@@ -20,8 +20,11 @@ import type { PullRequest } from "@reviewly/shared"
 interface HeaderProps {
   prData: PullRequest
   analyzing: boolean
+  scanning?: boolean
   hasAnalysis?: boolean
+  hasFindings?: boolean
   onAnalyze: () => void
+  onRescan?: () => void
   onImportUrl: (url: string) => Promise<void>
   importing?: boolean
   importError?: string | null
@@ -36,8 +39,11 @@ interface HeaderProps {
 export function Header({
   prData,
   analyzing,
+  scanning = false,
   hasAnalysis = false,
+  hasFindings = false,
   onAnalyze,
+  onRescan,
   onImportUrl,
   importing = false,
   importError = null,
@@ -194,7 +200,9 @@ export function Header({
                 className="flex items-center gap-1.5 text-[11px] text-ai-blue"
               >
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span className="hidden sm:inline">AI 分析中...</span>
+                <span className="hidden sm:inline">
+                  {scanning ? "规则扫描中…" : "AI 摘要生成中…"}
+                </span>
               </motion.div>
             ) : hasAnalysis ? (
               <motion.div
@@ -245,6 +253,22 @@ export function Header({
             </button>
           )}
 
+          {onRescan && (
+            <button
+              type="button"
+              onClick={onRescan}
+              disabled={analyzing || importing || diffLoading || prLoading}
+              className={cn(
+                "hidden sm:flex items-center h-8 px-3 rounded-md text-xs font-medium border border-border transition-colors",
+                analyzing || importing || diffLoading || prLoading
+                  ? "text-muted-foreground/50 cursor-not-allowed"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent",
+              )}
+            >
+              {zh.common.rescanAnalyze}
+            </button>
+          )}
+
           <motion.button
             type="button"
             onClick={onAnalyze}
@@ -269,12 +293,14 @@ export function Header({
             {analyzing ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>分析中</span>
+                <span>{scanning ? "扫描中" : "生成中"}</span>
               </>
             ) : (
               <>
                 <Zap className="w-3.5 h-3.5" />
-                <span>{zh.common.startAnalyze}</span>
+                <span>
+                  {hasFindings ? zh.common.regenerateSummary : zh.common.startAnalyze}
+                </span>
               </>
             )}
           </motion.button>
