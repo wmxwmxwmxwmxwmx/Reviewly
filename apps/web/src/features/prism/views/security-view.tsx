@@ -19,7 +19,7 @@ import {
   severityConfig,
 } from "@/features/prism/components/security-findings-table"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
-import { useRepos } from "@/hooks/use-repos"
+import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { useSecurityCenter } from "@/hooks/use-security-center"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
@@ -28,7 +28,7 @@ const SEVERITY_OPTIONS = ["", "critical", "high", "medium", "low"] as const
 
 export function SecurityView() {
   const { navigate } = useNavigation()
-  const { repos } = useRepos()
+  const { repos } = useReposStore()
   const {
     items,
     total,
@@ -61,13 +61,13 @@ export function SecurityView() {
   const securityMetrics = useMemo(
     () => [
       {
-        label: "安全评分",
-        value: stats ? String(Math.max(0, 100 - stats.critical * 15)) : "—",
-        suffix: "/100",
+        label: "开放漏洞",
+        value: stats ? String(stats.openFindings) : "—",
+        suffix: "",
       },
-      { label: "开放漏洞", value: stats ? String(stats.openFindings) : "—", suffix: "" },
       { label: "严重", value: stats ? String(stats.critical) : "—", suffix: "" },
       { label: "高危", value: stats ? String(stats.high) : "—", suffix: "" },
+      { label: "中危", value: stats ? String(stats.medium) : "—", suffix: "" },
     ],
     [stats],
   )

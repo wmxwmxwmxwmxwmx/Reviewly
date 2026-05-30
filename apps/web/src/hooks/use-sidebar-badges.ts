@@ -1,12 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
+import { useDashboardContext } from "@/features/prism/contexts/dashboard-context"
 import { PrismApiError } from "@/lib/api/client"
-import { fetchDashboard } from "@/lib/api/dashboard"
-import { fetchPerformanceStats } from "@/lib/api/performance"
-import { fetchPullRequests } from "@/lib/api/pull-requests"
-import { fetchSecurityStats } from "@/lib/api/security"
 import { fetchGovernanceViolations } from "@/lib/api/governance"
 
 export interface SidebarBadgeState {
@@ -26,70 +23,43 @@ const defaultBadges: SidebarBadgeState = {
 }
 
 export function useSidebarBadges() {
-  const [badges, setBadges] = useState<SidebarBadgeState>(defaultBadges)
-  const [error, setError] = useState<string | null>(null)
+  const { data: dashboard, error: dashboardError, loading } = useDashboardContext()
+  const [governanceCount, setGovernanceCount] = useState<number | null>(null)
+  const [govError, setGovError] = useState<string | null>(null)
 
   useEffect(() => {
     const ac = new AbortController()
-
-    fetchDashboard(ac.signal)
-      .then(async (dash) => {
-        const summary = dash.summary
-        let governance: string | null = null
-        try {
-          const violationsList = await fetchGovernanceViolations(ac.signal)
-          const violations = violationsList.length
-          governance = violations > 0 ? String(violations) : null
-        } catch {
-          /* optional */
-        }
-        setBadges({
-          pullRequests:
-            (summary?.openPrCount ?? dash.pendingPrs) > 0
-              ? String(summary?.openPrCount ?? dash.pendingPrs)
-              : null,
-          aiReview:
-            (summary?.highRiskCount ?? 0) > 0 ? String(summary?.highRiskCount) : null,
-          security:
-            (summary?.securityCount ?? dash.securityIssues) > 0
-              ? String(summary?.securityCount ?? dash.securityIssues)
-              : null,
-          governance,
-          performance:
-            (summary?.performanceCount ?? 0) > 0
-              ? String(summary?.performanceCount)
-              : null,
-        })
+    setGovError(null)
+    fetchGovernanceViolations(ac.signal)
+      .then((violationsList) => setGovernanceCount(violationsList.length))
+      .catch((e: unknown) => {
+        if (e instanceof DOMException && e.name === "AbortError") return
+        setGovError(e instanceof PrismApiError ? e.message : "加载失败")
+        setGovernanceCount(null)
       })
-      .catch(() => {
-        Promise.all([
-          fetchPullRequests({ state: "open" }, ac.signal),
-          fetchSecurityStats(ac.signal),
-          fetchPerformanceStats(ac.signal),
-          fetchGovernanceViolations(ac.signal),
-        ])
-          .then(([prs, security, performance, violationsList]) => {
-            const reviewBacklog = prs.items.filter(
-              (pr) => pr.riskLevel === "high" || pr.riskLevel === "critical"
-            ).length
-            const violations = violationsList.length
-
-            setBadges({
-              pullRequests: prs.items.length > 0 ? String(prs.items.length) : null,
-              aiReview: reviewBacklog > 0 ? String(reviewBacklog) : null,
-              security: security.openFindings > 0 ? String(security.openFindings) : null,
-              governance: violations > 0 ? String(violations) : null,
-              performance: performance.openFindings > 0 ? String(performance.openFindings) : null,
-            })
-          })
-          .catch((e: unknown) => {
-            if (e instanceof DOMException && e.name === "AbortError") return
-            setError(e instanceof PrismApiError ? e.message : "加载失败")
-          })
-      })
-
     return () => ac.abort()
-  }, [])
+  }, [dashboard])
 
-  return { badges, error }
+  const badges = useMemo<SidebarBadgeState>(() => {
+    if (!dashboard) {
+      return defaultBadges
+    }
+    const summary = dashboard.summary
+    return {
+      pullRequests:
+        (summary?.openPrCount ?? dashboard.pendingPrs) > 0
+          ? String(summary?.openPrCount ?? dashboard.pendingPrs)
+          : null,
+      aiReview: (summary?.highRiskCount ?? 0) > 0 ? String(summary?.highRiskCount) : null,
+      security:
+        (summary?.securityCount ?? dashboard.securityIssues) > 0
+          ? String(summary?.securityCount ?? dashboard.securityIssues)
+          : null,
+      governance: governanceCount !== null && governanceCount > 0 ? String(governanceCount) : null,
+      performance:
+        (summary?.performanceCount ?? 0) > 0 ? String(summary?.performanceCount) : null,
+    }
+  }, [dashboard, governanceCount])
+
+  return { badges, error: dashboardError ?? govError, loading }
 }

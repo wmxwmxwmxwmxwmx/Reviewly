@@ -186,6 +186,20 @@ export function AIReviewView({
   )
 
   const diffTotal = useMemo(() => Math.max(diffFiles.length, 1), [diffFiles.length])
+  const approxContextChars = useMemo(
+    () =>
+      diffFiles.reduce(
+        (sum, file) =>
+          sum +
+          file.chunks.reduce(
+            (chunkSum, chunk) =>
+              chunkSum + chunk.lines.reduce((lineSum, line) => lineSum + line.content.length, 0),
+            0,
+          ),
+        0,
+      ),
+    [diffFiles],
+  )
   const hasAnalysis =
     findings.length > 0 ||
     Boolean(generatedSummary) ||
@@ -440,6 +454,7 @@ ${diffContext || "（无 diff 内容）"}`,
             job={job ?? undefined}
             mergeRecommendation={latest?.mergeRecommendation}
             filesChanged={pr?.filesChanged ?? 0}
+            approxContextChars={approxContextChars}
             activeTab={activePanelTab}
             onActiveTabChange={setActivePanelTab}
           />

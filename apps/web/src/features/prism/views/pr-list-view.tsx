@@ -141,11 +141,13 @@ export function PRListView() {
         </div>
 
         <div className="divide-y divide-border">
-          {loading && (
-            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-              加载合并请求…
-            </div>
-          )}
+          {loading &&
+            Array.from({ length: 3 }).map((_, idx) => (
+              <div key={idx} className="px-4 py-3 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            ))}
           {!loading && filteredPRs.length === 0 && (
             <div className="px-4 py-8 text-center text-sm text-muted-foreground">
               {apiPrs.length === 0

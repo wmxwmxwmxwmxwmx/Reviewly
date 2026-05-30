@@ -4,10 +4,14 @@ import uuid
 from copy import deepcopy
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import not_, select
 from sqlalchemy.orm import Session
 
-from app.db.models import AuditLog, GovernanceRule, GovernanceViolation
+from app.db.models import AuditLog, GovernanceRule, GovernanceViolation, PullRequest, Repository
+from app.repositories.seed_filter import (
+    seed_governance_rule_predicate,
+    seed_pull_request_predicate,
+)
 def _row_to_definition(row: GovernanceRule) -> dict[str, Any]:
     payload = deepcopy(row.payload) if row.payload else {}
     payload["id"] = row.id
@@ -24,7 +28,9 @@ def _row_to_definition(row: GovernanceRule) -> dict[str, Any]:
 
 def list_enabled_rule_definitions(session: Session) -> list[dict[str, Any]]:
     rows = session.scalars(
-        select(GovernanceRule).where(GovernanceRule.enabled.is_(True))
+        select(GovernanceRule)
+        .where(GovernanceRule.enabled.is_(True))
+        .where(not_(seed_governance_rule_predicate()))
     ).all()
     if not rows:
         return []
@@ -36,7 +42,7 @@ def list_rule_definitions(
     *,
     include_disabled: bool = False,
 ) -> list[dict[str, Any]]:
-    query = select(GovernanceRule)
+    query = select(GovernanceRule).where(not_(seed_governance_rule_predicate()))
     if not include_disabled:
         query = query.where(GovernanceRule.enabled.is_(True))
     rows = session.scalars(query).all()
@@ -155,7 +161,11 @@ def list_rules_for_pr(session: Session, pr_id: str) -> list[dict]:
 
 def list_violations(session: Session) -> list[dict]:
     rows = session.scalars(
-        select(GovernanceViolation).where(GovernanceViolation.violated.is_(True))
+        select(GovernanceViolation)
+        .join(PullRequest, GovernanceViolation.pull_request_id == PullRequest.id)
+        .join(Repository, PullRequest.repository_id == Repository.id)
+        .where(GovernanceViolation.violated.is_(True))
+        .where(not_(seed_pull_request_predicate()))
     ).all()
     if rows:
         out: list[dict] = []

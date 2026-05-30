@@ -191,14 +191,21 @@ export function PerformanceFindingsTable({
                     </span>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    <button
-                      type="button"
-                      className="hover:text-foreground text-left"
-                      onClick={() => onRowClick(row)}
-                    >
-                      {row.repo}
-                      <span className="text-ai-blue">#{row.prNumber}</span>
-                    </button>
+                    {row.pullRequestId ? (
+                      <button
+                        type="button"
+                        className="hover:text-foreground text-left"
+                        onClick={() => onRowClick(row)}
+                      >
+                        {row.repo}
+                        <span className="text-ai-blue">#{row.prNumber}</span>
+                      </button>
+                    ) : (
+                      <span>
+                        {row.repo}
+                        <span className="text-muted-foreground">#{row.prNumber}</span>
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 font-mono text-muted-foreground">
                     {row.file}:{row.line}
@@ -228,14 +235,16 @@ export function PerformanceFindingsTable({
                             ? zh.performance.collapseOptimize
                             : zh.actions.aiOptimize}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => onRowClick(row)}
-                        className="p-1 opacity-0 group-hover:opacity-100 text-muted-foreground"
-                        aria-label={zh.actions.openPrReview}
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
+                      {row.pullRequestId && (
+                        <button
+                          type="button"
+                          onClick={() => onRowClick(row)}
+                          className="p-1 opacity-0 group-hover:opacity-100 text-muted-foreground"
+                          aria-label={zh.actions.openPrReview}
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </motion.tr>

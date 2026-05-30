@@ -15,6 +15,7 @@ from app.db.models import AnalysisFinding, AnalysisJob
 from app.repositories.analysis import _finding_to_api
 from app.repositories.dashboard import get_dashboard
 from app.repositories import settings as settings_repo
+from app.repositories.seed_filter import exclude_seed_findings, is_seed_repository
 from app.services.ai_config import resolve_ai_config
 
 
@@ -31,7 +32,15 @@ async def generate_weekly_summary(
     )
 
     since = datetime.now(timezone.utc) - timedelta(days=7)
-    findings_rows = session.scalars(select(AnalysisFinding)).all()
+    from app.db.models import PullRequest, Repository
+
+    findings_stmt = exclude_seed_findings(
+        select(AnalysisFinding)
+        .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
+        .join(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
+        .join(Repository, PullRequest.repository_id == Repository.id)
+    )
+    findings_rows = session.scalars(findings_stmt).all()
     recent_findings = []
     for row in findings_rows:
         job = session.get(AnalysisJob, row.job_id)

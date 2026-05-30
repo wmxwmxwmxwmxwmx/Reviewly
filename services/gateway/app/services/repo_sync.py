@@ -97,11 +97,13 @@ async def sync_repositories_for_user(session: Session, user: AuthUser) -> dict[s
     created = 0
     updated = 0
     last_synced = _now_utc()
+    synced_full_names: set[str] = set()
 
     for gh_repo in gh_repos:
         full_name = gh_repo.get("full_name") or ""
         if not full_name:
             continue
+        synced_full_names.add(full_name)
         metadata = github_repo_to_metadata(
             gh_repo,
             open_prs=0,
@@ -119,7 +121,9 @@ async def sync_repositories_for_user(session: Session, user: AuthUser) -> dict[s
         else:
             updated += 1
 
-    claimed = repos_repo.claim_orphan_repositories(session, user.id)
+    claimed = repos_repo.claim_orphan_repositories(
+        session, user.id, github_full_names=synced_full_names
+    )
     if claimed:
         logger.info("User %s claimed %s orphan repositories", user.username, claimed)
 

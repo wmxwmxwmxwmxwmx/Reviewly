@@ -5,7 +5,7 @@ from sqlalchemy import and_, func, not_, or_
 from sqlalchemy.orm import Query
 from sqlalchemy.sql import Select
 
-from app.db.models import PullRequest, Repository, User
+from app.db.models import GovernanceRule, PullRequest, Repository, User
 from app.mock.seed import DEFAULT_PR_ID
 
 LEGACY_SEED_REPOSITORY_IDS: frozenset[str] = frozenset({"repo-payment", "repo-auth"})
@@ -52,6 +52,11 @@ def seed_repository_predicate():
 def seed_pull_request_predicate():
     """SQLAlchemy expression: PullRequest belongs to a demo seed repository."""
     return PullRequest.repository_id.in_(tuple(LEGACY_SEED_REPOSITORY_IDS))
+
+
+def seed_governance_rule_predicate():
+    """SQLAlchemy expression: legacy demo governance rules."""
+    return GovernanceRule.id.in_(tuple(LEGACY_SEED_GOVERNANCE_RULE_IDS))
 
 
 def seed_user_predicate():

@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     oauth_callback_url: str = "http://localhost:3001/api/auth/github/callback"
     frontend_url: str = "http://localhost:3000"
     prism_auth_bypass: bool = False
+    prism_allow_legacy_sync: bool = False
     prism_repo_cache_dir: str = "./data/repo-cache"
     architecture_scan_max_files: int = 2000
     repo_cache_ttl_hours: int = 24

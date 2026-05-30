@@ -13,6 +13,7 @@ os.environ["GITHUB_APP_ID"] = ""
 os.environ["GITHUB_APP_PRIVATE_KEY"] = ""
 os.environ["GITHUB_WEBHOOK_SECRET"] = ""
 os.environ["PRISM_AUTH_BYPASS"] = "1"
+os.environ["PRISM_ALLOW_LEGACY_SYNC"] = "1"
 os.environ["JWT_SECRET"] = "test-jwt-secret-for-pytest-only"
 
 from app.db import session as db_session  # noqa: E402
@@ -62,3 +63,13 @@ def client() -> TestClient:
         yield test_client
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def db(client: TestClient):
+    _ = client
+    session = TestingSession()
+    try:
+        yield session
+    finally:
+        session.close()

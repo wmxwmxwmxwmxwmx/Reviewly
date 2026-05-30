@@ -32,6 +32,20 @@ def test_settings_patch(client: TestClient) -> None:
     assert r.json()["ai"]["temperature"] == 0.3
 
 
+def test_settings_patch_secrets_requires_encryption_key(client: TestClient) -> None:
+    from unittest.mock import patch
+
+    with patch("app.repositories.settings.settings_crypto.is_configured", return_value=False):
+        r = client.patch(
+            "/api/settings",
+            json={"ai": {"provider": "openai", "model": "gpt-4o-mini", "apiKey": "sk-test-key"}},
+        )
+    assert r.status_code == 501
+    body = r.json()
+    message = body.get("error") or body.get("detail", {}).get("error", "")
+    assert "SETTINGS_ENCRYPTION_KEY" in message
+
+
 def test_settings_security_patch(client: TestClient) -> None:
     r = client.patch(
         "/api/settings",

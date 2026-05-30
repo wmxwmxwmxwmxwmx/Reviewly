@@ -56,3 +56,13 @@ def test_invalid_pat() -> None:
         github_errors.raise_for_github_response(resp, resource="该仓库", has_pat=True)
     assert exc.value.status_code == 401
     assert "GITHUB_PAT" in exc.value.detail["error"]
+
+
+def test_github_client_passes_has_pat_on_error() -> None:
+    """GitHubClient must pass has_pat to avoid TypeError on failed responses."""
+    import inspect
+
+    from app.github import client as client_mod
+
+    source = inspect.getsource(client_mod.GitHubClient)
+    assert source.count("has_pat=True") >= 4

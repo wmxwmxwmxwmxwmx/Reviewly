@@ -7,7 +7,7 @@ import { Gauge, Search, Zap, ChevronLeft, ChevronRight } from "lucide-react"
 import { PerformanceFindingsTable, perfSeverityConfig } from "@/features/prism/components/performance-findings-table"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { usePerformanceCenter } from "@/hooks/use-performance-center"
-import { useRepos } from "@/hooks/use-repos"
+import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { zh } from "@/lib/i18n/zh"
 import { formatPerfType, PERF_TYPE_FILTER_OPTIONS } from "@/lib/perf-type-labels"
 import { cn } from "@/lib/utils"
@@ -16,7 +16,7 @@ const SEVERITY_OPTIONS = ["", "critical", "high", "medium", "low"] as const
 
 export function PerformanceView() {
   const { navigate } = useNavigation()
-  const { repos } = useRepos()
+  const { repos } = useReposStore()
   const {
     items,
     total,

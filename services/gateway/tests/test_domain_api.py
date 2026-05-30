@@ -26,14 +26,22 @@ def test_security_crud(client: TestClient) -> None:
 
 
 def test_pr_governance_checks(client: TestClient) -> None:
-    from app.mock.seed import DEFAULT_PR_ID
+    prs = client.get("/api/pull-requests").json()["items"]
+    assert prs, "expected at least one non-seed pull request"
+    pr_id = prs[0]["id"]
 
-    r = client.get(f"/api/pull-requests/{DEFAULT_PR_ID}/governance")
+    created = client.post(
+        "/api/governance/rules",
+        json={"rule": "禁止硬编码密钥", "severity": "high", "enabled": True},
+    )
+    assert created.status_code == 200
+
+    r = client.get(f"/api/pull-requests/{pr_id}/governance")
     assert r.status_code == 200
     rules = r.json()
     assert isinstance(rules, list)
     assert len(rules) >= 1
-    assert any(item.get("violated") for item in rules)
+    assert any(item.get("id") == created.json()["id"] for item in rules)
 
 
 def test_governance_rules_crud(client: TestClient) -> None:

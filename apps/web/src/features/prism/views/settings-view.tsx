@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils"
 
 export function SettingsView() {
   const { user, isAuthenticated, loading: authLoading } = useAuth()
-  const { settings, providerLabel, hasApiKey, maskedApiKey, monthlyUsage, clearUsage, updateSettings } =
+  const { settings, providerLabel, hasApiKey, maskedApiKey, monthlyUsage, clearUsage, updateSettings, settingsHydrated } =
     useAISettings()
   const {
     security,
@@ -122,6 +122,7 @@ export function SettingsView() {
   }
 
   const isSaving = securitySaving
+  const formDisabled = !settingsHydrated
   const accountUsername = user?.username ?? (authLoading ? "…" : zh.sidebar.notLoggedIn)
   const accountEmail = user?.email ?? (isAuthenticated ? "—" : zh.sidebar.signInHint)
 
@@ -152,10 +153,14 @@ export function SettingsView() {
           </span>
         </div>
         <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {!settingsHydrated && (
+            <p className="lg:col-span-3 text-xs text-muted-foreground">正在加载 AI 设置…</p>
+          )}
           <label className="space-y-2">
             <span className="text-xs font-medium text-muted-foreground">模型供应商</span>
             <select
               value={aiForm.provider}
+              disabled={formDisabled}
               onChange={(event) => handleProviderChange(event.target.value as AIProvider)}
               className="w-full h-10 rounded-md border border-border bg-surface-2 px-3 text-sm text-foreground outline-none transition-colors focus:border-ai-blue focus:ring-2 focus:ring-ai-blue/20"
             >
@@ -171,6 +176,7 @@ export function SettingsView() {
             <span className="text-xs font-medium text-muted-foreground">模型名称</span>
             <input
               value={aiForm.model}
+              disabled={formDisabled}
               onChange={(event) => {
                 setAiForm((current) => ({ ...current, model: event.target.value }))
                 setSaved(false)
@@ -187,6 +193,7 @@ export function SettingsView() {
               <input
                 type="password"
                 value={aiForm.apiKey}
+                disabled={formDisabled}
                 onChange={(event) => {
                   setAiForm((current) => ({ ...current, apiKey: event.target.value }))
                   setSaved(false)
@@ -210,7 +217,8 @@ export function SettingsView() {
             <button
               type="button"
               onClick={clearUsage}
-              className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:border-risk-medium/40 hover:text-risk-medium"
+              disabled={formDisabled}
+              className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:border-risk-medium/40 hover:text-risk-medium disabled:opacity-50"
             >
               清空用量
             </button>
@@ -317,7 +325,7 @@ export function SettingsView() {
       <button
         type="button"
         onClick={() => void handleSave()}
-        disabled={isSaving}
+        disabled={isSaving || formDisabled}
         className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-ai-blue rounded-md hover:bg-sky-300 transition-colors disabled:opacity-50"
       >
         {saved ? (

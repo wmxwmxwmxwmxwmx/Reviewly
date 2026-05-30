@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Loader2,
   CheckCircle2,
+  AlertTriangle,
   Zap,
   Menu,
   PanelRight,
@@ -66,6 +67,13 @@ export function Header({
     setLocalUrlError(null)
     await onImportUrl(trimmed)
   }, [inputUrl, importing, onImportUrl])
+
+  const syncLooksSuccessful =
+    Boolean(syncLabel) &&
+    (syncLabel === zh.common.loaded ||
+      syncLabel === zh.common.syncedFromGithub ||
+      syncLabel === zh.common.importedFromGithub ||
+      syncLabel === zh.common.syncComplete)
 
   return (
     <header className="sticky top-0 z-30 flex flex-col border-b border-border bg-panel/95 backdrop-blur-sm shrink-0 shadow-[0_18px_50px_rgba(0,0,0,0.20)]">
@@ -150,9 +158,30 @@ export function Header({
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          <div className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <CheckCircle2 className="w-3.5 h-3.5 text-risk-low" />
-            <span>{syncLabel}</span>
+          <div className="hidden md:flex items-center gap-1.5 text-[11px] max-w-[11rem]">
+            {importing ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-ai-blue" />
+                <span className="text-muted-foreground truncate">{syncLabel ?? zh.common.analyzeReady}</span>
+              </>
+            ) : importError ? (
+              <>
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-risk-high" />
+                <span className="text-risk-high truncate">{importError}</span>
+              </>
+            ) : syncLooksSuccessful ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-risk-low" />
+                <span className="text-muted-foreground truncate">{syncLabel}</span>
+              </>
+            ) : (
+              <>
+                <div className="w-1.5 h-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
+                <span className="text-muted-foreground truncate">
+                  {syncLabel ?? zh.common.analyzeReady}
+                </span>
+              </>
+            )}
           </div>
 
           <AnimatePresence mode="wait">
@@ -217,6 +246,7 @@ export function Header({
           )}
 
           <motion.button
+            type="button"
             onClick={onAnalyze}
             disabled={analyzing || importing || diffLoading || prLoading}
             className={cn(

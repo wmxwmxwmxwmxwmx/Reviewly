@@ -15,8 +15,6 @@ import {
   GitMerge,
   ChevronDown,
   ChevronRight,
-  Search,
-  Filter,
   Cpu,
   Zap,
   TriangleAlert,
@@ -131,15 +129,28 @@ function AIStreamPanel({
   job,
   findings,
   filesChanged,
+  approxContextChars = 0,
 }: {
   analyzing: boolean
   job?: AnalysisJob
   findings: AnalysisFinding[]
   filesChanged: number
+  approxContextChars?: number
 }) {
   const streamLines = buildStreamLines(analyzing, job, findings, filesChanged)
   const { settings, monthlyUsage, usageRecords } = useAISettings()
   const latestUsage = usageRecords[0]
+  const contextBudget = 200_000
+  const contextLabel =
+    approxContextChars > 0
+      ? `${Math.round(approxContextChars / 1000)}K / ${Math.round(contextBudget / 1000)}K`
+      : "—"
+  const contextPct =
+    approxContextChars > 0
+      ? Math.min(100, (approxContextChars / contextBudget) * 100)
+      : analyzing && job
+        ? Math.min(95, Math.max(8, job.progress))
+        : 0
 
   return (
     <div className="space-y-3">
@@ -165,16 +176,27 @@ function AIStreamPanel({
       <div className="px-3 py-2 rounded-md bg-surface-2 border border-border">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-[10px] text-muted-foreground">{zh.ai.contextWindow}</span>
-          <span className="text-[10px] font-mono text-foreground">67K / 200K</span>
+          <span className="text-[10px] font-mono text-foreground">{contextLabel}</span>
         </div>
         <div className="h-1.5 rounded-full bg-surface-4 overflow-hidden">
-          <motion.div
-            className="h-full rounded-full bg-ai-blue"
-            initial={{ width: 0 }}
-            animate={{ width: "33.5%" }}
-            transition={{ duration: 1.2, ease: "easeOut" }}
-          />
+          {analyzing && approxContextChars === 0 ? (
+            <motion.div
+              className="h-full w-1/3 rounded-full bg-ai-blue"
+              animate={{ x: ["-100%", "250%"] }}
+              transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+            />
+          ) : (
+            <motion.div
+              className="h-full rounded-full bg-ai-blue"
+              initial={{ width: 0 }}
+              animate={{ width: `${contextPct}%` }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+            />
+          )}
         </div>
+        {approxContextChars === 0 && !analyzing && (
+          <p className="text-[9px] text-muted-foreground mt-1">基于 Diff 估算，分析后更新</p>
+        )}
       </div>
 
       {/* Stream Log */}
@@ -368,9 +390,6 @@ function MergePanel({
           <div className="text-xs font-semibold">
             {blockingCount > 0 ? `${blockingCount} 项阻塞合并` : "可以合并"}
           </div>
-          <div className="text-[10px] opacity-80">
-            发布可信度：{blockingCount > 0 ? "32%" : "95%"}
-          </div>
         </div>
       </div>
 
@@ -518,6 +537,7 @@ interface AIPanelProps {
   job?: AnalysisJob
   mergeRecommendation?: AnalysisSummary["mergeRecommendation"]
   filesChanged?: number
+  approxContextChars?: number
   activeTab?: PanelTab
   onActiveTabChange?: (tab: PanelTab) => void
 }
@@ -530,6 +550,7 @@ export function AIPanel({
   job,
   mergeRecommendation,
   filesChanged = 0,
+  approxContextChars = 0,
   activeTab: activeTabProp,
   onActiveTabChange,
 }: AIPanelProps) {
@@ -616,6 +637,7 @@ export function AIPanel({
                 job={job}
                 findings={findings}
                 filesChanged={filesChanged}
+                approxContextChars={approxContextChars}
               />
             )}
             {activeTab === "risks" && <RisksPanel findings={findings} />}

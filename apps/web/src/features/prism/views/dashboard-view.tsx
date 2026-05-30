@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import type { NavView } from "@/features/prism/components/sidebar"
-import { useDashboard } from "@/hooks/use-dashboard"
+import { useDashboardContext } from "@/features/prism/contexts/dashboard-context"
 import { useDashboardMetrics } from "@/hooks/use-dashboard-metrics"
 import { useRiskDistribution } from "@/hooks/use-risk-distribution"
 import { useWeeklySummary } from "@/hooks/use-weekly-summary"
@@ -30,7 +30,7 @@ function activityIconType(type: string) {
 
 export function DashboardView() {
   const { navigate } = useNavigation()
-  const { data: dashboard, loading, error, refetch, isValidating } = useDashboard()
+  const { data: dashboard, loading, error, refetch, isValidating } = useDashboardContext()
   const metrics = useDashboardMetrics(dashboard, loading)
   const { segments: riskSegments, total: riskTotal } = useRiskDistribution(dashboard)
   const { content: weeklyContent, loading: weeklyLoading, error: weeklyError, generate } =
@@ -324,7 +324,7 @@ export function DashboardView() {
         <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <BrainCircuit className="w-4 h-4 text-ai-blue" />
-            <span className="text-sm font-medium text-foreground">AI 洞察</span>
+            <span className="text-sm font-medium text-foreground">{zh.dashboard.recentActivity}</span>
           </div>
           <button
             type="button"

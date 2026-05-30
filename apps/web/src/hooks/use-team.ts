@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import { fetchTeamMembers } from "@/lib/api/team"
 import { PrismApiError } from "@/lib/api/client"
@@ -11,18 +11,31 @@ export function useTeam() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const ac = new AbortController()
+  const load = useCallback(async (signal: AbortSignal) => {
     setLoading(true)
-    fetchTeamMembers(ac.signal)
-      .then(setMembers)
-      .catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === "AbortError") return
-        setError(e instanceof PrismApiError ? e.message : "加载失败")
-      })
-      .finally(() => setLoading(false))
-    return () => ac.abort()
+    setError(null)
+    try {
+      const data = await fetchTeamMembers(signal)
+      setMembers(data)
+    } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === "AbortError") return
+      setError(e instanceof PrismApiError ? e.message : "加载失败")
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  return { members, loading, error }
+  useEffect(() => {
+    const ac = new AbortController()
+    void load(ac.signal)
+    return () => ac.abort()
+  }, [load])
+
+  const reload = useCallback(() => {
+    const ac = new AbortController()
+    void load(ac.signal)
+    return () => ac.abort()
+  }, [load])
+
+  return { members, loading, error, reload }
 }

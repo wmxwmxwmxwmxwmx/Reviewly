@@ -1,13 +1,12 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Users, TrendingUp, TrendingDown } from "lucide-react"
+import { Users } from "lucide-react"
 import { zh } from "@/lib/i18n/zh"
-import { cn } from "@/lib/utils"
 import { useTeam } from "@/hooks/use-team"
 
 export function TeamView() {
-  const { members, loading, error } = useTeam()
+  const { members, loading, error, reload } = useTeam()
 
   return (
     <div className="p-5 space-y-5">
@@ -16,7 +15,14 @@ export function TeamView() {
         <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.team}</p>
       </div>
 
-      {error && <p className="text-sm text-risk-high">{error}</p>}
+      {error && (
+        <div className="rounded-lg border border-risk-high/30 bg-risk-high/10 px-4 py-3 text-sm text-risk-high flex items-center justify-between">
+          <span>{error}</span>
+          <button type="button" onClick={() => reload()} className="text-xs underline shrink-0 ml-3">
+            重试
+          </button>
+        </div>
+      )}
 
       <div className="rounded-lg border border-border overflow-hidden">
         <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
@@ -33,7 +39,6 @@ export function TeamView() {
               const avatar =
                 member.name?.slice(0, 2).toUpperCase() ??
                 member.id.slice(0, 2).toUpperCase()
-              const trend = member.riskFindings > 2 ? "down" : "up"
               return (
                 <motion.div
                   key={member.id}
@@ -64,13 +69,6 @@ export function TeamView() {
                       <div className="text-sm font-medium text-foreground">{member.riskFindings}</div>
                       <div className="text-xs text-muted-foreground">风险发现</div>
                     </div>
-                  </div>
-                  <div className={cn(trend === "up" ? "text-risk-low" : "text-risk-medium")}>
-                    {trend === "up" ? (
-                      <TrendingUp className="w-4 h-4" />
-                    ) : (
-                      <TrendingDown className="w-4 h-4" />
-                    )}
                   </div>
                 </motion.div>
               )

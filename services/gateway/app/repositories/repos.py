@@ -176,11 +176,19 @@ def _repo_to_api(session: Session, row: Repository) -> dict:
     return data
 
 
-def claim_orphan_repositories(session: Session, user_id: str) -> int:
+def claim_orphan_repositories(
+    session: Session,
+    user_id: str,
+    *,
+    github_full_names: set[str] | None = None,
+) -> int:
     """Assign unowned non-seed repositories to the current user after sync."""
-    rows = session.scalars(
-        exclude_seed_repositories(select(Repository)).where(Repository.owner_user_id.is_(None))
-    ).all()
+    query = exclude_seed_repositories(select(Repository)).where(Repository.owner_user_id.is_(None))
+    if github_full_names is not None:
+        if not github_full_names:
+            return 0
+        query = query.where(Repository.full_name.in_(tuple(github_full_names)))
+    rows = session.scalars(query).all()
     for row in rows:
         row.owner_user_id = user_id
     if rows:
@@ -334,6 +342,15 @@ def upsert_repo(
 
 
 def list_recent_findings_for_repo(session: Session, repo_id: str, limit: int = 20) -> list[dict]:
+    from app.repositories.seed_filter import is_seed_repository_id
+
+    if is_seed_repository_id(repo_id):
+        return []
+
+    repo = session.get(Repository, repo_id)
+    if repo is not None and is_seed_repository(repo):
+        return []
+
     pr_ids = session.scalars(
         select(PullRequest.id).where(PullRequest.repository_id == repo_id)
     ).all()

@@ -102,7 +102,8 @@ export const zh = {
   dashboard: {
     riskDistributionOpenPr: "风险分布（开放 PR）",
     repoPrCount: (count: number) => `${count} 个 PR`,
-    aiInsightsEmpty: "完成 PR 分析后将显示活动洞察",
+    recentActivity: "近期活动",
+    aiInsightsEmpty: "同步仓库并完成 PR 分析后，活动将显示在此",
     noReposHint: "暂无仓库数据。请前往仓库管理同步 GitHub 仓库。",
     goToRepos: "前往仓库管理",
   },
@@ -227,7 +228,6 @@ export const zh = {
     monthlyUsage: "本月用量",
     noTeamMember: "暂无团队成员",
     teamEmptyHint: "同步 GitHub 仓库后，团队成员将在此展示",
-    demoDataHint: "使用种子数据或同步团队",
     notLoggedIn: "未登录",
     signInHint: "请登录以同步仓库",
   },

@@ -73,33 +73,40 @@ async def handle_event(session: Session, event: str, payload: dict[str, Any]) ->
         installation_id = payload.get("installation", {}).get("id")
         inst_str = str(installation_id) if installation_id else None
 
-        if action in ("opened", "synchronize", "reopened"):
-            pr_id = await sync_from_webhook_pr(
-                session,
-                payload,
-                installation_id=inst_str,
-            )
-            if pr_id and action in ("opened", "synchronize"):
-                from app.services.analysis_orchestrator import (
-                    enqueue_analysis,
-                    schedule_analysis_background,
+        try:
+            if action in ("opened", "synchronize", "reopened"):
+                pr_id = await sync_from_webhook_pr(
+                    session,
+                    payload,
+                    installation_id=inst_str,
                 )
+                if pr_id and action in ("opened", "synchronize"):
+                    from app.services.analysis_orchestrator import (
+                        enqueue_analysis,
+                        schedule_analysis_background,
+                    )
 
-                job_id = enqueue_analysis(pr_id)
-                if job_id:
-                    schedule_analysis_background(job_id)
-            logger.info("Webhook pull_request %s handled pr_id=%s", action, pr_id)
-            return
+                    try:
+                        job_id = enqueue_analysis(pr_id)
+                        if job_id:
+                            schedule_analysis_background(job_id)
+                    except Exception:
+                        logger.exception(
+                            "Webhook analysis enqueue failed pr_id=%s action=%s",
+                            pr_id,
+                            action,
+                        )
+                logger.info("Webhook pull_request %s handled pr_id=%s", action, pr_id)
+                return
 
-        if installation_id and _github_configured():
-            try:
+            if installation_id and _github_configured():
                 await sync.sync_installation(session, inst_str)
-            except Exception:
-                logger.exception(
-                    "Webhook pull_request resync failed installation_id=%s action=%s",
-                    inst_str,
-                    action,
-                )
+        except Exception:
+            logger.exception(
+                "Webhook pull_request handler failed action=%s installation_id=%s",
+                action,
+                inst_str,
+            )
         return
 
     if event == "push":

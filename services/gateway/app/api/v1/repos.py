@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.errors import api_error
 from app.core.security import CurrentUser, get_current_user
 from app.db.deps import get_db
 from app.db.models import AuthUser
@@ -34,7 +36,12 @@ async def sync_repositories_admin(
     user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Legacy PAT-based sync; requires authenticated user (or PRISM_AUTH_BYPASS dev user)."""
+    """Legacy PAT-based sync; dev-only unless PRISM_ALLOW_LEGACY_SYNC=1."""
+    if not (settings.prism_auth_bypass or settings.prism_allow_legacy_sync):
+        raise api_error(
+            "全局 PAT 同步仅限开发环境。请使用 POST /api/repos/sync/me 同步您的仓库。",
+            403,
+        )
     _ = user
     return await repo_sync.sync_github_repositories(db)
 

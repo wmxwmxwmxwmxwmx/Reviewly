@@ -8,10 +8,7 @@ import {
   AlertTriangle,
   AlertOctagon,
   FileCode,
-  Plus,
-  Minus,
   User,
-  MessageSquare,
   Loader2,
 } from "lucide-react"
 import { zh } from "@/lib/i18n/zh"

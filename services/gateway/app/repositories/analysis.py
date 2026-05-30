@@ -148,6 +148,15 @@ def get_latest_analysis(session: Session, pull_request_id: str) -> dict | None:
 
 
 def get_findings(session: Session, pull_request_id: str) -> list[dict]:
+    from app.db.models import PullRequest, Repository
+    from app.repositories.seed_filter import is_seed_pull_request
+
+    pr = session.get(PullRequest, pull_request_id)
+    if pr is not None:
+        repo = session.get(Repository, pr.repository_id)
+        if repo is not None and is_seed_pull_request(pr, repo=repo):
+            return []
+
     job = session.scalar(
         select(AnalysisJob)
         .where(
