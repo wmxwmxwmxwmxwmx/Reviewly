@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 
 import { fetchPullRequest } from "@/lib/api/pull-requests"
 import { PrismApiError } from "@/lib/api/client"
+import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import type { PullRequest } from "@reviewly/shared"
 
 export function usePullRequest(prId: string | null) {
@@ -25,11 +26,13 @@ export function usePullRequest(prId: string | null) {
     fetchPullRequest(prId, ac.signal)
       .then(setData)
       .catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === "AbortError") return
+        if (isAbortError(e)) return
         setError(e instanceof PrismApiError ? e.message : "加载失败")
         setData(null)
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (shouldApplyResult(ac.signal)) setLoading(false)
+      })
 
     return () => ac.abort()
   }, [prId])

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 
 import { fetchPerformanceStats } from "@/lib/api/performance"
 import { PrismApiError } from "@/lib/api/client"
+import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import type { PerformanceStats } from "@/lib/api/performance"
 
 /** Stats-only hook for sidebar badges. */
@@ -18,10 +19,12 @@ export function usePerformance() {
     fetchPerformanceStats(ac.signal)
       .then(setStats)
       .catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === "AbortError") return
+        if (isAbortError(e)) return
         setError(e instanceof PrismApiError ? e.message : "加载失败")
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (shouldApplyResult(ac.signal)) setLoading(false)
+      })
     return () => ac.abort()
   }, [])
 

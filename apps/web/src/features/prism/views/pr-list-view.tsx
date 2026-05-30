@@ -220,7 +220,7 @@ export function PRListView() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2 mt-2">
-                      {pr.labels.map((label) => (
+                      {(pr.labels ?? []).map((label) => (
                         <span
                           key={label.name}
                           className="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground"

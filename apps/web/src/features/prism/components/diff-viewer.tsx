@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   ChevronDown,
@@ -21,6 +21,15 @@ const riskConfig = {
   medium: { label: zh.riskFile.medium, color: "text-risk-medium", bg: "bg-[oklch(0.75_0.16_83/0.08)]", border: "border-[oklch(0.75_0.16_83/0.25)]", dot: "bg-risk-medium" },
   low: { label: zh.riskFile.low, color: "text-risk-low", bg: "bg-[oklch(0.62_0.17_148/0.08)]", border: "border-[oklch(0.62_0.17_148/0.25)]", dot: "bg-risk-low" },
   none: { label: zh.riskFile.none, color: "text-muted-foreground", bg: "", border: "border-transparent", dot: "bg-muted" },
+}
+
+type RiskLevelKey = keyof typeof riskConfig
+
+function getRiskConfig(level: string | undefined) {
+  if (level && level in riskConfig) {
+    return riskConfig[level as RiskLevelKey]
+  }
+  return riskConfig.none
 }
 
 const langIcon: Record<string, string> = {
@@ -93,8 +102,27 @@ function RiskComment({
   )
 }
 
-function DiffLineRow({ line }: { line: DiffLine }) {
-  const [showComment, setShowComment] = useState(!!line.riskComment)
+function diffLineKey(line: DiffLine, index: number) {
+  return `${line.oldNum ?? "n"}-${line.newNum ?? "n"}-${line.type}-${index}`
+}
+
+const VIRTUALIZE_THRESHOLD = 80
+const ROW_HEIGHT = 22
+const MAX_VIEWPORT = 420
+const OVERSCAN = 10
+
+function DiffLineRow({
+  line,
+  showComment,
+  onToggleComment,
+}: {
+  line: DiffLine
+  showComment?: boolean
+  onToggleComment?: () => void
+}) {
+  const [internalShow, setInternalShow] = useState(!!line.riskComment)
+  const resolvedShow = showComment ?? internalShow
+  const toggleComment = onToggleComment ?? (() => setInternalShow((v) => !v))
 
   const bgClass = line.type === "add"
     ? "bg-[oklch(0.62_0.17_148/0.06)]"
@@ -123,7 +151,7 @@ function DiffLineRow({ line }: { line: DiffLine }) {
           borderClass,
           hasRisk && "ring-1 ring-inset ring-[oklch(0.55_0.22_27/0.15)]",
         )}
-        onClick={() => hasRisk && setShowComment(!showComment)}
+        onClick={() => hasRisk && toggleComment()}
       >
         {/* Line Numbers */}
         <div className="flex shrink-0">
@@ -152,10 +180,99 @@ function DiffLineRow({ line }: { line: DiffLine }) {
           </div>
         )}
       </div>
-      {hasRisk && showComment && line.riskComment && (
+      {hasRisk && resolvedShow && line.riskComment && (
         <RiskComment comment={line.riskComment} lineType={line.type} />
       )}
     </div>
+  )
+}
+
+function VirtualizedChunkLines({
+  lines,
+  commentExpanded,
+  onToggleComment,
+}: {
+  lines: DiffLine[]
+  commentExpanded: Record<string, boolean>
+  onToggleComment: (key: string, defaultOpen: boolean) => void
+}) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+
+  const totalHeight = lines.length * ROW_HEIGHT
+  const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+  const visibleCount = Math.ceil(MAX_VIEWPORT / ROW_HEIGHT) + OVERSCAN * 2
+  const end = Math.min(lines.length, start + visibleCount)
+
+  return (
+    <div
+      ref={containerRef}
+      onScroll={() => {
+        if (containerRef.current) setScrollTop(containerRef.current.scrollTop)
+      }}
+      className="overflow-y-auto"
+      style={{ maxHeight: MAX_VIEWPORT }}
+    >
+      <div className="relative" style={{ height: totalHeight }}>
+        {lines.slice(start, end).map((line, offset) => {
+          const index = start + offset
+          const key = diffLineKey(line, index)
+          const defaultOpen = !!line.riskComment
+          return (
+            <div
+              key={key}
+              className="absolute left-0 right-0"
+              style={{ top: index * ROW_HEIGHT }}
+            >
+              <DiffLineRow
+                line={line}
+                showComment={commentExpanded[key] ?? defaultOpen}
+                onToggleComment={() => onToggleComment(key, defaultOpen)}
+              />
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ChunkLines({
+  lines,
+  chunkKey,
+  commentExpanded,
+  onToggleComment,
+}: {
+  lines: DiffLine[]
+  chunkKey: string
+  commentExpanded: Record<string, boolean>
+  onToggleComment: (key: string, defaultOpen: boolean) => void
+}) {
+  if (lines.length >= VIRTUALIZE_THRESHOLD) {
+    return (
+      <VirtualizedChunkLines
+        lines={lines}
+        commentExpanded={commentExpanded}
+        onToggleComment={onToggleComment}
+      />
+    )
+  }
+
+  return (
+    <>
+      {lines.map((line, li) => {
+        const key = `${chunkKey}-${diffLineKey(line, li)}`
+        const defaultOpen = !!line.riskComment
+        return (
+          <DiffLineRow
+            key={key}
+            line={line}
+            showComment={commentExpanded[key] ?? defaultOpen}
+            onToggleComment={() => onToggleComment(key, defaultOpen)}
+          />
+        )
+      })}
+    </>
   )
 }
 
@@ -166,8 +283,16 @@ interface DiffFileCardProps {
 
 function DiffFileCard({ file, index }: DiffFileCardProps) {
   const [collapsed, setCollapsed] = useState(file.collapsed)
-  const cfg = riskConfig[file.riskLevel]
+  const [commentExpanded, setCommentExpanded] = useState<Record<string, boolean>>({})
+  const cfg = getRiskConfig(file.riskLevel)
   const ext = file.path.split('.').pop() || 'txt'
+
+  const toggleComment = useCallback((key: string, defaultOpen: boolean) => {
+    setCommentExpanded((prev) => ({
+      ...prev,
+      [key]: !(prev[key] ?? defaultOpen),
+    }))
+  }, [])
 
   return (
     <motion.div
@@ -234,17 +359,23 @@ function DiffFileCard({ file, index }: DiffFileCardProps) {
                 该文件暂无 diff 内容
               </div>
             ) : (
-              file.chunks.map((chunk, ci) => (
-                <div key={ci} className="relative z-0">
-                  {/* Chunk Header */}
-                  <div className="flex items-center gap-2 px-4 py-1.5 bg-[oklch(0.62_0.19_240/0.06)] border-y border-[oklch(0.62_0.19_240/0.15)]">
-                    <span className="text-[10px] font-mono text-[oklch(0.65_0.15_240)]">{chunk.header}</span>
+              file.chunks.map((chunk, ci) => {
+                const chunkKey = `${file.path}-${chunk.header}-${ci}`
+                return (
+                  <div key={chunkKey} className="relative z-0">
+                    {/* Chunk Header */}
+                    <div className="flex items-center gap-2 px-4 py-1.5 bg-[oklch(0.62_0.19_240/0.06)] border-y border-[oklch(0.62_0.19_240/0.15)]">
+                      <span className="text-[10px] font-mono text-[oklch(0.65_0.15_240)]">{chunk.header}</span>
+                    </div>
+                    <ChunkLines
+                      lines={chunk.lines}
+                      chunkKey={chunkKey}
+                      commentExpanded={commentExpanded}
+                      onToggleComment={toggleComment}
+                    />
                   </div>
-                  {chunk.lines.map((line, li) => (
-                    <DiffLineRow key={li} line={line} />
-                  ))}
-                </div>
-              ))
+                )
+              })
             )}
           </motion.div>
         )}

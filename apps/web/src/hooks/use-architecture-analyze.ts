@@ -6,6 +6,7 @@ import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { streamArchitectureAnalyze } from "@/lib/api/architecture"
 import { saveRepoArchitectureAnalysis } from "@/lib/api/repos"
+import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 
 export function useArchitectureAnalyze(repoId: string | null) {
   const { settings } = useAISettings()
@@ -24,10 +25,11 @@ export function useArchitectureAnalyze(repoId: string | null) {
   }, [repoId, cached])
 
   useEffect(() => {
+    analyzeAbort.current?.abort()
     return () => {
       analyzeAbort.current?.abort()
     }
-  }, [])
+  }, [repoId])
 
   const analyze = useCallback(async () => {
     if (!repoId) return
@@ -46,6 +48,7 @@ export function useArchitectureAnalyze(repoId: string | null) {
       await streamArchitectureAnalyze(repoId, {
         signal: ac.signal,
         onDelta: (delta) => {
+          if (ac.signal.aborted) return
           accumulated += delta
           setContent((prev) => prev + delta)
         },
@@ -63,10 +66,10 @@ export function useArchitectureAnalyze(repoId: string | null) {
         await refreshRepos()
       }
     } catch (e: unknown) {
-      if (e instanceof DOMException && e.name === "AbortError") return
+      if (isAbortError(e)) return
       setError(e instanceof Error ? e.message : "分析失败")
     } finally {
-      if (!ac.signal.aborted) {
+      if (shouldApplyResult(ac.signal)) {
         setLoading(false)
       }
     }

@@ -5,6 +5,8 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
@@ -14,6 +16,7 @@ import type { Repository, SyncRepositoriesResponse } from "@reviewly/shared"
 import { useAISettings, estimateCostCny } from "@/features/prism/contexts/ai-settings-context"
 import { extractApiErrorMessage, parseFetchJson, PrismApiError } from "@/lib/api/client"
 import { getAuthToken } from "@/lib/auth/storage"
+import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import { useReposSync } from "@/hooks/use-repos-sync"
 import { useAuth } from "@/features/prism/contexts/auth-context"
 import {
@@ -117,6 +120,13 @@ export function ReposProvider({ children }: { children: ReactNode }) {
   const [syncError, setSyncError] = useState<string | null>(null)
   const [analyzingRepoId, setAnalyzingRepoId] = useState<string | null>(null)
   const [analysisErrorsByRepoId, setAnalysisErrorsByRepoId] = useState<Record<string, string>>({})
+  const analyzeAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    return () => {
+      analyzeAbortRef.current?.abort()
+    }
+  }, [])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -197,8 +207,13 @@ export function ReposProvider({ children }: { children: ReactNode }) {
         return next
       })
 
+      analyzeAbortRef.current?.abort()
+      const ac = new AbortController()
+      analyzeAbortRef.current = ac
+
       try {
         const ctx = await fetchRepoAnalyzeContext(repoId)
+        if (ac.signal.aborted) return
 
         const hasTree = Boolean(ctx.fileTree?.trim())
         const hasReadme = Boolean(ctx.readme?.trim())
@@ -218,6 +233,7 @@ export function ReposProvider({ children }: { children: ReactNode }) {
         const authToken = getAuthToken()
         const response = await fetch("/api/ai/chat", {
           method: "POST",
+          signal: ac.signal,
           headers: {
             "Content-Type": "application/json",
             ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
@@ -239,11 +255,14 @@ export function ReposProvider({ children }: { children: ReactNode }) {
 
         const data = await parseFetchJson<{
           content?: string
-          usage?: { totalTokens?: number }
+          usage?: { totalTokens?: number; promptTokens?: number; completionTokens?: number }
+          latencyMs?: number
         }>(response)
         if (!response.ok) {
           throw new Error(extractApiErrorMessage(data, "AI 分析失败"))
         }
+
+        if (ac.signal.aborted) return
 
         const content = data?.content || "模型未返回内容。"
         const updated = await saveRepoAiAnalysis(repoId, {
@@ -264,35 +283,55 @@ export function ReposProvider({ children }: { children: ReactNode }) {
           latencyMs: Number(data?.latencyMs) || 0,
         })
       } catch (e: unknown) {
+        if (isAbortError(e)) return
         setAnalysisErrorsByRepoId((prev) => ({
           ...prev,
           [repoId]: e instanceof Error ? e.message : "AI 分析失败",
         }))
       } finally {
-        setAnalyzingRepoId(null)
+        if (shouldApplyResult(ac.signal)) {
+          setAnalyzingRepoId((current) => (current === repoId ? null : current))
+        }
       }
     },
     [hasApiKey, settings, recordUsage],
   )
 
+  const contextValue = useMemo(
+    () => ({
+      repos,
+      loading,
+      syncing,
+      importing,
+      error,
+      syncError,
+      analyzingRepoId,
+      analysisErrorsByRepoId,
+      refresh,
+      sync,
+      importRepo,
+      analyzeRepository,
+      clearAnalysisError,
+    }),
+    [
+      repos,
+      loading,
+      syncing,
+      importing,
+      error,
+      syncError,
+      analyzingRepoId,
+      analysisErrorsByRepoId,
+      refresh,
+      sync,
+      importRepo,
+      analyzeRepository,
+      clearAnalysisError,
+    ],
+  )
+
   return (
-    <ReposContext.Provider
-      value={{
-        repos,
-        loading,
-        syncing,
-        importing,
-        error,
-        syncError,
-        analyzingRepoId,
-        analysisErrorsByRepoId,
-        refresh,
-        sync,
-        importRepo,
-        analyzeRepository,
-        clearAnalysisError,
-      }}
-    >
+    <ReposContext.Provider value={contextValue}>
       {children}
     </ReposContext.Provider>
   )

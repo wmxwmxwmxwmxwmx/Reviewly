@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
 import { Bot, User, Shield, Save, Check, KeyRound } from "lucide-react"
 import type { SessionTimeoutMinutes } from "@reviewly/shared"
@@ -41,6 +41,13 @@ export function SettingsView() {
   const [aiSaveError, setAiSaveError] = useState<string | null>(null)
   const [pinDialogOpen, setPinDialogOpen] = useState(false)
   const [pinDialogMode, setPinDialogMode] = useState<"setup" | "disable">("setup")
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     setAiForm(settings)
@@ -117,7 +124,8 @@ export function SettingsView() {
     const securityOk = await saveSecurity()
     if (securityOk) {
       setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+      savedTimerRef.current = setTimeout(() => setSaved(false), 2000)
     }
   }
 

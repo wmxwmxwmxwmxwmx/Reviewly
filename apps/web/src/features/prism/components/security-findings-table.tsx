@@ -53,7 +53,7 @@ export function SecurityFindingsTable({
         </thead>
         <tbody className="divide-y divide-border">
           {items.map((row, idx) => {
-            const sev = severityConfig[row.severity]
+            const sev = severityConfig[row.severity] ?? severityConfig.low
             return (
               <motion.tr
                 key={row.id}

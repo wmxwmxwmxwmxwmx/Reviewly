@@ -219,7 +219,7 @@ export function DashboardView() {
                       {activityIconType(activity.type) ? (
                         <BrainCircuit className="w-4 h-4" />
                       ) : (
-                        activity.user.slice(0, 2)
+                        (activity.user ?? "?").slice(0, 2)
                       )}
                     </div>
                     <div className="flex-1 min-w-0">

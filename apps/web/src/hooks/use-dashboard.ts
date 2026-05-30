@@ -1,8 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { fetchDashboard } from "@/lib/api/dashboard"
+import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import { PrismApiError } from "@/lib/api/client"
 import type { DashboardStats } from "@reviewly/shared"
 
@@ -14,8 +15,15 @@ export function useDashboard() {
   const [isValidating, setIsValidating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const mounted = useRef(true)
+  const loadAbortRef = useRef<AbortController | null>(null)
+  const requestSeqRef = useRef(0)
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
+    loadAbortRef.current?.abort()
+    const ac = new AbortController()
+    loadAbortRef.current = ac
+    const seq = ++requestSeqRef.current
+
     if (!opts?.silent) {
       setLoading(true)
     } else {
@@ -23,17 +31,17 @@ export function useDashboard() {
     }
     setError(null)
     try {
-      const next = await fetchDashboard()
-      if (mounted.current) {
+      const next = await fetchDashboard(ac.signal)
+      if (mounted.current && seq === requestSeqRef.current) {
         setData(next)
       }
     } catch (e: unknown) {
-      if (e instanceof DOMException && e.name === "AbortError") return
-      if (mounted.current) {
+      if (isAbortError(e)) return
+      if (mounted.current && seq === requestSeqRef.current) {
         setError(e instanceof PrismApiError ? e.message : "加载失败")
       }
     } finally {
-      if (mounted.current) {
+      if (mounted.current && seq === requestSeqRef.current && shouldApplyResult(ac.signal)) {
         setLoading(false)
         setIsValidating(false)
       }
@@ -48,11 +56,15 @@ export function useDashboard() {
     }, REFRESH_MS)
     return () => {
       mounted.current = false
+      loadAbortRef.current?.abort()
       window.clearInterval(id)
     }
   }, [load])
 
   const refetch = useCallback(() => load({ silent: false }), [load])
 
-  return { data, loading, isValidating, error, refetch }
+  return useMemo(
+    () => ({ data, loading, isValidating, error, refetch }),
+    [data, loading, isValidating, error, refetch],
+  )
 }

@@ -134,9 +134,11 @@ const AIReviewSessionContext = createContext<AIReviewSessionContextValue | null>
 
 export function AIReviewSessionProvider({ children }: { children: ReactNode }) {
   const sessionsRef = useRef<Map<string, AIReviewSession>>(new Map())
-  const [lastReviewedPrId, setLastReviewedPrIdState] = useState<string | null>(() =>
-    readLastReviewedPrId(),
-  )
+  const [lastReviewedPrId, setLastReviewedPrIdState] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLastReviewedPrIdState(readLastReviewedPrId())
+  }, [])
 
   const getSession = useCallback((prId: string): AIReviewSession => {
     const mem = sessionsRef.current.get(prId) ?? emptySession()
@@ -153,8 +155,6 @@ export function AIReviewSessionProvider({ children }: { children: ReactNode }) {
       ...patch,
       hydratedAt: patch.hydratedAt ?? Date.now(),
     })
-    setLastReviewedPrIdState(prId)
-    writeLastReviewedPrId(prId)
   }, [])
 
   const clearSession = useCallback((prId: string) => {

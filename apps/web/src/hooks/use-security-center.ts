@@ -14,6 +14,7 @@ import {
   type SecurityStats,
 } from "@/lib/api/security"
 import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
+import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 
 const PAGE_SIZE = 10
 
@@ -84,10 +85,10 @@ export function useSecurityCenter() {
       setTotal(findingsRes.total)
       setStats(statsRes)
     } catch (e: unknown) {
-      if (e instanceof DOMException && e.name === "AbortError") return
+      if (isAbortError(e)) return
       setError(e instanceof PrismApiError ? e.message : "加载失败")
     } finally {
-      setLoading(false)
+      if (shouldApplyResult(signal)) setLoading(false)
     }
   }, [severityFilter, repoFilter, searchQuery, page])
 
@@ -136,6 +137,7 @@ export function useSecurityCenter() {
             setExplainingId((id) => (id === findingId ? null : id))
           },
           onDone: async () => {
+            if (ac.signal.aborted) return
             setExplainingId((id) => (id === findingId ? null : id))
             if (!accumulated.trim()) return
             try {
@@ -158,11 +160,9 @@ export function useSecurityCenter() {
           },
         })
       } catch (e: unknown) {
-        if (e instanceof DOMException && e.name === "AbortError") {
-          setExplainingId((id) => (id === findingId ? null : id))
-          return
-        }
+        if (isAbortError(e)) return
         setExplainError(e instanceof Error ? e.message : "解读失败")
+      } finally {
         setExplainingId((id) => (id === findingId ? null : id))
       }
     },
@@ -172,6 +172,7 @@ export function useSecurityCenter() {
   const cancelExplain = useCallback(() => {
     explainAbort.current?.abort()
     setExplainingId(null)
+    setExplainText("")
   }, [])
 
   const reload = useCallback(() => {

@@ -126,6 +126,21 @@ export function ArchitectureView() {
           </div>
         )}
 
+        {!loading && !scanning && !graph && !error && repoId && (
+          <div className="flex flex-col items-center justify-center gap-3 p-10 text-center">
+            <Network className="w-8 h-8 text-muted-foreground/50" />
+            <p className="text-sm text-muted-foreground">尚未扫描依赖图</p>
+            <button
+              type="button"
+              onClick={() => scan()}
+              disabled={scanning}
+              className="text-xs font-medium text-white bg-ai-blue px-3 py-1.5 rounded-md hover:bg-[oklch(0.55_0.19_240)] transition-colors disabled:opacity-50"
+            >
+              开始扫描
+            </button>
+          </div>
+        )}
+
         {graph && (
           <ArchitectureGraphViewer
             graph={graph}
@@ -177,16 +192,16 @@ export function ArchitectureView() {
                 <div>
                   <span className="text-muted-foreground">入边 ({inbound.length})</span>
                   <ul className="mt-1 font-mono text-[10px] text-muted-foreground max-h-16 overflow-y-auto">
-                    {inbound.map((e, i) => (
-                      <li key={i}>{e.from}</li>
+                    {inbound.map((e) => (
+                      <li key={`${e.from}-${e.to}`}>{e.from}</li>
                     ))}
                   </ul>
                 </div>
                 <div>
                   <span className="text-muted-foreground">出边 ({outbound.length})</span>
                   <ul className="mt-1 font-mono text-[10px] text-muted-foreground max-h-16 overflow-y-auto">
-                    {outbound.map((e, i) => (
-                      <li key={i}>{e.to}</li>
+                    {outbound.map((e) => (
+                      <li key={`${e.from}-${e.to}`}>{e.to}</li>
                     ))}
                   </ul>
                 </div>

@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatRelativeTime } from "@/lib/format-relative-time"
+import { useHydrated } from "@/hooks/use-hydrated"
 import { zh } from "@/lib/i18n/zh"
 import type { AnalysisSummary, PullRequest } from "@reviewly/shared"
 
@@ -121,6 +122,16 @@ function ScoreBar({ label, score, icon: Icon, color }: { label: string; score: n
   )
 }
 
+function RelativeTime({ iso }: { iso: string | undefined | null }) {
+  const hydrated = useHydrated()
+  if (!hydrated) {
+    if (!iso) return <>时间未知</>
+    const date = new Date(iso)
+    return <>{Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString("zh-CN")}</>
+  }
+  return <>{formatRelativeTime(iso)}</>
+}
+
 export function PROverview({ prData, analysisScores }: PROverviewProps) {
   const cfg = getRiskConfig(prData.riskLevel)
   const deployCfg = getDeployRisk(prData.deploymentRisk)
@@ -164,7 +175,7 @@ export function PROverview({ prData, analysisScores }: PROverviewProps) {
             </div>
             <div className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              <span>{formatRelativeTime(prData.updatedAt ?? prData.createdAt)}</span>
+              <RelativeTime iso={prData.updatedAt ?? prData.createdAt} />
             </div>
             <div className="flex items-center gap-1">
               <GitCommit className="w-3 h-3" />
@@ -188,7 +199,7 @@ export function PROverview({ prData, analysisScores }: PROverviewProps) {
 
           {/* Labels */}
           <div className="flex flex-wrap gap-1.5 mb-4">
-            {prData.labels.map((label) => (
+            {(prData.labels ?? []).map((label) => (
               <span
                 key={label.name}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border"

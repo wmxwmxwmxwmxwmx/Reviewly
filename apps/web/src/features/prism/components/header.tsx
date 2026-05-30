@@ -1,7 +1,7 @@
 ﻿"use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import {
   Github,
   ArrowRight,
@@ -194,42 +194,26 @@ export function Header({
             )}
           </div>
 
-          <AnimatePresence mode="wait">
+          <div className="min-h-[20px]">
             {analyzing ? (
-              <motion.div
-                key="analyzing"
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                className="flex items-center gap-1.5 text-[11px] text-ai-blue"
-              >
+              <div className="flex items-center gap-1.5 text-[11px] text-ai-blue">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span className="hidden sm:inline">
                   {scanning ? "规则扫描中…" : "AI 摘要生成中…"}
                 </span>
-              </motion.div>
+              </div>
             ) : hasAnalysis ? (
-              <motion.div
-                key="done"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground"
-              >
+              <div className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <div className="w-1.5 h-1.5 rounded-full bg-risk-low" />
                 <span>{zh.common.analyzeDone}</span>
-              </motion.div>
+              </div>
             ) : (
-              <motion.div
-                key="idle"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground"
-              >
+              <div className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
                 <span>{zh.common.analyzeReady}</span>
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
+          </div>
 
           {prData.author ? (
             <div

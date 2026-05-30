@@ -13,6 +13,7 @@ import { NavigationProvider, useNavigation } from "@/features/prism/contexts/nav
 import { AIReviewView } from "@/features/prism/views/ai-review-view"
 import { StandardView } from "@/features/prism/components/view-registry"
 import { Toaster } from "@/components/ui/toaster"
+import { ErrorBoundary } from "@/components/error-boundary"
 import { zh } from "@/lib/i18n/zh"
 
 function PRismPageContent() {
@@ -73,13 +74,15 @@ function PRismPageContent() {
         )}
 
         {activeView === "ai-review" && prId ? (
-          <AIReviewView
-            key={prId}
-            prId={prId}
-            onMenuClick={() => setSidebarOpen(true)}
-            aiPanelOpen={aiPanelOpen}
-            onToggleAIPanel={() => setAiPanelOpen((open) => !open)}
-          />
+          <ErrorBoundary section="AI 评审" key={`ai-review-${prId}`}>
+            <AIReviewView
+              key={prId}
+              prId={prId}
+              onMenuClick={() => setSidebarOpen(true)}
+              aiPanelOpen={aiPanelOpen}
+              onToggleAIPanel={() => setAiPanelOpen((open) => !open)}
+            />
+          </ErrorBoundary>
         ) : activeView === "ai-review" ? (
           <main className="flex flex-1 flex-col items-center justify-center gap-3 p-5 text-center">
             <div>
@@ -97,7 +100,9 @@ function PRismPageContent() {
           </main>
         ) : (
           <main className="flex-1 overflow-y-auto">
-            <StandardView view={activeView} />
+            <ErrorBoundary section="当前视图" key={activeView}>
+              <StandardView view={activeView} />
+            </ErrorBoundary>
           </main>
         )}
       </div>
@@ -128,8 +133,10 @@ export default function PRismPage() {
             <ReposProvider>
               <DashboardProvider>
                 <NavigationProvider>
-                  <PRismPageContent />
-                  <SessionLockOverlay />
+                  <ErrorBoundary section="PRism">
+                    <PRismPageContent />
+                    <SessionLockOverlay />
+                  </ErrorBoundary>
                 </NavigationProvider>
               </DashboardProvider>
             </ReposProvider>

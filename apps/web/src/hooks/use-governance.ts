@@ -9,6 +9,7 @@ import {
   updateGovernanceRule,
 } from "@/lib/api/governance"
 import { PrismApiError } from "@/lib/api/client"
+import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import type { GovernanceRule, GovernanceRuleInput } from "@reviewly/shared"
 
 export function useGovernance(options?: { includeDisabled?: boolean }) {
@@ -25,10 +26,10 @@ export function useGovernance(options?: { includeDisabled?: boolean }) {
         const data = await fetchGovernanceRules(includeDisabled, signal)
         setRules(data)
       } catch (e: unknown) {
-        if (e instanceof DOMException && e.name === "AbortError") return
+        if (isAbortError(e)) return
         setError(e instanceof PrismApiError ? e.message : "加载失败")
       } finally {
-        setLoading(false)
+        if (shouldApplyResult(signal)) setLoading(false)
       }
     },
     [includeDisabled],

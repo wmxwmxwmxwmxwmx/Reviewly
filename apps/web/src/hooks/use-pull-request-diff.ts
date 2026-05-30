@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 
 import { fetchPullRequestDiff } from "@/lib/api/pull-requests"
 import { PrismApiError } from "@/lib/api/client"
+import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import type { DiffFile } from "@reviewly/shared"
 
 export function usePullRequestDiff(prId: string | null) {
@@ -25,11 +26,13 @@ export function usePullRequestDiff(prId: string | null) {
     fetchPullRequestDiff(prId, ac.signal)
       .then(setFiles)
       .catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === "AbortError") return
+        if (isAbortError(e)) return
         setError(e instanceof PrismApiError ? e.message : "加载失败")
         setFiles([])
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (shouldApplyResult(ac.signal)) setLoading(false)
+      })
 
     return () => ac.abort()
   }, [prId])

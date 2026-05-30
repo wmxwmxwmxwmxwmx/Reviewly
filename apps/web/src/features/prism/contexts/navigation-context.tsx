@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   type ReactNode,
 } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -130,8 +131,13 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
     [router, lastReviewedPrId],
   )
 
+  const contextValue = useMemo(
+    () => ({ activeView, prId, navigate }),
+    [activeView, prId, navigate],
+  )
+
   return (
-    <NavigationContext.Provider value={{ activeView, prId, navigate }}>
+    <NavigationContext.Provider value={contextValue}>
       {children}
     </NavigationContext.Provider>
   )

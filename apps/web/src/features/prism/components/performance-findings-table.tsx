@@ -165,7 +165,7 @@ export function PerformanceFindingsTable({
         </thead>
         <tbody className="divide-y divide-border">
           {items.map((row, idx) => {
-            const sev = perfSeverityConfig[row.severity]
+            const sev = perfSeverityConfig[row.severity] ?? perfSeverityConfig.low
             const isExpanded = expandedFindingId === row.id
             const isOptimizing = optimizingId === row.id
             const isBusyElsewhere = Boolean(optimizingId && optimizingId !== row.id)

@@ -215,10 +215,10 @@ function AIStreamPanel({
         <div className="p-2 space-y-1 max-h-52 overflow-y-auto font-mono text-[10px]">
           {streamLines.map((line, i) => (
             <motion.div
-              key={i}
+              key={`${line.type}-${line.text}-${i}`}
               initial={{ opacity: 0, x: -4 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.2, delay: i * 0.06 }}
+              transition={{ duration: 0.15 }}
               className={cn(
                 "flex items-start gap-1.5 px-2 py-1 rounded",
                 line.type === "finding" ? "bg-[oklch(0.55_0.22_27/0.06)] text-risk-high" :
@@ -239,7 +239,7 @@ function AIStreamPanel({
 // ── Risk Panel ────────────────────────────────────────────────────────────────
 function RiskCard({ risk, index }: { risk: RiskItem; index: number }) {
   const [expanded, setExpanded] = useState(index < 2)
-  const cfg = severityConfig[risk.severity]
+  const cfg = severityConfig[risk.severity] ?? severityConfig.medium
 
   return (
     <motion.div
@@ -623,14 +623,12 @@ export function AIPanel({
 
       {/* Panel Content */}
       <div className="flex-1 overflow-y-auto p-4">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.2 }}
-          >
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.15 }}
+        >
             {activeTab === "stream" && (
               <AIStreamPanel
                 analyzing={analyzing}
@@ -649,7 +647,6 @@ export function AIPanel({
             )}
             {activeTab === "incidents" && <IncidentsPanel />}
           </motion.div>
-        </AnimatePresence>
       </div>
     </aside>
   )

@@ -14,6 +14,7 @@ import {
   type PerformanceStats,
 } from "@/lib/api/performance"
 import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
+import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 
 const PAGE_SIZE = 10
 
@@ -96,10 +97,10 @@ export function usePerformanceCenter() {
       setTotal(findingsRes.total)
       setStats(statsRes)
     } catch (e: unknown) {
-      if (e instanceof DOMException && e.name === "AbortError") return
+      if (isAbortError(e)) return
       setError(e instanceof PrismApiError ? e.message : "加载失败")
     } finally {
-      setLoading(false)
+      if (shouldApplyResult(signal)) setLoading(false)
     }
   }, [severityFilter, typeFilter, repoFilter, searchQuery, page])
 
@@ -152,6 +153,7 @@ export function usePerformanceCenter() {
             setOptimizingId((id) => (id === findingId ? null : id))
           },
           onDone: async () => {
+            if (ac.signal.aborted) return
             setOptimizingId((id) => (id === findingId ? null : id))
             if (!accumulated.trim()) return
             try {
@@ -174,11 +176,9 @@ export function usePerformanceCenter() {
           },
         })
       } catch (e: unknown) {
-        if (e instanceof DOMException && e.name === "AbortError") {
-          setOptimizingId((id) => (id === findingId ? null : id))
-          return
-        }
+        if (isAbortError(e)) return
         setOptimizeError(e instanceof Error ? e.message : "优化失败")
+      } finally {
         setOptimizingId((id) => (id === findingId ? null : id))
       }
     },
@@ -217,6 +217,7 @@ export function usePerformanceCenter() {
   const cancelOptimize = useCallback(() => {
     optimizeAbort.current?.abort()
     setOptimizingId(null)
+    setOptimizeText("")
   }, [])
 
   const reload = useCallback(() => {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 
 import { fetchPullRequests } from "@/lib/api/pull-requests"
 import { PrismApiError } from "@/lib/api/client"
+import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import type { PullRequest } from "@reviewly/shared"
 
 export function usePullRequests(filters?: Record<string, string | undefined>) {
@@ -20,10 +21,10 @@ export function usePullRequests(filters?: Record<string, string | undefined>) {
         const res = await fetchPullRequests(filters, signal)
         setItems(res.items)
       } catch (e: unknown) {
-        if (e instanceof DOMException && e.name === "AbortError") return
+        if (isAbortError(e)) return
         setError(e instanceof PrismApiError ? e.message : "加载失败")
       } finally {
-        setLoading(false)
+        if (shouldApplyResult(signal)) setLoading(false)
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filterKey serializes filters
