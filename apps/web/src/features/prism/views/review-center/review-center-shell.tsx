@@ -1,8 +1,8 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { Menu, Plus } from "lucide-react"
-import type { RepoReviewGroup } from "@reviewly/shared"
+import type { RepoReviewGroup, ReviewStatus } from "@reviewly/shared"
 
 import { Button } from "@/components/ui/button"
 import { ImportPRDialog } from "@/features/prism/components/import-pr-dialog"
@@ -16,6 +16,10 @@ import { ReviewCenterDashboardView } from "@/features/prism/views/review-center/
 import { ReviewCenterRulesView } from "@/features/prism/views/review-center/review-center-rules"
 import { ReviewCenterSettingsView } from "@/features/prism/views/review-center/review-center-settings"
 import { ReviewCenterStatsView } from "@/features/prism/views/review-center/review-center-stats"
+import type {
+  ReviewPrFilter,
+  WorkbenchNavigatePayload,
+} from "@/features/prism/lib/review-center-navigation"
 import { fetchReviewRepoGroups } from "@/lib/api/review-center"
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import { zh } from "@/lib/i18n/zh"
@@ -25,6 +29,10 @@ interface ReviewCenterShellProps {
   onTabChange: (tab: ReviewCenterTab) => void
   onMenuClick?: () => void
   onSelectPr: (prId: string) => void
+  onWorkbenchNavigate: (payload: WorkbenchNavigatePayload) => void
+  onNavigateFindings: () => void
+  listReviewStatus: ReviewStatus | null
+  listPrFilter: ReviewPrFilter | null
   importOpen: boolean
   onImportOpenChange: (open: boolean) => void
   importing: boolean
@@ -39,6 +47,10 @@ export function ReviewCenterShell({
   onTabChange,
   onMenuClick,
   onSelectPr,
+  onWorkbenchNavigate,
+  onNavigateFindings,
+  listReviewStatus,
+  listPrFilter,
   importOpen,
   onImportOpenChange,
   importing,
@@ -75,9 +87,8 @@ export function ReviewCenterShell({
       case "dashboard":
         return (
           <ReviewCenterDashboardView
-            onNavigatePending={() => onTabChange("pending")}
-            onNavigateAll={() => onTabChange("all")}
-            onSelectPr={onSelectPr}
+            onNavigate={onWorkbenchNavigate}
+            onNavigateFindings={onNavigateFindings}
           />
         )
       case "pending":
@@ -102,6 +113,8 @@ export function ReviewCenterShell({
             embedded
             title="全部 PR"
             repoId={repoId ?? undefined}
+            initialStatus={listReviewStatus ?? "ALL"}
+            prFilter={listPrFilter ?? undefined}
             onSelectPr={onSelectPr}
             importOpen={importOpen}
             onImportOpenChange={onImportOpenChange}

@@ -61,6 +61,10 @@ export type NavParams = {
   aiReviewList?: boolean
   /** Review center sub-tab: dashboard | pending | all | rules | stats | settings */
   reviewTab?: string
+  /** PR list review-status filter (ReviewStatus, not findings status). */
+  reviewStatus?: string
+  /** PR list preset filter: high-risk | my-created */
+  prFilter?: string
 }
 
 interface NavigationContextValue {
@@ -68,6 +72,8 @@ interface NavigationContextValue {
   prId: string | null
   repoId: string | null
   reviewTab: string | null
+  reviewStatus: string | null
+  prFilter: string | null
   findingsTab: FindingsTab
   findingId: string | null
   navigate: (view: NavView, params?: NavParams) => void
@@ -113,6 +119,8 @@ function buildQuery(
   if (params?.findingId) qs.set("findingId", params.findingId)
   if (params?.status) qs.set("status", params.status)
   if (params?.reviewTab) qs.set("reviewTab", params.reviewTab)
+  if (params?.reviewStatus) qs.set("reviewStatus", params.reviewStatus)
+  if (params?.prFilter) qs.set("prFilter", params.prFilter)
 
   return qs.toString()
 }
@@ -143,6 +151,8 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   })()
   const findingId = searchParams.get("findingId")
   const reviewTab = searchParams.get("reviewTab")
+  const reviewStatus = searchParams.get("reviewStatus")
+  const prFilter = searchParams.get("prFilter")
 
   const prId =
     activeView === "ai-review" && urlPrId && !isLegacyDemoPrId(urlPrId) ? urlPrId : null
@@ -186,8 +196,18 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   )
 
   const contextValue = useMemo(
-    () => ({ activeView, prId, repoId, reviewTab, findingsTab, findingId, navigate }),
-    [activeView, prId, repoId, reviewTab, findingsTab, findingId, navigate],
+    () => ({
+      activeView,
+      prId,
+      repoId,
+      reviewTab,
+      reviewStatus,
+      prFilter,
+      findingsTab,
+      findingId,
+      navigate,
+    }),
+    [activeView, prId, repoId, reviewTab, reviewStatus, prFilter, findingsTab, findingId, navigate],
   )
 
   return (
