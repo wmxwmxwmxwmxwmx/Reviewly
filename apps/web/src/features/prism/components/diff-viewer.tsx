@@ -1,6 +1,12 @@
 ﻿"use client"
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  diffFileDomId,
+  diffLineDomId,
+  matchDiffFilePath,
+  type FindingScrollTarget,
+} from "@/features/prism/lib/map-findings-to-diff"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   ChevronDown,
@@ -115,10 +121,14 @@ function DiffLineRow({
   line,
   showComment,
   onToggleComment,
+  highlighted,
+  lineDomId,
 }: {
   line: DiffLine
   showComment?: boolean
   onToggleComment?: () => void
+  highlighted?: boolean
+  lineDomId?: string
 }) {
   const [internalShow, setInternalShow] = useState(!!line.riskComment)
   const resolvedShow = showComment ?? internalShow
@@ -142,7 +152,7 @@ function DiffLineRow({
   const hasRisk = !!line.riskComment
 
   return (
-    <div className="border-b border-border/30 last:border-b-0">
+    <div id={lineDomId} className="border-b border-border/30 last:border-b-0 scroll-mt-24">
       <div
         className={cn(
           "group flex items-start font-mono text-[11px] hover:bg-accent/30 transition-colors",
@@ -150,6 +160,7 @@ function DiffLineRow({
           bgClass,
           borderClass,
           hasRisk && "ring-1 ring-inset ring-[oklch(0.55_0.22_27/0.15)]",
+          highlighted && "bg-ai-blue/20 ring-2 ring-ai-blue/40",
         )}
         onClick={() => hasRisk && toggleComment()}
       >
@@ -240,13 +251,17 @@ function VirtualizedChunkLines({
 function ChunkLines({
   lines,
   chunkKey,
+  filePath,
   commentExpanded,
   onToggleComment,
+  highlightLine,
 }: {
   lines: DiffLine[]
   chunkKey: string
+  filePath: string
   commentExpanded: Record<string, boolean>
   onToggleComment: (key: string, defaultOpen: boolean) => void
+  highlightLine?: number
 }) {
   if (lines.length >= VIRTUALIZE_THRESHOLD) {
     return (
@@ -263,12 +278,20 @@ function ChunkLines({
       {lines.map((line, li) => {
         const key = `${chunkKey}-${diffLineKey(line, li)}`
         const defaultOpen = !!line.riskComment
+        const lineNum = line.newNum ?? line.oldNum ?? 0
+        const highlighted = highlightLine !== undefined && highlightLine > 0 && lineNum === highlightLine
+        const lineDomId =
+          highlighted || line.riskComment
+            ? diffLineDomId(filePath, lineNum)
+            : undefined
         return (
           <DiffLineRow
             key={key}
             line={line}
             showComment={commentExpanded[key] ?? defaultOpen}
             onToggleComment={() => onToggleComment(key, defaultOpen)}
+            highlighted={highlighted}
+            lineDomId={lineDomId}
           />
         )
       })}
@@ -279,9 +302,11 @@ function ChunkLines({
 interface DiffFileCardProps {
   file: DiffFile
   index: number
+  scrollTarget?: FindingScrollTarget | null
+  highlightTarget?: FindingScrollTarget | null
 }
 
-function DiffFileCard({ file, index }: DiffFileCardProps) {
+function DiffFileCard({ file, index, scrollTarget, highlightTarget }: DiffFileCardProps) {
   const [collapsed, setCollapsed] = useState(file.collapsed)
   const [commentExpanded, setCommentExpanded] = useState<Record<string, boolean>>({})
   const cfg = getRiskConfig(file.riskLevel)
@@ -294,12 +319,26 @@ function DiffFileCard({ file, index }: DiffFileCardProps) {
     }))
   }, [])
 
+  const fileMatchesScroll =
+    scrollTarget && matchDiffFilePath(file.path, scrollTarget.file)
+  const highlightLine =
+    highlightTarget && matchDiffFilePath(file.path, highlightTarget.file)
+      ? highlightTarget.line
+      : undefined
+
+  useEffect(() => {
+    if (fileMatchesScroll) {
+      setCollapsed(false)
+    }
+  }, [fileMatchesScroll, scrollTarget?.findingId])
+
   return (
     <motion.div
+      id={diffFileDomId(file.path)}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.06 }}
-      className="rounded-lg border border-border overflow-hidden isolate"
+      className="rounded-lg border border-border overflow-hidden isolate scroll-mt-4"
     >
       {/* File Header */}
       <button
@@ -370,8 +409,10 @@ function DiffFileCard({ file, index }: DiffFileCardProps) {
                     <ChunkLines
                       lines={chunk.lines}
                       chunkKey={chunkKey}
+                      filePath={file.path}
                       commentExpanded={commentExpanded}
                       onToggleComment={toggleComment}
+                      highlightLine={highlightLine}
                     />
                   </div>
                 )
@@ -389,9 +430,32 @@ interface DiffViewerProps {
   analyzing: boolean
   chunkProgress?: { current: number; total: number }
   loading?: boolean
+  scrollTarget?: FindingScrollTarget | null
+  highlightTarget?: FindingScrollTarget | null
 }
 
-export function DiffViewer({ files, analyzing, chunkProgress, loading }: DiffViewerProps) {
+export function DiffViewer({
+  files,
+  analyzing,
+  chunkProgress,
+  loading,
+  scrollTarget,
+  highlightTarget,
+}: DiffViewerProps) {
+  const viewportRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!scrollTarget) return
+    const lineId = scrollTarget.line > 0 ? diffLineDomId(scrollTarget.file, scrollTarget.line) : null
+    const fileId = diffFileDomId(scrollTarget.file)
+    const el =
+      (lineId ? document.getElementById(lineId) : null) ??
+      document.getElementById(fileId)
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" })
+    }
+  }, [scrollTarget?.findingId, scrollTarget?.file, scrollTarget?.line])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
@@ -410,7 +474,7 @@ export function DiffViewer({ files, analyzing, chunkProgress, loading }: DiffVie
   }
 
   return (
-    <div className="space-y-3">
+    <div ref={viewportRef} className="space-y-3 min-h-0">
       {/* Chunk Analysis Banner */}
       {analyzing && chunkProgress && (
         <motion.div
@@ -439,7 +503,13 @@ export function DiffViewer({ files, analyzing, chunkProgress, loading }: DiffVie
 
       {/* File List */}
       {files.map((file, i) => (
-        <DiffFileCard key={file.path} file={file} index={i} />
+        <DiffFileCard
+          key={file.path}
+          file={file}
+          index={i}
+          scrollTarget={scrollTarget}
+          highlightTarget={highlightTarget}
+        />
       ))}
     </div>
   )

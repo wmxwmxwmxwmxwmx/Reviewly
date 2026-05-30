@@ -1,3 +1,7 @@
+/**
+ * @deprecated Prefer ReviewInsightPanel + ReviewDecisionBar in ai-review-view.
+ * Still exported for compatibility; new PR review UI should not import this component.
+ */
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
