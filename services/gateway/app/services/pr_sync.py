@@ -24,6 +24,7 @@ async def _persist_pr_with_token(
     owner: str,
     name: str,
     token: str,
+    owner_user_id: str | None = None,
 ) -> tuple[str, bool]:
     patch = await fetch_pull_request_diff(owner, name, gh_pr["number"], token)
     pr_id = f"pr-{gh_pr['id']}"
@@ -37,6 +38,7 @@ async def _persist_pr_with_token(
         name=name,
         installation_id=None,
         patch=patch,
+        owner_user_id=owner_user_id,
     )
     return pr_id, created
 
@@ -77,6 +79,7 @@ async def sync_repository_pull_requests(
             owner=owner,
             name=name,
             token=token,
+            owner_user_id=repo_row.owner_user_id,
         )
         synced += 1
         if was_created:

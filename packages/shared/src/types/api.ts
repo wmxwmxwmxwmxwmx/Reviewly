@@ -70,9 +70,23 @@ export interface AuthUser {
   id: string
   githubId: string
   username: string
+  login?: string
+  name?: string
   email?: string | null
   avatarUrl?: string | null
   lastLoginAt?: string | null
+}
+
+export type GithubTokenStatus = "valid" | "missing" | "expired"
+
+export interface GithubAccountInfo {
+  login: string
+  avatarUrl?: string | null
+  email?: string | null
+  githubId: string
+  syncedRepoCount: number
+  lastSyncedAt?: string | null
+  tokenStatus: GithubTokenStatus
 }
 
 export interface AuthLoginResponse {

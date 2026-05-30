@@ -1,4 +1,4 @@
-"""Auth API — bypass mode and login URL."""
+"""Auth API — bypass mode, login URL, and account endpoints."""
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -9,7 +9,19 @@ def test_auth_me_bypass(client: TestClient) -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["username"] == "dev-user"
+    assert body["login"] == "dev-user"
+    assert body["name"] == "dev-user"
     assert body["githubId"] == "bypass"
+
+
+def test_github_account_bypass(client: TestClient) -> None:
+    r = client.get("/api/auth/github/account")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["login"] == "dev-user"
+    assert body["githubId"] == "bypass"
+    assert "syncedRepoCount" in body
+    assert body["tokenStatus"] in ("valid", "missing", "expired")
 
 
 def test_github_login_url(client: TestClient) -> None:

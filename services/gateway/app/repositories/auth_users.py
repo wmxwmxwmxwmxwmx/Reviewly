@@ -4,12 +4,15 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+import httpx
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.models import AuthUser, Team, TeamMembership
+from app.db.models import AuthUser, Repository, Team, TeamMembership
 from app.services import settings_crypto
+
+_GITHUB_USER = "https://api.github.com/user"
 
 
 def _now() -> datetime:
@@ -37,6 +40,8 @@ def decrypt_token(blob: str | None) -> str | None:
 def user_to_api(row: AuthUser) -> dict:
     return {
         "id": row.id,
+        "login": row.username,
+        "name": row.username,
         "githubId": row.github_id,
         "username": row.username,
         "email": row.email,
@@ -44,6 +49,59 @@ def user_to_api(row: AuthUser) -> dict:
         "lastLoginAt": row.last_login_at.isoformat().replace("+00:00", "Z")
         if row.last_login_at
         else None,
+    }
+
+
+def _sync_stats(session: Session, user_id: str) -> tuple[int, str | None]:
+    row = session.execute(
+        select(
+            func.count(Repository.id),
+            func.max(Repository.last_synced_at),
+        ).where(Repository.owner_user_id == user_id)
+    ).one()
+    count = int(row[0] or 0)
+    last_synced = row[1]
+    last_synced_at = (
+        last_synced.isoformat().replace("+00:00", "Z") if last_synced else None
+    )
+    return count, last_synced_at
+
+
+async def check_token_status(row: AuthUser) -> str:
+    token = decrypt_token(row.access_token_encrypted)
+    if not token:
+        return "missing"
+    if settings.prism_auth_bypass and row.github_id == "bypass":
+        return "valid"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                _GITHUB_USER,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                },
+            )
+            if resp.status_code == 200:
+                return "valid"
+            if resp.status_code == 401:
+                return "expired"
+    except httpx.HTTPError:
+        return "expired"
+    return "expired"
+
+
+async def github_account_to_api(session: Session, row: AuthUser) -> dict:
+    synced_repo_count, last_synced_at = _sync_stats(session, row.id)
+    token_status = await check_token_status(row)
+    return {
+        "login": row.username,
+        "avatarUrl": row.avatar_url,
+        "email": row.email,
+        "githubId": row.github_id,
+        "syncedRepoCount": synced_repo_count,
+        "lastSyncedAt": last_synced_at,
+        "tokenStatus": token_status,
     }
 
 

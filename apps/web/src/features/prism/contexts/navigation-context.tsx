@@ -28,6 +28,7 @@ const NAV_VIEWS: NavView[] = [
   "repos",
   "team",
   "settings",
+  "profile",
 ]
 
 function isNavView(value: string | null): value is NavView {

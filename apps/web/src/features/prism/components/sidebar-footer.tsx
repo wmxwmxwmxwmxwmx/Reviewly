@@ -5,6 +5,8 @@ import { AlertCircle, CheckCircle2, ChevronRight, Cpu, Zap } from "lucide-react"
 
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { useAuth } from "@/features/prism/contexts/auth-context"
+import { AccountMenu } from "@/features/prism/components/account-menu"
+import type { NavView } from "@/features/prism/components/sidebar"
 import { useSidebarStatus } from "@/hooks/use-sidebar-status"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
@@ -42,9 +44,10 @@ function FooterSkeleton() {
 
 interface SidebarFooterProps {
   onOpenSettings: () => void
+  onNavigate: (view: NavView) => void
 }
 
-export function SidebarFooter({ onOpenSettings }: SidebarFooterProps) {
+export function SidebarFooter({ onOpenSettings, onNavigate }: SidebarFooterProps) {
   const { settings, settingsHydrated, providerLabel, hasApiKey, monthlyUsage } = useAISettings()
   const { user, isAuthenticated, loading: authLoading } = useAuth()
   const { github, member, ready: statusReady } = useSidebarStatus()
@@ -143,25 +146,7 @@ export function SidebarFooter({ onOpenSettings }: SidebarFooterProps) {
       </div>
 
       {isAuthenticated && user ? (
-        <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-accent transition-colors">
-          {user.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={user.avatarUrl}
-              alt=""
-              className="w-7 h-7 rounded-full shrink-0 border border-border"
-            />
-          ) : (
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-ai-blue to-ai-purple flex items-center justify-center text-[11px] font-semibold text-white shrink-0">
-              {user.username.slice(0, 2).toUpperCase()}
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-medium text-foreground truncate">{user.username}</div>
-            <div className="text-[10px] text-muted-foreground truncate">{zh.sidebar.githubConnected}</div>
-          </div>
-          <CheckCircle2 className="w-3.5 h-3.5 text-risk-low shrink-0" />
-        </div>
+        <AccountMenu user={user} onNavigate={onNavigate} />
       ) : member ? (
         <div className="flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-accent transition-colors">
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-ai-blue to-ai-purple flex items-center justify-center text-[11px] font-semibold text-white shrink-0 shadow-[0_0_18px_rgba(139,92,246,0.22)]">
