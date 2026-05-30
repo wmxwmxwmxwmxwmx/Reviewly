@@ -297,6 +297,13 @@ export function AiReviewOverview({
                   </p>
                 )}
 
+                {pr.aiSummary?.usage?.totalTokens ? (
+                  <p className="text-[10px] font-mono text-muted-foreground mb-2">
+                    AI · {pr.aiSummary.usage.totalTokens.toLocaleString()} tok · ¥
+                    {pr.aiSummary.usage.costCny.toFixed(4)}
+                  </p>
+                ) : null}
+
                 <div className="mt-auto flex items-center justify-between gap-2 pt-3 border-t border-border/60">
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                     <Clock className="w-3 h-3 shrink-0" />

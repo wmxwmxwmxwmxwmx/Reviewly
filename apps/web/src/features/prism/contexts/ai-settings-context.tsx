@@ -10,7 +10,13 @@ import {
   type ReactNode,
 } from "react"
 import { fetchSettings } from "@/lib/api/settings"
+import {
+  estimateCostCny,
+  estimateCostCnyFromUsage,
+} from "@/lib/ai/pricing"
 import { zh } from "@/lib/i18n/zh"
+
+export { estimateCostCny, estimateCostCnyFromUsage }
 
 export type AIProvider = "anthropic" | "openai" | "google" | "deepseek" | "openrouter" | "custom"
 
@@ -28,6 +34,7 @@ export interface AISettings {
 
 export interface AIUsageRecord {
   id: string
+  prId?: string
   provider: AIProvider
   model: string
   promptTokens: number
@@ -116,6 +123,7 @@ function normalizeUsageRecords(value: unknown): AIUsageRecord[] {
 
     return [{
       id: typeof candidate.id === "string" ? candidate.id : crypto.randomUUID(),
+      prId: typeof candidate.prId === "string" ? candidate.prId : undefined,
       provider: candidate.provider,
       model: candidate.model,
       promptTokens: Number(candidate.promptTokens) || 0,
@@ -147,19 +155,6 @@ function isCurrentMonth(isoDate: string) {
   const now = new Date()
 
   return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()
-}
-
-export function estimateCostCny(provider: AIProvider, totalTokens: number) {
-  const pricePerMillionTokens: Record<AIProvider, number> = {
-    anthropic: 42,
-    openai: 8,
-    google: 7,
-    deepseek: 2,
-    openrouter: 10,
-    custom: 0,
-  }
-
-  return (totalTokens / 1_000_000) * pricePerMillionTokens[provider]
 }
 
 type ServerSettingsPayload = {

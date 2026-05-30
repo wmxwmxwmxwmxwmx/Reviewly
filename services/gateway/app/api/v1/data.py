@@ -56,11 +56,22 @@ class RepoAiAnalysisBody(BaseModel):
     provider: str | None = None
 
 
+class AiUsageMetricsBody(BaseModel):
+    prompt_tokens: int = Field(default=0, validation_alias="promptTokens")
+    completion_tokens: int = Field(default=0, validation_alias="completionTokens")
+    total_tokens: int = Field(default=0, validation_alias="totalTokens")
+    cost_cny: float = Field(default=0, validation_alias="costCny")
+    latency_ms: int | None = Field(default=None, validation_alias="latencyMs")
+
+    model_config = {"populate_by_name": True}
+
+
 class PrAiSummaryBody(BaseModel):
     content: str = Field(min_length=1)
     model: str | None = None
     provider: str | None = None
     analyzed_at: str | None = Field(default=None, validation_alias="analyzedAt")
+    usage: AiUsageMetricsBody | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -305,7 +316,10 @@ def delete_pull_request(
     user: AuthUser | None = Depends(get_optional_user),
 ) -> dict:
     user_id, team_ids = _resolve_user_scope(db, user)
-    if not pr_repo.delete_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids):
+    result = pr_repo.delete_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids)
+    if result == "protected":
+        raise api_error("内置演示 PR 不能删除", 403)
+    if not result:
         raise api_error("合并请求不存在", 404)
     return {"ok": True, "id": pr_id}
 
@@ -400,6 +414,14 @@ def patch_pr_ai_summary(
         payload["model"] = body.model.strip()
     if body.provider:
         payload["provider"] = body.provider.strip()
+    if body.usage:
+        payload["usage"] = {
+            "promptTokens": body.usage.prompt_tokens,
+            "completionTokens": body.usage.completion_tokens,
+            "totalTokens": body.usage.total_tokens,
+            "costCny": body.usage.cost_cny,
+            **({"latencyMs": body.usage.latency_ms} if body.usage.latency_ms is not None else {}),
+        }
     saved = pr_repo.save_ai_summary(db, pr_id, payload, user_id=user_id, team_ids=team_ids)
     if saved is None:
         raise api_error("保存失败", 500)

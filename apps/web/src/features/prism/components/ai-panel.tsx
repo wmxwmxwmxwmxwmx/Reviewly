@@ -21,7 +21,7 @@ import {
   Flame,
   ScrollText,
 } from "lucide-react"
-import type { AnalysisFinding, AnalysisJob, AnalysisSummary } from "@reviewly/shared"
+import type { AnalysisFinding, AnalysisJob, AnalysisSummary, AiUsageMetrics } from "@reviewly/shared"
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
@@ -130,16 +130,17 @@ function AIStreamPanel({
   findings,
   filesChanged,
   approxContextChars = 0,
+  runUsage,
 }: {
   analyzing: boolean
   job?: AnalysisJob
   findings: AnalysisFinding[]
   filesChanged: number
   approxContextChars?: number
+  runUsage?: AiUsageMetrics
 }) {
   const streamLines = buildStreamLines(analyzing, job, findings, filesChanged)
-  const { settings, monthlyUsage, usageRecords } = useAISettings()
-  const latestUsage = usageRecords[0]
+  const { settings } = useAISettings()
   const contextBudget = 200_000
   const contextLabel =
     approxContextChars > 0
@@ -158,9 +159,26 @@ function AIStreamPanel({
       <div className="grid grid-cols-2 gap-2">
         {[
           { label: "模型", value: settings.model, icon: Cpu },
-          { label: "延迟", value: latestUsage ? `${(latestUsage.latencyMs / 1000).toFixed(2)}s` : "--", icon: Zap },
-          { label: "Token 用量", value: latestUsage ? latestUsage.totalTokens.toLocaleString() : "0", icon: BrainCircuit },
-          { label: "本月成本", value: `¥${monthlyUsage.costCny.toFixed(2)}`, icon: Info },
+          {
+            label: "延迟",
+            value: runUsage?.latencyMs ? `${(runUsage.latencyMs / 1000).toFixed(2)}s` : "--",
+            icon: Zap,
+          },
+          {
+            label: "Token 用量",
+            value: runUsage?.totalTokens ? runUsage.totalTokens.toLocaleString() : analyzing ? "…" : "0",
+            icon: BrainCircuit,
+          },
+          {
+            label: "本次成本",
+            value:
+              runUsage?.costCny != null
+                ? `¥${runUsage.costCny.toFixed(4)}`
+                : analyzing
+                  ? "…"
+                  : "--",
+            icon: Info,
+          },
         ].map((item) => (
           <div key={item.label} className="flex items-center gap-2 px-2.5 py-2 rounded-md bg-surface-2 border border-border">
             <item.icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -538,6 +556,7 @@ interface AIPanelProps {
   mergeRecommendation?: AnalysisSummary["mergeRecommendation"]
   filesChanged?: number
   approxContextChars?: number
+  runUsage?: AiUsageMetrics
   activeTab?: PanelTab
   onActiveTabChange?: (tab: PanelTab) => void
 }
@@ -551,6 +570,7 @@ export function AIPanel({
   mergeRecommendation,
   filesChanged = 0,
   approxContextChars = 0,
+  runUsage,
   activeTab: activeTabProp,
   onActiveTabChange,
 }: AIPanelProps) {
@@ -636,6 +656,7 @@ export function AIPanel({
                 findings={findings}
                 filesChanged={filesChanged}
                 approxContextChars={approxContextChars}
+                runUsage={runUsage}
               />
             )}
             {activeTab === "risks" && <RisksPanel findings={findings} />}

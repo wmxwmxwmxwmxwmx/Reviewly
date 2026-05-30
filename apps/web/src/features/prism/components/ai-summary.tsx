@@ -8,6 +8,7 @@ import {
   ChevronRight,
   AlertTriangle,
 } from "lucide-react"
+import type { AiUsageMetrics } from "@reviewly/shared"
 import { SummaryMarkdown } from "@/features/prism/components/summary-markdown"
 import { zh } from "@/lib/i18n/zh"
 
@@ -37,6 +38,7 @@ interface AISummaryProps {
   hasAnalysis?: boolean
   restoring?: boolean
   error?: string | null
+  usage?: AiUsageMetrics
   onGoToSettings?: () => void
 }
 
@@ -49,6 +51,7 @@ export function AISummary({
   hasAnalysis = false,
   restoring = false,
   error,
+  usage,
   onGoToSettings,
 }: AISummaryProps) {
   const showSettingsAction =
@@ -91,6 +94,11 @@ export function AISummary({
           )}
         </div>
         <span className="text-[10px] text-muted-foreground shrink-0">{model}</span>
+        {usage?.totalTokens ? (
+          <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+            {usage.totalTokens.toLocaleString()} tok · ¥{usage.costCny.toFixed(4)}
+          </span>
+        ) : null}
         {fullOpen ? <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />}
       </button>
 

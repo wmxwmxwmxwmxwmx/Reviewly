@@ -61,7 +61,7 @@ async def stream_openai_compatible(
     api_key: str,
     messages: list[dict],
     temperature: float = 0.2,
-) -> AsyncIterator[str]:
+) -> AsyncIterator[str | dict[str, dict[str, int]]]:
     if not endpoint:
         raise RuntimeError("Custom provider 需要配置 customEndpoint")
 
@@ -83,11 +83,14 @@ async def stream_openai_compatible(
                 "messages": messages,
                 "temperature": temperature,
                 "stream": True,
+                "stream_options": {"include_usage": True},
             },
         ) as response:
             if not response.is_success:
                 body = await response.aread()
                 raise RuntimeError(body.decode("utf-8", errors="replace")[:500])
+
+            usage_data: dict[str, int] | None = None
 
             async for line in response.aiter_lines():
                 if not line or not line.startswith("data: "):
@@ -101,6 +104,8 @@ async def stream_openai_compatible(
                     data = json.loads(payload)
                 except json.JSONDecodeError:
                     continue
+                if data.get("usage"):
+                    usage_data = normalize_openai_usage(data.get("usage"))
                 choices = data.get("choices") or []
                 if not choices:
                     continue
@@ -108,3 +113,6 @@ async def stream_openai_compatible(
                 text = delta.get("content") or ""
                 if text:
                     yield text
+
+            if usage_data:
+                yield {"usage": usage_data}

@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.db.models import (
+    ActivityEvent,
     AnalysisCacheEvent,
     AnalysisFinding,
     AnalysisJob,
+    GovernanceViolation,
     PullRequest,
     PullRequestDiff,
     PullRequestFile,
@@ -278,13 +280,13 @@ def delete_pull_request(
     *,
     user_id: str | None = None,
     team_ids: list[str] | None = None,
-) -> bool:
+) -> bool | str:
     row = session.get(PullRequest, pr_id)
     if row is None:
         return False
     repo = session.get(Repository, row.repository_id)
     if repo is not None and (is_seed_repository(repo) or is_seed_pull_request(row, repo=repo)):
-        return False
+        return "protected"
     if user_id and not _user_can_access_pr(session, row, user_id=user_id, team_ids=team_ids):
         return False
 
@@ -295,15 +297,20 @@ def delete_pull_request(
     )
     if job_ids:
         session.execute(delete(AnalysisFinding).where(AnalysisFinding.job_id.in_(job_ids)))
+        session.execute(delete(AnalysisCacheEvent).where(AnalysisCacheEvent.job_id.in_(job_ids)))
+        session.execute(
+            update(AnalysisJob)
+            .where(AnalysisJob.source_job_id.in_(job_ids))
+            .values(source_job_id=None)
+        )
         session.execute(delete(AnalysisJob).where(AnalysisJob.id.in_(job_ids)))
 
     session.execute(delete(AnalysisCacheEvent).where(AnalysisCacheEvent.pull_request_id == pr_id))
+    session.execute(delete(GovernanceViolation).where(GovernanceViolation.pull_request_id == pr_id))
+    session.execute(delete(ActivityEvent).where(ActivityEvent.pull_request_id == pr_id))
     session.execute(delete(PullRequestFile).where(PullRequestFile.pull_request_id == pr_id))
-    diff_row = session.get(PullRequestDiff, pr_id)
-    if diff_row is not None:
-        session.delete(diff_row)
-
-    session.delete(row)
+    session.execute(delete(PullRequestDiff).where(PullRequestDiff.pull_request_id == pr_id))
+    session.execute(delete(PullRequest).where(PullRequest.id == pr_id))
     session.commit()
     return True
 

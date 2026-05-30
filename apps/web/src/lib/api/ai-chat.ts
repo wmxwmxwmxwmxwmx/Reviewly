@@ -14,6 +14,17 @@ export type ChatRequest = {
   stream?: boolean
 }
 
+export type ChatUsageMetrics = {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
+export type ChatStreamMeta = {
+  usage?: ChatUsageMetrics
+  latencyMs?: number
+}
+
 export type ChatResponse = {
   provider: string
   model: string
@@ -24,6 +35,24 @@ export type ChatResponse = {
     totalTokens?: number
   }
   latencyMs?: number
+}
+
+function parseStreamUsage(payload: Record<string, unknown>): ChatStreamMeta | null {
+  const usageRaw = payload.usage
+  if (!usageRaw || typeof usageRaw !== "object") {
+    if (typeof payload.latencyMs === "number") {
+      return { latencyMs: payload.latencyMs }
+    }
+    return null
+  }
+  const usage = usageRaw as Record<string, unknown>
+  const promptTokens = Number(usage.promptTokens) || 0
+  const completionTokens = Number(usage.completionTokens) || 0
+  const totalTokens = Number(usage.totalTokens) || promptTokens + completionTokens
+  return {
+    usage: { promptTokens, completionTokens, totalTokens },
+    latencyMs: typeof payload.latencyMs === "number" ? payload.latencyMs : undefined,
+  }
 }
 
 function buildChatBody(request: ChatRequest): Record<string, unknown> {
@@ -98,15 +127,20 @@ export async function chatCompletionStream(
   options: {
     signal?: AbortSignal
     onDelta: (text: string) => void
+    onUsage?: (meta: ChatStreamMeta) => void
     onError?: (message: string) => void
     onDone?: () => void
   },
 ): Promise<void> {
-  await postSse(
-    "/api/ai/chat",
-    buildChatBody({ ...request, stream: true }),
-    options,
-  )
+  await postSse("/api/ai/chat", buildChatBody({ ...request, stream: true }), {
+    ...options,
+    onEvent: (payload) => {
+      const meta = parseStreamUsage(payload)
+      if (meta) {
+        options.onUsage?.(meta)
+      }
+    },
+  })
 }
 
 export function patchPrAiSummary(

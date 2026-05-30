@@ -11,11 +11,20 @@ export interface PaginatedResponse<T> {
   hasMore: boolean
 }
 
+export interface AiUsageMetrics {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  costCny: number
+  latencyMs?: number
+}
+
 export interface AiPersistedContent {
   content: string
   analyzedAt: string
   model?: string
   provider?: string
+  usage?: AiUsageMetrics
 }
 
 /** @deprecated Use AiPersistedContent */
@@ -233,6 +242,7 @@ export interface PullRequestListItem {
   displayName?: string
   note?: string
   favorite?: boolean
+  aiSummary?: AiPersistedContent | null
   sourceType?: RepositorySourceType
   repositoryType?: RepositoryType
   managed?: boolean

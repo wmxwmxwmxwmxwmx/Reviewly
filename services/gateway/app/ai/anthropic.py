@@ -63,7 +63,7 @@ async def stream_anthropic(
     api_key: str,
     messages: list[dict],
     temperature: float = 0.2,
-) -> AsyncIterator[str]:
+) -> AsyncIterator[str | dict[str, dict[str, int]]]:
     system = next((m["content"] for m in messages if m.get("role") == "system"), None)
     chat_messages = [
         {
@@ -99,6 +99,9 @@ async def stream_anthropic(
                 body_bytes = await response.aread()
                 raise RuntimeError(body_bytes.decode("utf-8", errors="replace")[:500])
 
+            input_tokens = 0
+            output_tokens = 0
+
             async for line in response.aiter_lines():
                 if not line.startswith("data: "):
                     continue
@@ -108,8 +111,22 @@ async def stream_anthropic(
                     data = json.loads(line[6:])
                 except json.JSONDecodeError:
                     continue
-                if data.get("type") == "content_block_delta":
+                event_type = data.get("type")
+                if event_type == "message_start":
+                    message = data.get("message") or {}
+                    usage = message.get("usage") or {}
+                    input_tokens = int(usage.get("input_tokens") or 0)
+                elif event_type == "content_block_delta":
                     delta = data.get("delta") or {}
                     text = delta.get("text") or ""
                     if text:
                         yield text
+                elif event_type == "message_delta":
+                    usage = data.get("usage") or {}
+                    output_tokens = int(usage.get("output_tokens") or output_tokens)
+
+            yield {
+                "usage": normalize_anthropic_usage(
+                    {"input_tokens": input_tokens, "output_tokens": output_tokens},
+                ),
+            }

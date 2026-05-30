@@ -1,7 +1,7 @@
 ﻿"use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { AnalysisFinding } from "@reviewly/shared"
+import type { AnalysisFinding, AiUsageMetrics } from "@reviewly/shared"
 import { Loader2 } from "lucide-react"
 import { Header } from "@/features/prism/components/header"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
@@ -13,7 +13,7 @@ import { PROverview } from "@/features/prism/components/pr-overview"
 import { AISummary } from "@/features/prism/components/ai-summary"
 import { DiffViewer } from "@/features/prism/components/diff-viewer"
 import { AIPanel } from "@/features/prism/components/ai-panel"
-import { estimateCostCny, useAISettings } from "@/features/prism/contexts/ai-settings-context"
+import { estimateCostCnyFromUsage, useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { usePullRequest } from "@/hooks/use-pull-request"
 import { usePullRequestDiff } from "@/hooks/use-pull-request-diff"
 import { usePrAnalysis } from "@/hooks/use-pr-analysis"
@@ -92,6 +92,7 @@ export function AIReviewView({
     cached.activePanelTab ?? "risks",
   )
   const [governanceRefreshKey, setGovernanceRefreshKey] = useState(0)
+  const [runUsage, setRunUsage] = useState<AiUsageMetrics | undefined>(aiSummary?.usage)
 
   const analyzeAbortRef = useRef<AbortController | null>(null)
   const handleRescanRef = useRef<((options?: { force?: boolean }) => Promise<void>) | null>(null)
@@ -108,6 +109,9 @@ export function AIReviewView({
     void loadPersisted(controller.signal).then((result) => {
       if (result?.aiSummary?.content) {
         setGeneratedSummary(result.aiSummary.content)
+      }
+      if (result?.aiSummary?.usage) {
+        setRunUsage(result.aiSummary.usage)
       }
     }).catch(() => {
       /* persistError 已由 hook 记录 */
@@ -196,15 +200,19 @@ export function AIReviewView({
     findings.length === 0
 
   const persistGeneratedSummary = useCallback(
-    async (content: string, signal?: AbortSignal) => {
+    async (content: string, usage: AiUsageMetrics | undefined, signal?: AbortSignal) => {
       const payload = {
         content,
         analyzedAt: new Date().toISOString(),
         model: settings.model,
         provider: settings.provider,
+        ...(usage ? { usage } : {}),
       }
       const saved = await patchPrAiSummary(prId, payload, signal)
       setAiSummary(saved)
+      if (saved.usage) {
+        setRunUsage(saved.usage)
+      }
     },
     [prId, settings.model, settings.provider, setAiSummary],
   )
@@ -248,6 +256,10 @@ ${diffContext || "（无 diff 内容）"}`,
       ]
 
       let accumulated = ""
+      let promptTokens = 0
+      let completionTokens = 0
+      let totalTokens = 0
+      let latencyMs = 0
 
       try {
         await chatCompletionStream(
@@ -263,6 +275,16 @@ ${diffContext || "（无 diff 内容）"}`,
               accumulated += delta
               setGeneratedSummary(accumulated)
             },
+            onUsage: (meta) => {
+              if (meta.usage) {
+                promptTokens = meta.usage.promptTokens
+                completionTokens = meta.usage.completionTokens
+                totalTokens = meta.usage.totalTokens
+              }
+              if (typeof meta.latencyMs === "number") {
+                latencyMs = meta.latencyMs
+              }
+            },
             onError: (msg) => {
               throw new Error(msg)
             },
@@ -272,18 +294,35 @@ ${diffContext || "（无 diff 内容）"}`,
         const finalSummary = accumulated.trim() || jobSummary || "模型未返回内容。"
         setGeneratedSummary(finalSummary)
 
+        const resolvedTotal = totalTokens || promptTokens + completionTokens
+        const costCny = estimateCostCnyFromUsage(
+          settings.provider,
+          settings.model,
+          promptTokens,
+          completionTokens,
+        )
+        const usage: AiUsageMetrics = {
+          promptTokens,
+          completionTokens,
+          totalTokens: resolvedTotal,
+          costCny,
+          latencyMs,
+        }
+        setRunUsage(usage)
+
         if (!signal.aborted && finalSummary) {
-          await persistGeneratedSummary(finalSummary, signal)
+          await persistGeneratedSummary(finalSummary, usage, signal)
         }
 
         recordUsage({
+          prId,
           provider: settings.provider,
           model: settings.model,
-          promptTokens: 0,
-          completionTokens: 0,
-          totalTokens: Math.ceil(finalSummary.length / 4),
-          costCny: estimateCostCny(settings.provider, Math.ceil(finalSummary.length / 4)),
-          latencyMs: 0,
+          promptTokens,
+          completionTokens,
+          totalTokens: resolvedTotal,
+          costCny,
+          latencyMs,
         })
       } catch (error) {
         if (isAbortError(error)) {
@@ -310,6 +349,7 @@ ${diffContext || "（无 diff 内容）"}`,
       settings.apiKey,
       persistGeneratedSummary,
       recordUsage,
+      prId,
     ],
   )
 
@@ -542,6 +582,7 @@ ${diffContext || "（无 diff 内容）"}`,
               hasAnalysis={hasAnalysis}
               restoring={restoring}
               error={summaryError}
+              usage={runUsage}
               onGoToSettings={() => navigate("settings")}
             />
 
@@ -599,6 +640,7 @@ ${diffContext || "（无 diff 内容）"}`,
             mergeRecommendation={latest?.mergeRecommendation}
             filesChanged={pr?.filesChanged ?? 0}
             approxContextChars={approxContextChars}
+            runUsage={runUsage}
             activeTab={activePanelTab}
             onActiveTabChange={setActivePanelTab}
           />

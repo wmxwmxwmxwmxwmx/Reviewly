@@ -63,24 +63,25 @@ async def _stream_chat(
     temperature: float,
 ):
     if provider == "anthropic":
-        async for delta in stream_anthropic(
+        stream = stream_anthropic(
             model=model,
             api_key=api_key,
             messages=messages,
             temperature=temperature,
-        ):
-            yield delta
+        )
     else:
         endpoint = get_endpoint(provider, custom_endpoint)
-        async for delta in stream_openai_compatible(
+        stream = stream_openai_compatible(
             endpoint=endpoint or "",
             provider=provider,
             model=model,
             api_key=api_key,
             messages=messages,
             temperature=temperature,
-        ):
-            yield delta
+        )
+
+    async for chunk in stream:
+        yield chunk
 
 
 @router.post("/chat")
@@ -95,8 +96,10 @@ async def chat(body: ChatRequestBody, db: Session = Depends(get_db)):
     if body.stream:
 
         async def event_stream():
+            started = time.time()
+            usage: dict[str, int] | None = None
             try:
-                async for delta in _stream_chat(
+                async for chunk in _stream_chat(
                     provider=provider,
                     model=model,
                     api_key=api_key,
@@ -104,8 +107,18 @@ async def chat(body: ChatRequestBody, db: Session = Depends(get_db)):
                     messages=messages,
                     temperature=temperature,
                 ):
-                    payload = json.dumps({"delta": delta}, ensure_ascii=False)
-                    yield f"data: {payload}\n\n"
+                    if isinstance(chunk, str):
+                        payload = json.dumps({"delta": chunk}, ensure_ascii=False)
+                        yield f"data: {payload}\n\n"
+                        continue
+                    if isinstance(chunk, dict) and chunk.get("usage"):
+                        usage = chunk["usage"]
+                if usage:
+                    meta = {
+                        "usage": usage,
+                        "latencyMs": int((time.time() - started) * 1000),
+                    }
+                    yield f"data: {json.dumps(meta, ensure_ascii=False)}\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as exc:  # noqa: BLE001
                 yield f"data: {json.dumps({'error': str(exc)}, ensure_ascii=False)}\n\n"

@@ -13,7 +13,8 @@ import {
 
 import type { Repository, SyncRepositoriesResponse } from "@reviewly/shared"
 
-import { useAISettings, estimateCostCny } from "@/features/prism/contexts/ai-settings-context"
+import { estimateCostCnyFromUsage } from "@/lib/ai/pricing"
+import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
 import { extractApiErrorMessage, parseFetchJson, PrismApiError } from "@/lib/api/client"
 import { getAuthToken } from "@/lib/auth/storage"
@@ -304,13 +305,20 @@ export function ReposProvider({ children }: { children: ReactNode }) {
         setRepos((prev) => prev.map((r) => (r.id === repoId ? updated : r)))
 
         const totalTokens = Number(data?.usage?.totalTokens) || 0
+        const promptTokens = Number(data?.usage?.promptTokens) || 0
+        const completionTokens = Number(data?.usage?.completionTokens) || 0
         recordUsage({
           provider: settings.provider,
           model: settings.model,
-          promptTokens: Number(data?.usage?.promptTokens) || 0,
-          completionTokens: Number(data?.usage?.completionTokens) || 0,
+          promptTokens,
+          completionTokens,
           totalTokens,
-          costCny: estimateCostCny(settings.provider, totalTokens),
+          costCny: estimateCostCnyFromUsage(
+            settings.provider,
+            settings.model,
+            promptTokens,
+            completionTokens,
+          ),
           latencyMs: Number(data?.latencyMs) || 0,
         })
       } catch (e: unknown) {

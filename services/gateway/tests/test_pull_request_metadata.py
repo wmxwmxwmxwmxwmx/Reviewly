@@ -38,6 +38,23 @@ def test_delete_pull_request_not_found(client: TestClient) -> None:
     assert r.status_code == 404
 
 
+def test_delete_pull_request_with_analysis_cascade(client: TestClient) -> None:
+    listed = client.get("/api/pull-requests?includeExternal=true&limit=1").json()
+    items = listed.get("items") or []
+    if not items:
+        return
+    pr_id = items[0]["id"]
+
+    client.post(f"/api/pull-requests/{pr_id}/analysis?force=true")
+
+    deleted = client.delete(f"/api/pull-requests/{pr_id}")
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json().get("ok") is True
+
+    missing = client.get(f"/api/pull-requests/{pr_id}")
+    assert missing.status_code == 404
+
+
 def test_patch_pull_request_requires_fields(client: TestClient) -> None:
     listed = client.get("/api/pull-requests?includeExternal=true&limit=1").json()
     items = listed.get("items") or []
