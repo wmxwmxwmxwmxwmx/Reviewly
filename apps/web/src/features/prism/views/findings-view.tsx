@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { motion } from "framer-motion"
 import {
   AlertTriangle,
   ChevronLeft,
@@ -10,27 +9,24 @@ import {
   Search,
 } from "lucide-react"
 
-import type { UnifiedFinding } from "@reviewly/shared"
+import type { FindingCategory, UnifiedFinding } from "@reviewly/shared"
 
 import { FindingDetailDrawer } from "@/features/prism/components/finding-detail-drawer"
 import { FindingsKpiStrip } from "@/features/prism/components/findings-kpi-strip"
 import { FindingsTable } from "@/features/prism/components/findings-table"
-import { FindingsTrendChart } from "@/features/prism/components/findings-trend-chart"
+import { RiskCategoryCards } from "@/features/prism/components/risk-category-cards"
 import {
-  useNavigation,
-  type FindingsTab,
-} from "@/features/prism/contexts/navigation-context"
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { useFindingsCenter } from "@/hooks/use-findings-center"
 import { isStatsEligibleRepo } from "@/lib/repos-utils"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
-
-const TABS: { id: FindingsTab; label: string }[] = [
-  { id: "all", label: zh.findings.tabAll },
-  { id: "security", label: zh.findings.tabSecurity },
-  { id: "performance", label: zh.findings.tabPerformance },
-]
 
 const SEVERITY_OPTIONS = ["", "critical", "high", "medium", "low"] as const
 const STATUS_OPTIONS = ["", "open", "ignored", "resolved"] as const
@@ -40,6 +36,7 @@ export function FindingsView() {
   const { repos } = useReposStore()
   const center = useFindingsCenter(findingsTab)
   const [selected, setSelected] = useState<UnifiedFinding | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   const eligibleRepos = useMemo(
     () => repos.filter((r) => isStatsEligibleRepo(r)),
@@ -52,23 +49,65 @@ export function FindingsView() {
     if (match) {
       setSelected(match)
       center.prepareAi(match)
+      setSheetOpen(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sync selection when list loads
   }, [urlFindingId, center.items])
 
-  const handleTab = (tab: FindingsTab) => {
-    navigate("findings", { tab: tab === "all" ? undefined : tab })
-    center.setTab(tab)
+  const handleCategorySelect = (category: FindingCategory | null) => {
+    center.setCategoryFilter(category)
+    setSelected(null)
+    setSheetOpen(false)
+    navigate("findings", {
+      tab: category ?? undefined,
+      findingId: undefined,
+    })
   }
 
   const handleSelect = (finding: UnifiedFinding) => {
     setSelected(finding)
     center.prepareAi(finding)
+    setSheetOpen(true)
     navigate("findings", {
       tab: finding.findingType,
       findingId: finding.id,
     })
   }
+
+  const handleCloseDetail = () => {
+    setSelected(null)
+    setSheetOpen(false)
+    navigate("findings", {
+      tab: center.tab === "all" ? undefined : center.tab,
+      findingId: undefined,
+    })
+  }
+
+  const detailPanel = (
+    <FindingDetailDrawer
+      finding={selected}
+      aiText={center.aiText}
+      aiLoading={center.aiFindingId === selected?.id}
+      aiError={center.aiError}
+      actionLoading={center.actionLoading}
+      onClose={handleCloseDetail}
+      onRunAi={(f) => void center.runAi(f)}
+      onReanalyze={(f) => void center.reanalyze(f)}
+      onIgnore={async (f) => {
+        const ok = await center.updateStatus(f, "ignored")
+        if (ok) handleCloseDetail()
+      }}
+      onResolve={async (f) => {
+        const ok = await center.updateStatus(f, "resolved")
+        if (ok) handleCloseDetail()
+      }}
+      onOpenPr={(f) => {
+        if (f.pullRequestId) {
+          navigate("ai-review", { prId: f.pullRequestId })
+        }
+      }}
+    />
+  )
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -93,41 +132,24 @@ export function FindingsView() {
 
         <FindingsKpiStrip stats={center.stats} loading={center.loading} />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <FindingsTrendChart title={zh.findings.trend7d} data={center.trends.last7Days} />
-          <FindingsTrendChart title={zh.findings.trend30d} data={center.trends.last30Days} />
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => handleTab(t.id)}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-xs border transition-colors",
-                center.tab === t.id
-                  ? "border-ai-blue/40 bg-ai-blue/10 text-foreground"
-                  : "border-border text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-2">{zh.findings.categoryOverview}</p>
+          <RiskCategoryCards
+            categoryStats={center.categoryStats}
+            activeId={center.categoryFilter}
+            loading={center.loading}
+            onSelect={handleCategorySelect}
+          />
         </div>
 
         {center.filtersOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            className="flex flex-wrap gap-2 items-center"
-          >
+          <div className="flex flex-wrap gap-2 items-center">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <input
                 value={center.searchInput}
                 onChange={(e) => center.setSearchInput(e.target.value)}
-                placeholder="搜索规则、文件、描述…"
+                placeholder={zh.findings.searchPlaceholder}
                 className="w-full pl-8 pr-3 py-1.5 text-xs rounded-md border border-border bg-surface-2"
               />
             </div>
@@ -171,7 +193,7 @@ export function FindingsView() {
                 </option>
               ))}
             </select>
-          </motion.div>
+          </div>
         )}
 
         {center.error && (
@@ -185,6 +207,8 @@ export function FindingsView() {
             items={center.items}
             loading={center.loading}
             selectedId={selected?.id ?? null}
+            sort={center.sort}
+            onSortChange={center.setSort}
             onSelect={handleSelect}
           />
           <div className="flex items-center justify-between px-4 py-2 border-t border-border text-xs text-muted-foreground">
@@ -211,22 +235,17 @@ export function FindingsView() {
             </div>
           </div>
         </div>
-        <div className="w-[min(420px,38vw)] shrink-0 hidden lg:block">
-          <FindingDetailDrawer
-            finding={selected}
-            aiText={center.aiText}
-            aiLoading={center.aiFindingId === selected?.id}
-            aiError={center.aiError}
-            onClose={() => setSelected(null)}
-            onRunAi={(f) => void center.runAi(f)}
-            onOpenPr={(f) => {
-              if (f.pullRequestId) {
-                navigate("ai-review", { prId: f.pullRequestId })
-              }
-            }}
-          />
-        </div>
+        <div className="w-[min(420px,38vw)] shrink-0 hidden lg:block">{detailPanel}</div>
       </div>
+
+      <Sheet open={sheetOpen && !!selected} onOpenChange={(open) => !open && handleCloseDetail()}>
+        <SheetContent side="right" className="w-full sm:max-w-md p-0 lg:hidden">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{zh.findings.detailTitle}</SheetTitle>
+          </SheetHeader>
+          <div className="h-full">{detailPanel}</div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

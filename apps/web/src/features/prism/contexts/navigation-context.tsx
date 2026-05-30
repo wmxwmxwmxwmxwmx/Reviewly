@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import type { FindingCategory } from "@reviewly/shared"
+
 import type { NavView } from "@/features/prism/components/sidebar"
 import { useAIReviewSession } from "@/features/prism/contexts/ai-review-session-context"
 
@@ -31,7 +33,7 @@ const NAV_VIEWS: NavView[] = [
   "team",
 ]
 
-export type FindingsTab = "all" | "security" | "performance"
+export type FindingsTab = "all" | FindingCategory
 
 function isNavView(value: string | null): value is NavView {
   return value !== null && (NAV_VIEWS as string[]).includes(value)
@@ -128,8 +130,17 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const urlPrId = searchParams.get("prId")
   const repoId = searchParams.get("repoId")
   const tabParam = searchParams.get("tab")
-  const findingsTab: FindingsTab =
-    tabParam === "security" || tabParam === "performance" ? tabParam : "all"
+  const findingsTab: FindingsTab = (() => {
+    if (!tabParam || tabParam === "all") return "all"
+    const allowed: FindingCategory[] = [
+      "security",
+      "performance",
+      "architecture",
+      "maintainability",
+      "convention",
+    ]
+    return allowed.includes(tabParam as FindingCategory) ? (tabParam as FindingCategory) : "all"
+  })()
   const findingId = searchParams.get("findingId")
   const reviewTab = searchParams.get("reviewTab")
 

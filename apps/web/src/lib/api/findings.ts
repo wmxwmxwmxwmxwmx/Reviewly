@@ -1,9 +1,9 @@
-import type { FindingsPage, UnifiedFinding } from "@reviewly/shared"
+import type { FindingsPage, FindingCategory, UnifiedFinding } from "@reviewly/shared"
 
 import { apiFetch } from "./client"
 
 export type FindingsQuery = {
-  type?: "security" | "performance"
+  type?: FindingCategory
   severity?: string
   repo?: string
   repoId?: string
@@ -11,7 +11,7 @@ export type FindingsQuery = {
   q?: string
   page?: number
   pageSize?: number
-  sort?: string
+  sort?: "createdAt" | "severity"
   signal?: AbortSignal
 }
 
@@ -37,4 +37,16 @@ export function fetchFindings(params: FindingsQuery = {}) {
 
 export function fetchFinding(id: string, signal?: AbortSignal) {
   return apiFetch<UnifiedFinding>(`/api/findings/${id}`, { signal })
+}
+
+export function patchFindingStatus(
+  id: string,
+  status: "open" | "ignored" | "resolved",
+  signal?: AbortSignal,
+) {
+  return apiFetch<UnifiedFinding>(`/api/findings/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+    signal,
+  })
 }

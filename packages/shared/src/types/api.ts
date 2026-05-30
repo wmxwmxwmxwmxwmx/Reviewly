@@ -463,10 +463,17 @@ export interface PerformanceFindingsPage {
   pageSize: number
 }
 
-/** Unified findings center row (security + performance). */
+export type FindingCategory =
+  | "security"
+  | "performance"
+  | "architecture"
+  | "maintainability"
+  | "convention"
+
+/** Unified findings center row (analysis + governance). */
 export interface UnifiedFinding {
   id: string
-  findingType: "security" | "performance"
+  findingType: FindingCategory
   typeLabel: string
   repo: string
   repoId?: string
@@ -492,9 +499,9 @@ export interface FindingsStats {
   low: number
 }
 
-export interface FindingsTrendPoint {
-  date: string
-  count: number
+export interface FindingsCategoryStats {
+  counts: Record<FindingCategory, number>
+  maxSeverity: Partial<Record<FindingCategory, "critical" | "high" | "medium" | "low">>
 }
 
 export interface FindingsPage {
@@ -503,10 +510,7 @@ export interface FindingsPage {
   page: number
   pageSize: number
   stats: FindingsStats
-  trends: {
-    last7Days: FindingsTrendPoint[]
-    last30Days: FindingsTrendPoint[]
-  }
+  categoryStats: FindingsCategoryStats
 }
 
 export interface ArchitectureFinding extends AnalysisFinding {

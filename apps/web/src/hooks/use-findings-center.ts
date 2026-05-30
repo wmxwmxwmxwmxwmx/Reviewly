@@ -2,15 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import type { AiPersistedContent, UnifiedFinding } from "@reviewly/shared"
+import type {
+  AiPersistedContent,
+  FindingCategory,
+  FindingsCategoryStats,
+  UnifiedFinding,
+} from "@reviewly/shared"
 
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
 import type { FindingsTab } from "@/features/prism/contexts/navigation-context"
 import { PrismApiError } from "@/lib/api/client"
-import { fetchFindings } from "@/lib/api/findings"
+import { fetchFindings, patchFindingStatus } from "@/lib/api/findings"
 import { explainSecurityFinding } from "@/lib/api/security"
 import { optimizePerformanceFinding } from "@/lib/api/performance"
+import { startAnalysis } from "@/lib/api/analysis"
+import { EMPTY_CATEGORY_COUNTS } from "@/lib/findings-categories"
 import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 
@@ -23,6 +30,10 @@ function buildAiInsight(content: string, model: string, provider: string): AiPer
     model,
     provider,
   }
+}
+
+function tabToCategory(tab: FindingsTab): FindingCategory | undefined {
+  return tab === "all" ? undefined : tab
 }
 
 export function useFindingsCenter(initialTab: FindingsTab = "all") {
@@ -38,12 +49,14 @@ export function useFindingsCenter(initialTab: FindingsTab = "all") {
     medium: 0,
     low: 0,
   })
-  const [trends, setTrends] = useState<{
-    last7Days: { date: string; count: number }[]
-    last30Days: { date: string; count: number }[]
-  }>({ last7Days: [], last30Days: [] })
+  const [categoryStats, setCategoryStats] = useState<FindingsCategoryStats>({
+    counts: { ...EMPTY_CATEGORY_COUNTS },
+    maxSeverity: {},
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sort, setSort] = useState<"createdAt" | "severity">("createdAt")
+  const [actionLoading, setActionLoading] = useState(false)
 
   const [viewState, setViewState] = usePersistedViewState("findings", {
     severityFilter: "",
@@ -82,9 +95,9 @@ export function useFindingsCenter(initialTab: FindingsTab = "all") {
 
   useEffect(() => {
     setPage(1)
-  }, [tab, severityFilter, repoFilter, statusFilter, searchQuery])
+  }, [tab, severityFilter, repoFilter, statusFilter, searchQuery, sort])
 
-  const apiType = tab === "all" ? undefined : tab
+  const apiType = tabToCategory(tab)
 
   const load = useCallback(
     async (signal: AbortSignal) => {
@@ -99,12 +112,13 @@ export function useFindingsCenter(initialTab: FindingsTab = "all") {
           q: searchQuery || undefined,
           page,
           pageSize: PAGE_SIZE,
+          sort,
           signal,
         })
         setItems(res.items)
         setTotal(res.total)
         setStats(res.stats)
-        setTrends(res.trends)
+        setCategoryStats(res.categoryStats)
       } catch (e: unknown) {
         if (isAbortError(e)) return
         setError(e instanceof PrismApiError ? e.message : "加载失败")
@@ -112,7 +126,7 @@ export function useFindingsCenter(initialTab: FindingsTab = "all") {
         if (shouldApplyResult(signal)) setLoading(false)
       }
     },
-    [apiType, severityFilter, repoFilter, statusFilter, searchQuery, page],
+    [apiType, severityFilter, repoFilter, statusFilter, searchQuery, page, sort],
   )
 
   useEffect(() => {
@@ -129,6 +143,13 @@ export function useFindingsCenter(initialTab: FindingsTab = "all") {
     return () => ac.abort()
   }, [load])
 
+  const setCategoryFilter = useCallback((category: FindingCategory | null) => {
+    setTab(category ?? "all")
+    setPage(1)
+  }, [])
+
+  const categoryFilter = tab === "all" ? null : tab
+
   const prepareAi = useCallback((finding: UnifiedFinding) => {
     aiAbort.current?.abort()
     setAiFindingId(finding.id)
@@ -139,6 +160,10 @@ export function useFindingsCenter(initialTab: FindingsTab = "all") {
 
   const runAi = useCallback(
     async (finding: UnifiedFinding) => {
+      if (finding.findingType === "convention" || finding.findingType === "architecture") {
+        setAiError("该类型暂不支持流式 AI，请查看规则描述与修复建议。")
+        return
+      }
       aiAbort.current?.abort()
       const ac = new AbortController()
       aiAbort.current = ac
@@ -169,8 +194,10 @@ export function useFindingsCenter(initialTab: FindingsTab = "all") {
       try {
         if (finding.findingType === "security") {
           await explainSecurityFinding(finding.id, streamOpts)
-        } else {
+        } else if (finding.findingType === "performance") {
           await optimizePerformanceFinding(finding.id, streamOpts)
+        } else {
+          setAiError("该类型暂不支持流式 AI 解读")
         }
       } catch (e: unknown) {
         if (isAbortError(e)) return
@@ -187,19 +214,61 @@ export function useFindingsCenter(initialTab: FindingsTab = "all") {
     setAiFindingId(null)
   }, [])
 
+  const updateStatus = useCallback(
+    async (finding: UnifiedFinding, status: "ignored" | "resolved") => {
+      setActionLoading(true)
+      setError(null)
+      try {
+        await patchFindingStatus(finding.id, status)
+        reload()
+        return true
+      } catch (e: unknown) {
+        setError(e instanceof PrismApiError ? e.message : "更新状态失败")
+        return false
+      } finally {
+        setActionLoading(false)
+      }
+    },
+    [reload],
+  )
+
+  const reanalyze = useCallback(
+    async (finding: UnifiedFinding) => {
+      if (!finding.pullRequestId) {
+        setError("缺少关联 PR，无法重新分析")
+        return
+      }
+      setActionLoading(true)
+      setError(null)
+      try {
+        await startAnalysis(finding.pullRequestId, { force: true })
+        reload()
+      } catch (e: unknown) {
+        setError(e instanceof PrismApiError ? e.message : "重新分析失败")
+      } finally {
+        setActionLoading(false)
+      }
+    },
+    [reload],
+  )
+
   return {
     tab,
     setTab,
+    categoryFilter,
+    setCategoryFilter,
     items,
     total,
     page,
     totalPages,
     setPage,
     stats,
-    trends,
+    categoryStats,
     loading,
     error,
     reload,
+    sort,
+    setSort,
     severityFilter,
     setSeverityFilter,
     repoFilter,
@@ -213,8 +282,11 @@ export function useFindingsCenter(initialTab: FindingsTab = "all") {
     aiFindingId,
     aiText,
     aiError,
+    actionLoading,
     prepareAi,
     runAi,
     cancelAi,
+    updateStatus,
+    reanalyze,
   }
 }
