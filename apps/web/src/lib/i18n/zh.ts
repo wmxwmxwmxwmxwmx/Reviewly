@@ -193,6 +193,7 @@ export const zh = {
     expandPrList: "展开 PR 列表",
     collapsePrList: "收起 PR 列表",
     prListEmpty: "暂无合并请求",
+    prListEmptyHint: "若 GitHub 上有开放 PR，请先同步该仓库的合并请求。",
     prListLoadFailed: "PR 列表加载失败",
     prListColTitle: "标题",
     prListColAuthor: "作者",

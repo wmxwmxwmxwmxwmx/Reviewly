@@ -160,7 +160,7 @@ async def _persist_pull_request(
             owner_user_id=owner_user_id,
             gh_repo=gh_repo if repo_source_type == SOURCE_TYPE_EXTERNAL else None,
         )
-        pr_id, pr_payload = _map_pr(gh_pr, repo_id, name)
+        pr_id, pr_payload = _map_pr(gh_pr, repo_id, full_name)
         if commit_count is not None:
             pr_payload["commits"] = commit_count
         if gh_files is None:
@@ -339,7 +339,7 @@ async def sync_installation(session: Session, installation_id: str) -> dict[str,
         payload["openPrCount"] = len(prs)
 
         for gh_pr in prs:
-            pr_id, pr_payload = _map_pr(gh_pr, repo_id, name)
+            pr_id, pr_payload = _map_pr(gh_pr, repo_id, full_name)
             patch = await client.get_pull_diff_patch(owner, name, gh_pr["number"])
             gh_files, commit_count = await _fetch_pr_files_and_commits(
                 owner, name, gh_pr["number"], installation_id=installation_id

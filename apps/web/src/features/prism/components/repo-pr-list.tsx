@@ -11,10 +11,11 @@ import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
 type RepoPrListProps = {
+  repoId: string
   repoFullName: string
 }
 
-export function RepoPrList({ repoFullName }: RepoPrListProps) {
+export function RepoPrList({ repoId, repoFullName }: RepoPrListProps) {
   const { navigate } = useNavigation()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -26,7 +27,12 @@ export function RepoPrList({ repoFullName }: RepoPrListProps) {
     setError(null)
     try {
       const res = await fetchPullRequests(
-        { repo: repoFullName, limit: "30", includeExternal: "true" },
+        {
+          repoId,
+          repo: repoFullName,
+          limit: "30",
+          includeExternal: "true",
+        },
         signal,
       )
       const sorted = [...res.items].sort(
@@ -36,19 +42,25 @@ export function RepoPrList({ repoFullName }: RepoPrListProps) {
     } catch (err) {
       if (signal.aborted) return
       setError(formatPrismApiError(err, zh.repos.prListLoadFailed))
+      setItems([])
     } finally {
       if (!signal.aborted) {
         setLoading(false)
       }
     }
-  }, [repoFullName])
+  }, [repoId, repoFullName])
 
   useEffect(() => {
-    if (!open || items.length > 0 || loading) return
+    setItems([])
+    setError(null)
+  }, [repoId])
+
+  useEffect(() => {
+    if (!open) return
     const ac = new AbortController()
     void load(ac.signal)
     return () => ac.abort()
-  }, [open, items.length, loading, load])
+  }, [open, load])
 
   return (
     <div className="mt-3 pt-3 border-t border-border">
@@ -78,7 +90,10 @@ export function RepoPrList({ repoFullName }: RepoPrListProps) {
           ) : null}
           {error ? <p className="text-xs text-risk-high">{error}</p> : null}
           {!loading && !error && items.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{zh.repos.prListEmpty}</p>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">{zh.repos.prListEmpty}</p>
+              <p className="text-[11px] text-muted-foreground/80">{zh.repos.prListEmptyHint}</p>
+            </div>
           ) : null}
           {items.length > 0 ? (
             <div className="overflow-x-auto rounded-md border border-border">

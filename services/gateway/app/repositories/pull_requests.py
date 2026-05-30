@@ -55,10 +55,31 @@ def _user_can_access_pr(
     )
 
 
+def _apply_repository_filter(
+    stmt,
+    *,
+    repo: str | None,
+    repo_id: str | None,
+):
+    if repo_id:
+        return stmt.where(PullRequest.repository_id == repo_id)
+    if not repo:
+        return stmt
+    if "/" in repo:
+        return stmt.where(Repository.full_name == repo)
+    return stmt.where(
+        or_(
+            Repository.full_name == repo,
+            Repository.name == repo,
+        )
+    )
+
+
 def list_pull_requests(
     session: Session,
     *,
     repo: str | None = None,
+    repo_id: str | None = None,
     risk: str | None = None,
     author: str | None = None,
     state: str | None = None,
@@ -74,6 +95,7 @@ def list_pull_requests(
     scope = _user_pr_scope(user_id, team_ids)
     if scope is not None:
         stmt = stmt.where(scope)
+    stmt = _apply_repository_filter(stmt, repo=repo, repo_id=repo_id)
     rows = session.scalars(stmt).all()
     if rows:
         repo_map = {
@@ -92,8 +114,6 @@ def list_pull_requests(
     else:
         repo_map = {}
     items = [_pr_dict(r, repo=repo_map.get(r.repository_id)) for r in rows]
-    if repo:
-        items = [p for p in items if repo in p.get("repo", "")]
     if risk:
         items = [p for p in items if p.get("riskLevel") == risk]
     if author:
@@ -285,6 +305,8 @@ def _pr_dict(row: PullRequest, repo: Repository | None = None) -> dict:
             "riskScore": row.risk_score,
         }
     if repo is not None:
+        data["repo"] = repo.full_name
+        data["repoId"] = row.repository_id
         data["sourceType"] = repo.source_type or SOURCE_TYPE_GITHUB
         data["repositoryType"] = getattr(repo, "repository_type", None) or "owned"
         data["managed"] = bool(getattr(repo, "managed", True))

@@ -647,7 +647,7 @@ function RepoCard({
         <RepositoryJobBar repoId={repo.id} seedJob={repo.activeJob} />
       )}
 
-      <RepoPrList repoFullName={`${repo.owner}/${repo.name}`} />
+      <RepoPrList repoId={repo.id} repoFullName={`${repo.owner}/${repo.name}`} />
 
       {showAnalysisPanel && (
         <div className="mt-3 pt-3 border-t border-border">
