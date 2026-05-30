@@ -50,6 +50,30 @@ def test_scan_endpoint_uses_fixture(client: TestClient) -> None:
     assert len(g.json()["nodes"]) >= 4
 
 
+def test_scan_stream_reports_progress(client: TestClient) -> None:
+    repos = client.get("/api/repos").json()
+    if not repos:
+        pytest.skip("no repos")
+    repo_id = repos[0]["id"]
+
+    with patch(
+        "app.services.architecture_scan.ensure_repo_clone",
+        new_callable=AsyncMock,
+    ) as mock_clone:
+        mock_clone.return_value = {
+            "ok": True,
+            "path": str(FIXTURE_ROOT.resolve()),
+            "ref": "main",
+            "cached": True,
+        }
+        r = client.post("/api/architecture/scan", json={"repoId": repo_id, "stream": True})
+
+    assert r.status_code == 200
+    assert "progress" in r.text
+    assert "graph" in r.text
+    assert "[DONE]" in r.text or "done" in r.text.lower()
+
+
 def test_architecture_analyze_rejects_empty_graph(client: TestClient) -> None:
     repos = client.get("/api/repos").json()
     if not repos:

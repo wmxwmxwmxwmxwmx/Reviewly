@@ -6,7 +6,8 @@ import { extractApiErrorMessage } from "./client"
 
 export type SseReaderOptions = {
   signal?: AbortSignal
-  onDelta: (text: string) => void
+  onDelta?: (text: string) => void
+  onEvent?: (payload: Record<string, unknown>) => void
   onError?: (message: string) => void
   onDone?: () => void
 }
@@ -63,12 +64,15 @@ export async function readSseResponse(
             return
           }
           try {
-            const parsed = JSON.parse(data) as { delta?: string; error?: string }
-            if (parsed.error) {
+            const parsed = JSON.parse(data) as Record<string, unknown>
+            if (typeof parsed.error === "string") {
               options.onError?.(parsed.error)
               return
             }
-            if (parsed.delta) options.onDelta(parsed.delta)
+            if (typeof parsed.delta === "string") {
+              options.onDelta?.(parsed.delta)
+            }
+            options.onEvent?.(parsed)
           } catch {
             /* ignore malformed chunks */
           }
