@@ -1,4 +1,8 @@
-﻿"use client"
+﻿/**
+ * @deprecated Superseded by ReviewInsightPanel + ReviewFileRail (ai-review-view three-column layout).
+ * Kept for reference; not mounted in production routes.
+ */
+"use client"
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"

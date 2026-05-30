@@ -11,7 +11,9 @@ import {
   Zap,
 } from "lucide-react"
 import { RepositoryBadges } from "@/features/prism/components/repository-badges"
+import { ReviewProgressIndicator } from "@/features/prism/components/review-progress-indicator"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import type { AnalysisPhase } from "@/hooks/use-review-layout"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import type { PullRequest } from "@reviewly/shared"
@@ -30,6 +32,8 @@ interface HeaderProps {
   onMenuClick?: () => void
   aiPanelOpen?: boolean
   onToggleAIPanel?: () => void
+  analysisPhase?: AnalysisPhase
+  chunkProgress?: { current: number; total: number }
 }
 
 export function Header({
@@ -46,6 +50,8 @@ export function Header({
   onMenuClick,
   aiPanelOpen,
   onToggleAIPanel,
+  analysisPhase = "idle",
+  chunkProgress,
 }: HeaderProps) {
   const { navigate } = useNavigation()
 
@@ -97,7 +103,7 @@ export function Header({
           </div>
         </div>
 
-        <div className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono shrink-0">
+        <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono shrink-0">
           <span
             className="max-w-[10rem] truncate px-1.5 py-0.5 rounded bg-ai-blue/10 text-ai-blue border border-ai-blue/20"
             title={prData.sourceBranch}
@@ -112,6 +118,8 @@ export function Header({
             {prData.targetBranch}
           </span>
         </div>
+
+        <ReviewProgressIndicator phase={analysisPhase} chunkProgress={chunkProgress} />
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0 ml-auto">
           <div className="hidden md:flex items-center gap-1.5 text-[11px] max-w-[11rem]">
@@ -163,7 +171,7 @@ export function Header({
             </div>
           ) : null}
 
-          {onToggleAIPanel && (
+          {onToggleAIPanel ? (
             <button
               type="button"
               onClick={onToggleAIPanel}
@@ -171,11 +179,11 @@ export function Header({
                 "flex items-center justify-center w-8 h-8 rounded-md transition-colors shrink-0 xl:hidden",
                 aiPanelOpen ? "bg-ai-blue/15 text-ai-blue" : "hover:bg-accent text-muted-foreground",
               )}
-              aria-label="切换 AI 面板"
+              aria-label="切换洞察面板"
             >
               <PanelRight className="w-4 h-4" />
             </button>
-          )}
+          ) : null}
 
           {onRescan && (
             <button
