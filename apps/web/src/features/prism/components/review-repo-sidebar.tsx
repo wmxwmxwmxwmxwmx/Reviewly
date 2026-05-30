@@ -18,7 +18,7 @@ export function ReviewRepoSidebar({
   loading,
 }: ReviewRepoSidebarProps) {
   return (
-    <aside className="w-[220px] shrink-0 border-r border-border bg-panel/50 overflow-y-auto hidden lg:block">
+    <aside className="w-[200px] shrink-0 border-r border-border bg-panel/50 overflow-y-auto hidden lg:block">
       <div className="p-3 border-b border-border">
         <div className="flex items-center gap-2 text-[11px] font-semibold text-foreground uppercase tracking-wide">
           <FolderGit2 className="w-3.5 h-3.5 text-muted-foreground" />

@@ -3,6 +3,7 @@
 import type { Repository, PullRequest } from "@reviewly/shared"
 
 import { zh } from "@/lib/i18n/zh"
+import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
 import { cn } from "@/lib/utils"
 
 const badgeBase =
@@ -47,12 +48,17 @@ export function RepositorySourceBadge({
 
 export function RepositoryManagedBadge({
   managed,
+  isManaged,
+  repositoryType,
   className,
 }: {
   managed?: boolean
+  isManaged?: boolean
+  repositoryType?: Repository["repositoryType"] | PullRequest["repositoryType"]
   className?: string
 }) {
-  if (managed === true) {
+  const adopted = isRepositoryManaged({ isManaged, managed, repositoryType })
+  if (adopted) {
     return (
       <span
         className={cn(
@@ -65,7 +71,7 @@ export function RepositoryManagedBadge({
       </span>
     )
   }
-  if (managed === false) {
+  if (!adopted && managed === false) {
     return (
       <span
         className={cn(
@@ -84,16 +90,24 @@ export function RepositoryManagedBadge({
 export function RepositoryBadges({
   sourceType,
   managed,
+  isManaged,
+  repositoryType,
   className,
 }: {
   sourceType?: Repository["sourceType"] | PullRequest["sourceType"]
   managed?: boolean
+  isManaged?: boolean
+  repositoryType?: Repository["repositoryType"] | PullRequest["repositoryType"]
   className?: string
 }) {
   return (
     <span className={cn("inline-flex items-center gap-1", className)}>
       <RepositorySourceBadge sourceType={sourceType} />
-      <RepositoryManagedBadge managed={managed} />
+      <RepositoryManagedBadge
+        managed={managed}
+        isManaged={isManaged}
+        repositoryType={repositoryType}
+      />
     </span>
   )
 }

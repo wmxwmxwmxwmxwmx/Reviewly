@@ -85,6 +85,8 @@ export interface Repository {
   sourceType?: RepositorySourceType
   repositoryType?: RepositoryType
   managed?: boolean
+  /** Canonical adoption flag from API (managed OR repositoryType=managed). */
+  isManaged?: boolean
   localPath?: string | null
   lastClonedAt?: string | null
   lastCommitSha?: string | null
@@ -345,6 +347,7 @@ export interface PullRequestListItem {
   sourceType?: RepositorySourceType
   repositoryType?: RepositoryType
   managed?: boolean
+  isManaged?: boolean
 }
 
 export interface PullRequest extends PullRequestListItem {

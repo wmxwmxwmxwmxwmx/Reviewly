@@ -16,6 +16,7 @@ from app.db.models import (
     PullRequestFile,
     Repository,
 )
+from app.repositories.repo_management import apply_management_fields_to_api
 from app.repositories.seed_filter import (
     LEGACY_SEED_PULL_REQUEST_IDS,
     SOURCE_TYPE_GITHUB,
@@ -443,8 +444,7 @@ def _pr_dict(row: PullRequest, repo: Repository | None = None) -> dict:
         data["repo"] = repo.full_name
         data["repoId"] = row.repository_id
         data["sourceType"] = repo.source_type or SOURCE_TYPE_GITHUB
-        data["repositoryType"] = getattr(repo, "repository_type", None) or "owned"
-        data["managed"] = bool(getattr(repo, "managed", True))
+        apply_management_fields_to_api(data, repo)
     if row.head_sha:
         data["headSha"] = row.head_sha
     if row.base_sha:

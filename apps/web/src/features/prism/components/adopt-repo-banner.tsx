@@ -8,6 +8,7 @@ import type { PullRequest, Repository } from "@reviewly/shared"
 import { useRepositoryJobs } from "@/hooks/use-repository-jobs"
 import { adoptRepository } from "@/lib/api/repos"
 import { zh } from "@/lib/i18n/zh"
+import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
 import { cn } from "@/lib/utils"
 
 function dismissKey(repoId: string) {
@@ -22,9 +23,7 @@ function isDismissed(repoId: string): boolean {
 export function shouldShowAdoptBanner(pr: PullRequest | null | undefined): boolean {
   if (!pr?.repoId) return false
   if (isDismissed(pr.repoId)) return false
-  if (pr.repositoryType === "external") return true
-  if (pr.managed === false) return true
-  return pr.sourceType === "external"
+  return !isRepositoryManaged(pr)
 }
 
 interface AdoptRepoBannerProps {
@@ -59,6 +58,9 @@ export function AdoptRepoBanner({ pr, onAdopted }: AdoptRepoBannerProps) {
     setAdoptError(null)
     try {
       const result = await adoptRepository(repoId)
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.removeItem(dismissKey(repoId))
+      }
       setAdopted(true)
       onAdopted?.(result.repository)
       void refresh()

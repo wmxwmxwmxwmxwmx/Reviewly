@@ -1,8 +1,10 @@
 import type { Repository } from "@reviewly/shared"
 
+import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
+
 export function repoCategory(repo: Repository): "owned" | "managed" | "external" {
-  if (repo.repositoryType === "managed") return "managed"
-  if (repo.repositoryType === "external" || repo.managed === false) return "external"
+  if (isRepositoryManaged(repo)) return "managed"
+  if (repo.repositoryType === "external") return "external"
   return "owned"
 }
 

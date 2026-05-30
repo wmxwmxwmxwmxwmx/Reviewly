@@ -10,6 +10,7 @@ import {
   ReviewCenterNav,
   type ReviewCenterTab,
 } from "@/features/prism/components/review-center-nav"
+import { ReviewRepoFilter } from "@/features/prism/components/review-repo-filter"
 import { ReviewRepoSidebar } from "@/features/prism/components/review-repo-sidebar"
 import { AiReviewOverview } from "@/features/prism/views/ai-review-overview"
 import { ReviewCenterDashboardView } from "@/features/prism/views/review-center/review-center-dashboard"
@@ -89,6 +90,7 @@ export function ReviewCenterShell({
           <ReviewCenterDashboardView
             onNavigate={onWorkbenchNavigate}
             onNavigateFindings={onNavigateFindings}
+            onSelectPr={onSelectPr}
           />
         )
       case "pending":
@@ -174,6 +176,17 @@ export function ReviewCenterShell({
       </div>
 
       <ReviewCenterNav active={activeTab} onChange={onTabChange} />
+
+      {showRepoSidebar ? (
+        <div className="lg:hidden px-4 py-2 border-b border-border shrink-0">
+          <ReviewRepoFilter
+            groups={repoGroups}
+            selectedRepoId={repoId ?? null}
+            onSelectRepo={onRepoChange}
+            loading={groupsLoading}
+          />
+        </div>
+      ) : null}
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {showRepoSidebar ? (
