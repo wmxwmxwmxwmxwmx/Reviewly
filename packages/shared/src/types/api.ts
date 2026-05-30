@@ -489,6 +489,8 @@ export interface UnifiedFinding {
   title?: string
   discoveredAt?: string | null
   aiInsight?: AiPersistedContent | null
+  note?: string | null
+  impact?: string | null
 }
 
 export interface FindingsStats {

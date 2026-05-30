@@ -13,7 +13,8 @@ router = APIRouter(prefix="/api/findings", tags=["findings"])
 
 
 class PatchFindingBody(BaseModel):
-    status: str = Field(min_length=1)
+    status: str | None = None
+    note: str | None = None
 
 
 @router.get("")
@@ -48,7 +49,15 @@ def list_findings(
         sort=sort,
     )
     stats = findings_center.compute_stats(db, finding_type=type, repo=repo, repo_id=repo_id)
-    category_stats = findings_center.compute_category_stats(db, repo=repo, repo_id=repo_id)
+    status_filter = status if status else None
+    category_stats = findings_center.compute_category_stats(
+        db,
+        severity=severity,
+        repo=repo,
+        repo_id=repo_id,
+        status=status_filter,
+        q=q,
+    )
     return {
         "items": items,
         "total": total,
@@ -65,7 +74,14 @@ def patch_finding(
     body: PatchFindingBody,
     db: Session = Depends(get_db),
 ) -> dict:
-    row = findings_center.patch_finding_status(db, finding_id, status=body.status)
+    if body.status is None and body.note is None:
+        raise api_error("请提供 status 或 note", 400)
+    row = findings_center.patch_finding(
+        db,
+        finding_id,
+        status=body.status,
+        note=body.note,
+    )
     if not row:
         raise api_error("风险项不存在或状态无效", 404)
     return row

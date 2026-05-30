@@ -13,10 +13,9 @@ import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
 import type { FindingsTab } from "@/features/prism/contexts/navigation-context"
 import { PrismApiError } from "@/lib/api/client"
-import { fetchFindings, patchFindingStatus } from "@/lib/api/findings"
+import { fetchFindings, patchFinding } from "@/lib/api/findings"
 import { explainSecurityFinding } from "@/lib/api/security"
 import { optimizePerformanceFinding } from "@/lib/api/performance"
-import { startAnalysis } from "@/lib/api/analysis"
 import { EMPTY_CATEGORY_COUNTS } from "@/lib/findings-categories"
 import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
@@ -215,16 +214,17 @@ export function useFindingsCenter(initialTab: FindingsTab = "all") {
   }, [])
 
   const updateStatus = useCallback(
-    async (finding: UnifiedFinding, status: "ignored" | "resolved") => {
+    async (finding: UnifiedFinding, status: "open" | "ignored" | "resolved") => {
       setActionLoading(true)
       setError(null)
       try {
-        await patchFindingStatus(finding.id, status)
+        const updated = await patchFinding(finding.id, { status })
+        setItems((prev) => prev.map((item) => (item.id === finding.id ? updated : item)))
         reload()
-        return true
+        return updated
       } catch (e: unknown) {
         setError(e instanceof PrismApiError ? e.message : "更新状态失败")
-        return false
+        return null
       } finally {
         setActionLoading(false)
       }
@@ -232,24 +232,22 @@ export function useFindingsCenter(initialTab: FindingsTab = "all") {
     [reload],
   )
 
-  const reanalyze = useCallback(
-    async (finding: UnifiedFinding) => {
-      if (!finding.pullRequestId) {
-        setError("缺少关联 PR，无法重新分析")
-        return
-      }
+  const saveNote = useCallback(
+    async (finding: UnifiedFinding, note: string) => {
       setActionLoading(true)
       setError(null)
       try {
-        await startAnalysis(finding.pullRequestId, { force: true })
-        reload()
+        const updated = await patchFinding(finding.id, { note })
+        setItems((prev) => prev.map((item) => (item.id === finding.id ? updated : item)))
+        return updated
       } catch (e: unknown) {
-        setError(e instanceof PrismApiError ? e.message : "重新分析失败")
+        setError(e instanceof PrismApiError ? e.message : "保存备注失败")
+        return null
       } finally {
         setActionLoading(false)
       }
     },
-    [reload],
+    [],
   )
 
   return {
@@ -287,6 +285,6 @@ export function useFindingsCenter(initialTab: FindingsTab = "all") {
     runAi,
     cancelAi,
     updateStatus,
-    reanalyze,
+    saveNote,
   }
 }

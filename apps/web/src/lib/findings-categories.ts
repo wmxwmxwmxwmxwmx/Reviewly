@@ -2,17 +2,14 @@ import type { FindingCategory } from "@reviewly/shared"
 
 export type { FindingCategory }
 
-export const RISK_CATEGORIES: {
-  id: FindingCategory
-  label: string
-  icon: string
-  countTone: string
-}[] = [
-  { id: "security", label: "安全问题", icon: "🔒", countTone: "text-risk-high" },
-  { id: "performance", label: "性能问题", icon: "⚡", countTone: "text-ai-blue" },
-  { id: "architecture", label: "架构问题", icon: "🏗", countTone: "text-ai-purple" },
-  { id: "maintainability", label: "可维护性", icon: "🔧", countTone: "text-risk-medium" },
-  { id: "convention", label: "规范问题", icon: "📋", countTone: "text-muted-foreground" },
+/** Short tab labels for risk center filter bar */
+export const RISK_CATEGORY_TABS: { id: FindingCategory | "all"; label: string }[] = [
+  { id: "all", label: "全部" },
+  { id: "security", label: "安全" },
+  { id: "performance", label: "性能" },
+  { id: "architecture", label: "架构" },
+  { id: "maintainability", label: "维护性" },
+  { id: "convention", label: "规范" },
 ]
 
 export const EMPTY_CATEGORY_COUNTS: Record<FindingCategory, number> = {

@@ -34,7 +34,7 @@ TYPE_LABELS: dict[str, str] = {
     "security": "安全问题",
     "performance": "性能问题",
     "architecture": "架构问题",
-    "maintainability": "可维护性",
+    "maintainability": "维护性",
     "convention": "规范问题",
 }
 
@@ -62,7 +62,18 @@ def _resolve_analysis_rule(ftype: str, payload: dict[str, Any], title: str) -> s
 
 
 def _open_status(payload: dict | None) -> str:
-    return str((payload or {}).get("status", "open"))
+    raw = str((payload or {}).get("status") or "open").strip().lower()
+    if raw in ("", "open"):
+        return "open"
+    if raw in ("ignored", "resolved"):
+        return raw
+    return raw
+
+
+def _matches_status(payload: dict | None, status: str | None) -> bool:
+    if status is None:
+        return True
+    return _open_status(payload) == status
 
 
 def _to_unified_finding(
@@ -103,6 +114,8 @@ def _to_unified_finding(
         "title": row.title,
         "discoveredAt": _dt_iso(job.created_at),
         "aiInsight": extract_from_payload(payload, ai_key),
+        "note": str(payload.get("note") or "") or None,
+        "impact": str(payload.get("impact") or payload.get("rootCause") or "") or None,
     }
 
 
@@ -147,6 +160,8 @@ def _to_convention_finding(
         "title": rule.rule[:80] if rule.rule else "规范违规",
         "discoveredAt": discovered_at,
         "aiInsight": extract_from_payload(payload, "aiInsight"),
+        "note": str(payload.get("note") or "") or None,
+        "impact": str(payload.get("impact") or "") or None,
     }
 
 
@@ -192,9 +207,7 @@ def _base_query(
                 cast(AnalysisFinding.payload, String).ilike(pattern),
             )
         )
-    if status:
-        base = base.where(cast(AnalysisFinding.payload, String).ilike(f'%"status": "{status}"%'))
-
+    # Status is applied in Python via _matches_status (payload often omits status key).
     return only_stats_eligible_findings(exclude_seed_findings(base))
 
 
@@ -221,7 +234,7 @@ def _list_analysis_findings(
     items: list[dict[str, Any]] = []
     for f, pr, repo_row, job in rows:
         payload = f.payload or {}
-        if status is not None and _open_status(payload) != status:
+        if not _matches_status(payload, status):
             continue
         items.append(_to_unified_finding(f, pr, repo_row, job))
     return items
@@ -270,7 +283,7 @@ def _list_convention_findings(
     for violation, pr, repo_row, rule in rows:
         payload = violation.payload or {}
         st = _open_status(payload)
-        if status is not None and st != status:
+        if not _matches_status(payload, status):
             continue
         items.append(_to_convention_finding(violation, pr, repo_row, rule))
     return items
@@ -399,31 +412,42 @@ def compute_stats(
 def compute_category_stats(
     session: Session,
     *,
+    severity: str | None = None,
     repo: str | None = None,
     repo_id: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
 ) -> dict[str, Any]:
+    """Per-category counts using the same filters as the findings list (incl. status=None → all)."""
     counts = {key: 0 for key in CATEGORY_TYPES}
     max_severity: dict[str, str | None] = {key: None for key in CATEGORY_TYPES}
 
-    for ftype in ANALYSIS_TYPES:
-        items = _list_analysis_findings(
-            session,
-            finding_types=[ftype],
-            severity=None,
-            repo=repo,
-            repo_id=repo_id,
-            status="open",
-            q=None,
-        )
-        counts[ftype] = len(items)
-        for item in items:
-            sev = str(item.get("severity"))
-            prev = max_severity[ftype]
-            if prev is None or SEVERITY_RANK.get(sev, 9) < SEVERITY_RANK.get(prev, 9):
-                max_severity[ftype] = sev
+    analysis_items = _list_analysis_findings(
+        session,
+        finding_types=list(ANALYSIS_TYPES),
+        severity=severity,
+        repo=repo,
+        repo_id=repo_id,
+        status=status,
+        q=q,
+    )
+    for item in analysis_items:
+        ftype = item.get("findingType")
+        if ftype not in counts:
+            continue
+        counts[ftype] += 1
+        sev = str(item.get("severity"))
+        prev = max_severity[ftype]
+        if prev is None or SEVERITY_RANK.get(sev, 9) < SEVERITY_RANK.get(prev, 9):
+            max_severity[ftype] = sev
 
     convention_items = _list_convention_findings(
-        session, severity=None, repo=repo, repo_id=repo_id, status="open", q=None
+        session,
+        severity=severity,
+        repo=repo,
+        repo_id=repo_id,
+        status=status,
+        q=q,
     )
     counts["convention"] = len(convention_items)
     for item in convention_items:
@@ -466,13 +490,16 @@ def get_finding(session: Session, finding_id: str) -> dict[str, Any] | None:
     return _to_unified_finding(row, pr, repo_row, job)
 
 
-def patch_finding_status(
+def patch_finding(
     session: Session,
     finding_id: str,
     *,
-    status: str,
+    status: str | None = None,
+    note: str | None = None,
 ) -> dict[str, Any] | None:
-    if status not in ("open", "ignored", "resolved"):
+    if status is not None and status not in ("open", "ignored", "resolved"):
+        return None
+    if status is None and note is None:
         return None
 
     if finding_id.startswith(GOV_ID_PREFIX):
@@ -481,7 +508,10 @@ def patch_finding_status(
         if violation is None:
             return None
         payload = deepcopy(violation.payload) if violation.payload else {}
-        payload["status"] = status
+        if status is not None:
+            payload["status"] = status
+        if note is not None:
+            payload["note"] = note
         violation.payload = payload
         session.commit()
         session.refresh(violation)
@@ -496,7 +526,10 @@ def patch_finding_status(
     if row is None or row.type not in ANALYSIS_TYPES:
         return None
     payload = deepcopy(row.payload) if row.payload else {}
-    payload["status"] = status
+    if status is not None:
+        payload["status"] = status
+    if note is not None:
+        payload["note"] = note
     row.payload = payload
     session.commit()
     session.refresh(row)
@@ -511,6 +544,15 @@ def patch_finding_status(
     if repo_row is None:
         return None
     return _to_unified_finding(row, pr, repo_row, job)
+
+
+def patch_finding_status(
+    session: Session,
+    finding_id: str,
+    *,
+    status: str,
+) -> dict[str, Any] | None:
+    return patch_finding(session, finding_id, status=status)
 
 
 # Deprecated — kept for importers; trends removed from API.
