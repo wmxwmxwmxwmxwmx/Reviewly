@@ -1,459 +1,344 @@
-﻿"use client"
+"use client"
 
-import { useMemo } from "react"
+import { useState } from "react"
 import { motion } from "framer-motion"
 import {
-  LayoutDashboard,
-  GitPullRequest,
-  TrendingUp,
-  TrendingDown,
   Activity,
-  AlertTriangle,
-  CheckCircle2,
+  BarChart3,
   BrainCircuit,
-  Loader2,
-  RefreshCw,
-  Database,
-  Timer,
-  DollarSign,
   ChevronRight,
+  ClipboardCheck,
   FolderGit2,
+  Github,
+  Plus,
+  RefreshCw,
+  ShieldAlert,
+  CheckCircle2,
+  PencilLine,
 } from "lucide-react"
-import { zh } from "@/lib/i18n/zh"
-import { cn } from "@/lib/utils"
-import { Skeleton } from "@/components/ui/skeleton"
-import { useNavigation } from "@/features/prism/contexts/navigation-context"
-import type { NavView } from "@/features/prism/components/sidebar"
-import { useDashboardContext } from "@/features/prism/contexts/dashboard-context"
-import { useDashboardMetrics } from "@/hooks/use-dashboard-metrics"
-import { useRiskDistribution } from "@/hooks/use-risk-distribution"
-import { useWeeklySummary } from "@/hooks/use-weekly-summary"
 
-function activityIconType(type: string) {
-  return type.includes("security") || type === "security_finding"
-}
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ImportPRDialog } from "@/features/prism/components/import-pr-dialog"
+import { useAuth } from "@/features/prism/contexts/auth-context"
+import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import { useDashboardWorkspace } from "@/hooks/use-dashboard-workspace"
+import { useImportPrByUrl } from "@/hooks/use-import-pr-by-url"
+import { formatActivityLine } from "@/lib/format-activity-line"
+import { formatWorkspaceGreeting } from "@/lib/dashboard-greeting"
+import { resolveDashboardRepoGroups } from "@/lib/group-repos-for-dashboard"
+import { cn } from "@/lib/utils"
+import { zh } from "@/lib/i18n/zh"
+
+const STAT_CARDS = [
+  {
+    key: "pendingAssigned" as const,
+    label: "待我审批",
+    icon: ClipboardCheck,
+    color: "text-ai-blue",
+    bg: "bg-ai-blue/10 border-ai-blue/20",
+    reviewTab: "pending" as const,
+  },
+  {
+    key: "changesRequested" as const,
+    label: "待修改",
+    icon: PencilLine,
+    color: "text-risk-medium",
+    bg: "bg-risk-medium/10 border-risk-medium/20",
+    reviewTab: "all" as const,
+  },
+  {
+    key: "highRisk" as const,
+    label: "高风险 PR",
+    icon: ShieldAlert,
+    color: "text-risk-high",
+    bg: "bg-risk-high/10 border-risk-high/20",
+    reviewTab: "all" as const,
+  },
+  {
+    key: "approved" as const,
+    label: "已通过 PR",
+    icon: CheckCircle2,
+    color: "text-risk-low",
+    bg: "bg-risk-low/10 border-risk-low/20",
+    reviewTab: "all" as const,
+  },
+  {
+    key: "weeklyAnalysisCount" as const,
+    label: "本周 AI 分析",
+    icon: BrainCircuit,
+    color: "text-ai-purple",
+    bg: "bg-ai-purple/10 border-ai-purple/20",
+    reviewTab: "stats" as const,
+    suffix: "次",
+  },
+]
 
 export function DashboardView() {
   const { navigate } = useNavigation()
-  const { data: dashboard, loading, error, refetch, isValidating } = useDashboardContext()
-  const metrics = useDashboardMetrics(dashboard, loading)
-  const { segments: riskSegments, total: riskTotal } = useRiskDistribution(dashboard)
-  const { content: weeklyContent, loading: weeklyLoading, error: weeklyError, generate } =
-    useWeeklySummary(dashboard, refetch)
+  const { user } = useAuth()
+  const { stats, activities, repoGroups, repos, loading, error, refetch, isValidating } =
+    useDashboardWorkspace()
+  const [importOpen, setImportOpen] = useState(false)
+  const { importing, handleImportUrl } = useImportPrByUrl({
+    onImportSuccess: () => {
+      setImportOpen(false)
+      void refetch()
+    },
+  })
 
-  const activities = dashboard?.activities?.length
-    ? dashboard.activities
-    : dashboard?.recentActivity ?? []
-
-  const resolvedAiInsights = useMemo(() => {
-    if (!activities.length) return []
-    return activities.slice(0, 3).map((activity) => {
-      const type = activity.type
-      const severity = type.includes("security")
-        ? "high"
-        : type.includes("review") || type.includes("analysis")
-          ? "medium"
-          : "low"
-      const target: NavView = type.includes("security") || type.includes("performance")
-        ? "findings"
-        : type.includes("pr-opened") || type.includes("pr-merged")
-          ? "repos"
-          : "ai-review"
-      return {
-        severity,
-        message: `${activity.user} ${activity.action}（${activity.repo}）`,
-        action: "查看详情",
-        target,
-        pullRequestId: activity.pullRequestId,
-        findingsTab:
-          type.includes("performance")
-            ? ("performance" as const)
-            : type.includes("security")
-              ? ("security" as const)
-              : undefined,
-      }
-    })
-  }, [activities])
-
-  const navigateFromInsight = (
-    target: NavView,
-    pullRequestId?: string,
-    findingsTab?: "security" | "performance",
-  ) => {
-    if (pullRequestId && target === "ai-review") {
-      navigate(target, { prId: pullRequestId })
-      return
-    }
-    if (target === "findings") {
-      navigate("findings", { tab: findingsTab ?? "security" })
-      return
-    }
-    navigate(target)
-  }
-
-  const recentReviews = dashboard?.recentReviews ?? []
-
-  const topRepos = dashboard?.topRepos ?? []
-  const analysisCache = dashboard?.analysisCache
+  const greeting = formatWorkspaceGreeting(user)
+  const displayRepoGroups = resolveDashboardRepoGroups(repoGroups, repos)
+  const hasRepoGroups = displayRepoGroups.some((g) => g.repos.length > 0)
 
   return (
-    <div className="p-5 space-y-5">
+    <div className="p-5 space-y-5 max-w-6xl mx-auto">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">{zh.nav.dashboard}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.dashboard}</p>
+          <p className="text-2xl font-semibold text-foreground tracking-tight">
+            <span className="mr-2" aria-hidden>
+              👋
+            </span>
+            {greeting}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">{zh.pageSubtitle.dashboard}</p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={() => refetch()}
           disabled={loading}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-border rounded-md px-2.5 py-1.5"
+          className="shrink-0"
         >
-          <RefreshCw className={cn("w-3.5 h-3.5", isValidating && "animate-spin")} />
+          <RefreshCw className={cn("size-3.5", isValidating && "animate-spin")} />
           刷新
-        </button>
+        </Button>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-risk-high/30 bg-risk-high/10 px-4 py-3 text-sm text-risk-high flex items-center justify-between">
+        <div className="rounded-lg border border-risk-high/30 bg-risk-high/10 px-4 py-3 text-sm text-risk-high flex items-center justify-between gap-3">
           <span>{error}</span>
-          <button type="button" onClick={() => refetch()} className="text-xs underline">
+          <Button type="button" variant="ghost" size="sm" onClick={() => refetch()}>
             重试
-          </button>
+          </Button>
         </div>
       )}
 
-      {analysisCache && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {[
-            {
-              icon: Database,
-              label: "缓存命中率",
-              value: `${analysisCache.hitRate}%`,
-              color: "text-ai-blue",
-            },
-            {
-              icon: Timer,
-              label: "节省分析时间",
-              value: analysisCache.savedTimeLabel,
-              color: "text-risk-low",
-            },
-            {
-              icon: DollarSign,
-              label: "预估节省 AI 成本",
-              value: `$${analysisCache.estimatedCostSavedUsd.toFixed(2)}`,
-              color: "text-ai-purple",
-            },
-          ].map((card, idx) => (
-            <motion.div
-              key={card.label}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.05 }}
-              className="p-4 rounded-lg bg-surface-2 border border-border"
-            >
-              <card.icon className={cn("w-5 h-5 mb-2", card.color)} />
-              <div className="text-2xl font-semibold text-foreground">{card.value}</div>
-              <div className="text-xs text-muted-foreground mt-1">{card.label}</div>
-            </motion.div>
-          ))}
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {loading && metrics.length === 0
-          ? Array.from({ length: 4 }).map((_, idx) => (
-              <div key={idx} className="p-4 rounded-lg bg-surface-2 border border-border space-y-3">
-                <Skeleton className="h-5 w-5" />
-                <Skeleton className="h-8 w-16" />
-                <Skeleton className="h-3 w-20" />
-              </div>
-            ))
-          : metrics.map((metric, idx) => (
-              <motion.div
-                key={metric.label}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.05 }}
-                className="p-4 rounded-lg bg-surface-2 border border-border"
-              >
-                <div className="flex items-center justify-between">
-                  <metric.icon className={cn("w-5 h-5", metric.color)} />
-                  <div
-                    className={cn(
-                      "flex items-center gap-1 text-xs text-muted-foreground",
-                      metric.trend === "up" && metric.label === "安全问题"
-                        ? "text-risk-high"
-                        : metric.trend === "down"
-                          ? "text-risk-low"
-                          : ""
-                    )}
-                  >
-                    {metric.trend === "up" ? (
-                      <TrendingUp className="w-3 h-3" />
-                    ) : (
-                      <TrendingDown className="w-3 h-3" />
-                    )}
-                    {metric.change}
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-semibold text-foreground">{metric.value}</span>
-                    {metric.suffix && (
-                      <span className="text-sm text-muted-foreground">{metric.suffix}</span>
-                    )}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{metric.label}</div>
-                </div>
-              </motion.div>
-            ))}
-      </div>
-
-      {riskTotal > 0 && (
-        <div className="rounded-lg border border-border p-4 bg-surface-2">
-          <p className="text-sm font-medium text-foreground mb-3">{zh.dashboard.riskDistributionOpenPr}</p>
-          <div className="flex h-2 rounded-full overflow-hidden bg-surface-3">
-            {riskSegments.map((seg) => (
-              <div
-                key={seg.key}
-                className={cn("h-full", seg.colorClass)}
-                style={{ width: `${seg.percent}%` }}
-                title={`${seg.label}: ${seg.count}`}
-              />
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
-            {riskSegments.map((seg) => (
-              <span key={seg.key}>
-                {seg.label} {seg.count}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 rounded-lg border border-border overflow-hidden">
-          <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
-            <Activity className="w-4 h-4 text-ai-blue" />
-            <span className="text-sm font-medium text-foreground">最近活动</span>
-          </div>
-          <div className="divide-y divide-border">
-            {loading ? (
-              Array.from({ length: 4 }).map((_, idx) => (
-                <div key={idx} className="px-4 py-3 flex gap-3">
-                  <Skeleton className="h-8 w-8 rounded-full shrink-0" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-3 w-1/2" />
-                  </div>
-                </div>
+      <section aria-label="我的工作台统计">
+        <h2 className="text-sm font-medium text-muted-foreground mb-3">我的工作台</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {loading
+            ? Array.from({ length: 5 }).map((_, idx) => (
+                <Card key={idx} className="py-4 gap-3 bg-surface-2 border-border shadow-none">
+                  <CardContent className="px-4 space-y-2">
+                    <Skeleton className="h-8 w-8 rounded-md" />
+                    <Skeleton className="h-7 w-12" />
+                    <Skeleton className="h-3 w-16" />
+                  </CardContent>
+                </Card>
               ))
-            ) : activities.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted-foreground text-center">暂无活动记录</p>
-            ) : (
-              activities.map((activity, idx) => (
-                <motion.div
-                  key={`${activity.time}-${idx}`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="px-4 py-3 hover:bg-surface-2/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
+            : STAT_CARDS.map((card, idx) => {
+                const Icon = card.icon
+                const value = stats[card.key]
+                return (
+                  <motion.button
+                    key={card.key}
+                    type="button"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.04 }}
+                    onClick={() => navigate("ai-review", { reviewTab: card.reviewTab })}
+                    className="text-left"
+                  >
+                    <Card
                       className={cn(
-                        "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-semibold",
-                        activityIconType(activity.type)
-                          ? "bg-[oklch(0.62_0.19_240/0.2)] text-ai-blue"
-                          : "bg-gradient-to-br from-[oklch(0.55_0.19_240)] to-[oklch(0.45_0.14_264)] text-white"
+                        "py-4 gap-2 bg-surface-2 border shadow-none transition-colors hover:bg-surface-2/80",
+                        card.bg,
                       )}
                     >
-                      {activityIconType(activity.type) ? (
-                        <BrainCircuit className="w-4 h-4" />
-                      ) : (
-                        (activity.user ?? "?").slice(0, 2)
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm text-foreground">
-                        <span className="font-medium">{activity.user}</span>
-                        <span className="text-muted-foreground"> {activity.action}</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        <span className="font-mono">{activity.repo}</span>
-                        <span className="mx-2">·</span>
-                        <span>{activity.time}</span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))
-            )}
-          </div>
+                      <CardContent className="px-4">
+                        <Icon className={cn("size-5 mb-2", card.color)} />
+                        <div className="flex items-baseline gap-0.5">
+                          <span className="text-2xl font-semibold text-foreground tabular-nums">
+                            {value}
+                          </span>
+                          {card.suffix && (
+                            <span className="text-xs text-muted-foreground">{card.suffix}</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{card.label}</p>
+                      </CardContent>
+                    </Card>
+                  </motion.button>
+                )
+              })}
         </div>
+      </section>
 
-        <div className="rounded-lg border border-border overflow-hidden">
-          <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
-            <LayoutDashboard className="w-4 h-4 text-ai-blue" />
-            <span className="text-sm font-medium text-foreground">{zh.dashboard.repoOverview}</span>
-          </div>
-          <div className="divide-y divide-border">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="bg-surface-2 border-border shadow-none gap-0 py-0 overflow-hidden">
+          <CardHeader className="px-4 py-3 border-b border-border bg-surface-2/80">
+            <div className="flex items-center gap-2">
+              <FolderGit2 className="size-4 text-ai-blue" />
+              <CardTitle className="text-sm font-medium">最近仓库</CardTitle>
+            </div>
+            <CardDescription className="text-xs">按分组浏览已接入仓库</CardDescription>
+          </CardHeader>
+          <CardContent className="px-0 py-0">
             {loading ? (
-              Array.from({ length: 3 }).map((_, idx) => (
-                <div key={idx} className="px-4 py-3">
-                  <Skeleton className="h-10 w-full" />
-                </div>
-              ))
-            ) : topRepos.length === 0 ? (
-              <div className="px-4 py-6 text-center space-y-2">
+              <div className="p-4 space-y-3">
+                {Array.from({ length: 3 }).map((_, idx) => (
+                  <Skeleton key={idx} className="h-10 w-full" />
+                ))}
+              </div>
+            ) : !hasRepoGroups ? (
+              <div className="px-4 py-8 text-center space-y-2">
                 <p className="text-sm text-muted-foreground">{zh.dashboard.noReposHint}</p>
-                <button
+                <Button
                   type="button"
+                  variant="link"
+                  size="sm"
+                  className="text-ai-blue"
                   onClick={() => navigate("repos")}
-                  className="text-xs text-ai-blue hover:underline"
                 >
                   {zh.dashboard.goToRepos}
-                </button>
+                </Button>
               </div>
             ) : (
-              topRepos.map((repo, idx) => (
-                <motion.button
-                  key={repo.id}
-                  type="button"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: idx * 0.05 }}
-                  onClick={() => navigate("repos", { repoId: repo.id })}
-                  className="w-full px-4 py-3 text-left hover:bg-surface-2/80 transition-colors flex items-center gap-3 group"
-                >
-                  <div className="w-8 h-8 rounded-md bg-ai-blue/10 border border-ai-blue/20 flex items-center justify-center shrink-0">
-                    <FolderGit2 className="w-4 h-4 text-ai-blue" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-foreground font-mono truncate">
-                      {repo.fullName ?? repo.name}
+              <div className="divide-y divide-border max-h-[320px] overflow-y-auto">
+                {displayRepoGroups.map((group) =>
+                  group.repos.length === 0 ? null : (
+                    <div key={group.id} className="px-4 py-3">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                        {group.label}
+                      </p>
+                      <ul className="space-y-1">
+                        {group.repos.map((repo) => (
+                          <li key={repo.id}>
+                            <button
+                              type="button"
+                              onClick={() => navigate("repos", { repoId: repo.id })}
+                              className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground hover:bg-surface-3/80 transition-colors group"
+                            >
+                              <span className="text-muted-foreground font-mono text-xs">└</span>
+                              <span className="font-mono truncate flex-1 text-left">
+                                {repo.name}
+                              </span>
+                              {repo.prCount > 0 && (
+                                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                                  {repo.prCount} PR
+                                </Badge>
+                              )}
+                              <ChevronRight className="size-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <GitPullRequest className="w-3 h-3" />
-                        {zh.dashboard.repoPrCount(repo.prs)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" />
-                        {repo.issues} 问题
-                      </span>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-ai-blue shrink-0 transition-colors" />
-                </motion.button>
-              ))
+                  ),
+                )}
+              </div>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-surface-2 border-border shadow-none gap-0 py-0 overflow-hidden">
+          <CardHeader className="px-4 py-3 border-b border-border bg-surface-2/80">
+            <div className="flex items-center gap-2">
+              <Activity className="size-4 text-ai-blue" />
+              <CardTitle className="text-sm font-medium">最近活动</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="px-0 py-0">
+            {loading ? (
+              <div className="p-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, idx) => (
+                  <Skeleton key={idx} className="h-8 w-full" />
+                ))}
+              </div>
+            ) : activities.length === 0 ? (
+              <p className="px-4 py-8 text-sm text-muted-foreground text-center">暂无活动记录</p>
+            ) : (
+              <ul className="divide-y divide-border max-h-[320px] overflow-y-auto">
+                {activities.map((activity, idx) => (
+                  <li key={`${activity.createdAt ?? activity.time}-${idx}`}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activity.pullRequestId) {
+                          navigate("ai-review", { prId: activity.pullRequestId })
+                          return
+                        }
+                        if (activity.type.includes("pr")) {
+                          navigate("ai-review", { reviewTab: "all" })
+                        }
+                      }}
+                      className="w-full px-4 py-2.5 text-left text-sm hover:bg-surface-3/50 transition-colors flex items-center gap-2"
+                    >
+                      <span className="text-foreground truncate font-mono text-xs sm:text-sm">
+                        {formatActivityLine(activity)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="rounded-lg border border-border overflow-hidden">
-        <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <BrainCircuit className="w-4 h-4 text-ai-blue" />
-            <span className="text-sm font-medium text-foreground">{zh.dashboard.recentActivity}</span>
-          </div>
-          <button
+      <section aria-label="快捷操作">
+        <h2 className="text-sm font-medium text-muted-foreground mb-3">快捷操作</h2>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" onClick={() => setImportOpen(true)} className="gap-2">
+            <Plus className="size-4" />
+            导入 PR
+          </Button>
+          <Button
             type="button"
-            onClick={() => generate()}
-            disabled={weeklyLoading}
-            className="text-xs px-2.5 py-1 rounded-md bg-ai-blue/15 text-ai-blue hover:bg-ai-blue/25 disabled:opacity-50 flex items-center gap-1"
+            variant="outline"
+            onClick={() => navigate("ai-review", { reviewTab: "pending" })}
+            className="gap-2"
           >
-            {weeklyLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-            {zh.actions.generateWeeklySummary}
-          </button>
+            <ClipboardCheck className="size-4" />
+            我的待审批
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => navigate("ai-review", { reviewTab: "stats" })}
+            className="gap-2"
+          >
+            <BarChart3 className="size-4" />
+            查看统计
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => navigate("repos")}
+            className="gap-2"
+          >
+            <Github className="size-4" />
+            仓库管理
+          </Button>
         </div>
-        {weeklyError && (
-          <p className="px-4 py-2 text-xs text-risk-high border-b border-border">{weeklyError}</p>
-        )}
-        {weeklyContent && (
-          <div className="px-4 py-3 text-sm text-muted-foreground whitespace-pre-wrap border-b border-border">
-            {weeklyContent}
-          </div>
-        )}
-        <div className="divide-y divide-border">
-          {resolvedAiInsights.length === 0 && !weeklyContent && !loading ? (
-            <p className="px-4 py-4 text-sm text-muted-foreground">{zh.dashboard.aiInsightsEmpty}</p>
-          ) : (
-            resolvedAiInsights.map((insight, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: idx * 0.05 }}
-                className="px-4 py-3 flex items-center gap-3"
-              >
-                <div
-                  className={cn(
-                    "p-1.5 rounded",
-                    insight.severity === "high"
-                      ? "bg-[oklch(0.62_0.21_32/0.15)]"
-                      : insight.severity === "medium"
-                        ? "bg-[oklch(0.75_0.15_85/0.15)]"
-                        : "bg-surface-3"
-                  )}
-                >
-                  {insight.severity === "high" ? (
-                    <AlertTriangle className="w-4 h-4 text-risk-high" />
-                  ) : insight.severity === "medium" ? (
-                    <AlertTriangle className="w-4 h-4 text-risk-medium" />
-                  ) : (
-                    <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
-                  )}
-                </div>
-                <span className="flex-1 text-sm text-muted-foreground">{insight.message}</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigateFromInsight(
-                      insight.target,
-                      insight.pullRequestId,
-                      insight.findingsTab,
-                    )
-                  }
-                  className="text-xs text-ai-blue hover:underline"
-                >
-                  {insight.action}
-                </button>
-              </motion.div>
-            ))
-          )}
-        </div>
-      </div>
+      </section>
 
-      {recentReviews.length > 0 && (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-ai-blue" />
-            <span className="text-sm font-medium text-foreground">最近评审</span>
-          </div>
-          <div className="divide-y divide-border">
-            {recentReviews.slice(0, 3).map((review) => (
-              <button
-                key={review.jobId}
-                type="button"
-                onClick={() => navigate("ai-review", { prId: review.pullRequestId })}
-                className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-surface-2/80 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-foreground truncate">{review.title}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    风险分 {review.riskScore} · {review.mergeRecommendation}
-                  </div>
-                </div>
-                <span className="text-xs text-ai-blue shrink-0">查看</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <ImportPRDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        importing={importing}
+        onImport={handleImportUrl}
+      />
     </div>
   )
 }

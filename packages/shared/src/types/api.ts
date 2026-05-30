@@ -9,6 +9,17 @@ export interface PaginatedResponse<T> {
   items: T[]
   cursor?: string
   hasMore: boolean
+  /** Present on filtered PR list responses */
+  total?: number
+}
+
+/** GET /api/analysis/jobs/stats — workspace summary for dashboard */
+export interface AnalysisJobsStats {
+  pendingAssigned: number
+  changesRequested: number
+  highRisk: number
+  approved: number
+  weeklyAnalysisCount: number
 }
 
 export interface AiUsageMetrics {
@@ -598,6 +609,10 @@ export interface DashboardActivity {
   createdAt?: string
   pullRequestId?: string
   payload?: Record<string, unknown> | null
+}
+
+export interface RecentActivityResponse {
+  activities: DashboardActivity[]
 }
 
 export interface DashboardRepoHealth {

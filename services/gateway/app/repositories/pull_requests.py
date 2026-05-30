@@ -85,6 +85,25 @@ def _apply_repository_filter(
     )
 
 
+def filter_pull_request_items(
+    items: list[dict],
+    filter_name: str | None,
+) -> list[dict]:
+    """Dashboard / list filters: assigned (待审批), high-risk."""
+    if not filter_name:
+        return items
+    if filter_name == "assigned":
+        return [p for p in items if p.get("reviewStatus") in ("OPEN", "IN_REVIEW")]
+    if filter_name in ("high-risk", "high_risk"):
+        return [
+            p
+            for p in items
+            if p.get("riskLevel") in ("critical", "high")
+            and p.get("reviewStatus") not in ("MERGED", "CLOSED")
+        ]
+    return items
+
+
 def list_pull_requests(
     session: Session,
     *,

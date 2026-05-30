@@ -199,6 +199,16 @@ async def repo_clone(repo_id: str, db: Session = Depends(get_db)) -> dict:
     return await ensure_repo_clone(db, repo_id)
 
 
+@router.get("/pull-requests/recent-activity")
+def pull_requests_recent_activity(
+    db: Session = Depends(get_db),
+    limit: int = Query(default=20, le=100),
+) -> dict:
+    from app.services.activity_log import list_recent
+
+    return {"activities": list_recent(db, limit=limit)}
+
+
 @router.get("/pull-requests")
 def pull_requests(
     db: Session = Depends(get_db),
@@ -210,6 +220,7 @@ def pull_requests(
     state: str | None = None,
     review_status: str | None = Query(None, alias="reviewStatus"),
     search: str | None = None,
+    pr_filter: str | None = Query(None, alias="filter"),
     cursor: str | None = None,
     limit: int = Query(default=50, le=100),
     include_external: bool = Query(default=False, alias="includeExternal"),
@@ -229,7 +240,15 @@ def pull_requests(
         user_id=user_id,
         team_ids=team_ids,
     )
-    result: dict = {"items": items[:limit], "cursor": cursor, "hasMore": len(items) > limit}
+    items = pr_repo.filter_pull_request_items(items, pr_filter)
+    total = len(items)
+    page = items[:limit]
+    result: dict = {
+        "items": page,
+        "total": total,
+        "cursor": cursor,
+        "hasMore": total > limit,
+    }
     if include_counts:
         from app.repositories import review_center as rc_repo
 
@@ -517,6 +536,28 @@ def pr_governance(
     if pr_repo.get_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids) is None:
         raise api_error("合并请求不存在", 404)
     return governance_repo.list_rules_for_pr(db, pr_id)
+
+
+@router.get("/analysis/jobs/stats")
+def analysis_jobs_stats(
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> dict:
+    from app.repositories import review_center as rc_repo
+
+    user_id, team_ids = _resolve_user_scope(db, user)
+    counts = rc_repo.count_by_review_status(
+        db, user_id=user_id, team_ids=team_ids
+    )
+    stats = rc_repo.get_stats(db, user_id=user_id, team_ids=team_ids)
+    dash = rc_repo.get_dashboard(db, user_id=user_id, team_ids=team_ids)
+    return {
+        "pendingAssigned": int(counts.get("OPEN", 0)) + int(counts.get("IN_REVIEW", 0)),
+        "changesRequested": int(counts.get("CHANGES_REQUESTED", 0)),
+        "highRisk": int(dash.get("highRisk", 0)),
+        "approved": int(counts.get("APPROVED", 0)),
+        "weeklyAnalysisCount": int(stats.get("weeklyAnalysisCount", 0)),
+    }
 
 
 @router.get("/analysis/jobs/{job_id}")
