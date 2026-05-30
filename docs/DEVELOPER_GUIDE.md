@@ -174,7 +174,14 @@ npm run start:app
 2. 安装 `requirements.txt`
 3. 加载 `.env`
 4. 执行 `alembic upgrade head`
-5. 启动 uvicorn（`--reload`）
+5. 启动 uvicorn（`--reload --reload-dir app --reload-exclude "data/*"`，避免 `data/repo-cache` 克隆/扫描触发无限重载）
+
+手动启动 Gateway 时使用相同参数：
+
+```powershell
+cd services/gateway
+.venv\Scripts\python -m uvicorn app.main:app --port 3001 --reload --reload-dir app --reload-exclude "data/*"
+```
 
 ### 4.3 数据库初始化
 
