@@ -12,6 +12,37 @@ export type SseReaderOptions = {
   onDone?: () => void
 }
 
+function flushSseBuffer(buffer: string, options: SseReaderOptions): boolean {
+  if (!buffer.trim()) return false
+  let sawDone = false
+  for (const part of buffer.split("\n\n")) {
+    for (const line of part.split("\n")) {
+      if (!line.startsWith("data: ")) continue
+      const data = line.slice(6).trim()
+      if (data === "[DONE]") {
+        sawDone = true
+        continue
+      }
+      try {
+        const parsed = JSON.parse(data) as Record<string, unknown>
+        if (typeof parsed.error === "string") {
+          options.onError?.(parsed.error)
+          throw new Error(parsed.error)
+        }
+        if (typeof parsed.delta === "string") {
+          options.onDelta?.(parsed.delta)
+        }
+        options.onEvent?.(parsed)
+      } catch (error) {
+        if (error instanceof Error && error.message !== "Unexpected end of JSON input") {
+          throw error
+        }
+      }
+    }
+  }
+  return sawDone
+}
+
 /**
  * Read a fetch Response body as SSE events (`data: {"delta"}` / `{"error"}` / `[DONE]`).
  * Always cancels the reader in finally.
@@ -67,24 +98,32 @@ export async function readSseResponse(
             const parsed = JSON.parse(data) as Record<string, unknown>
             if (typeof parsed.error === "string") {
               options.onError?.(parsed.error)
-              return
+              throw new Error(parsed.error)
             }
             if (typeof parsed.delta === "string") {
               options.onDelta?.(parsed.delta)
             }
             options.onEvent?.(parsed)
-          } catch {
-            /* ignore malformed chunks */
+          } catch (error) {
+            if (error instanceof Error && !error.message.startsWith("Unexpected")) {
+              throw error
+            }
           }
         }
       }
+    }
+    if (flushSseBuffer(buffer, options)) {
+      options.onDone?.()
+      return
     }
     options.onDone?.()
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       return
     }
-    options.onError?.(error instanceof Error ? error.message : "流式读取失败")
+    const msg = error instanceof Error ? error.message : "流式读取失败"
+    options.onError?.(msg)
+    throw error instanceof Error ? error : new Error(msg)
   } finally {
     try {
       await reader.cancel()

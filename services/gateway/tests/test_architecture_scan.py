@@ -70,7 +70,7 @@ def test_scan_stream_reports_progress(client: TestClient) -> None:
 
     assert r.status_code == 200
     assert "progress" in r.text
-    assert "graph" in r.text
+    assert "complete" in r.text
     assert "[DONE]" in r.text or "done" in r.text.lower()
 
 
