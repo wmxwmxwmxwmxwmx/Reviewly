@@ -79,3 +79,20 @@ def test_findings_invalid_type(client: TestClient) -> None:
 def test_findings_sort_severity(client: TestClient) -> None:
     r = client.get("/api/findings?sort=severity&pageSize=20")
     assert r.status_code == 200
+
+
+def test_category_stats_align_with_list_total(client: TestClient) -> None:
+    """Tab counts and list total must use the same status/filter semantics."""
+    r = client.get("/api/findings?pageSize=50")
+    assert r.status_code == 200
+    body = r.json()
+    counts = body["categoryStats"]["counts"]
+    cat_sum = sum(counts.values())
+    assert cat_sum == body["total"]
+    if body["total"] >= 1:
+        by_type: dict[str, int] = {}
+        for item in body["items"]:
+            ft = item["findingType"]
+            by_type[ft] = by_type.get(ft, 0) + 1
+        for ft, n in by_type.items():
+            assert counts.get(ft, 0) >= n

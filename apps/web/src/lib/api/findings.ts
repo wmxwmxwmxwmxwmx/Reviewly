@@ -39,14 +39,22 @@ export function fetchFinding(id: string, signal?: AbortSignal) {
   return apiFetch<UnifiedFinding>(`/api/findings/${id}`, { signal })
 }
 
+export function patchFinding(
+  id: string,
+  body: { status?: "open" | "ignored" | "resolved"; note?: string },
+  signal?: AbortSignal,
+) {
+  return apiFetch<UnifiedFinding>(`/api/findings/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+    signal,
+  })
+}
+
 export function patchFindingStatus(
   id: string,
   status: "open" | "ignored" | "resolved",
   signal?: AbortSignal,
 ) {
-  return apiFetch<UnifiedFinding>(`/api/findings/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ status }),
-    signal,
-  })
+  return patchFinding(id, { status }, signal)
 }

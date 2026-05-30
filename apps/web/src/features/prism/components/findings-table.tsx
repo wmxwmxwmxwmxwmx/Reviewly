@@ -1,11 +1,14 @@
 "use client"
 
-import { motion } from "framer-motion"
-import { ArrowDown, ArrowUp, ChevronRight } from "lucide-react"
+import { ArrowDown, ArrowUp } from "lucide-react"
 
 import type { UnifiedFinding } from "@reviewly/shared"
 
-import { severityConfig } from "@/features/prism/components/security-findings-table"
+import {
+  FINDINGS_SEVERITY_COLORS,
+  FINDINGS_SEVERITY_LABELS,
+  statusLabel,
+} from "@/lib/findings-severity-display"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
@@ -33,7 +36,7 @@ function SortHeader({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+      className="inline-flex items-center gap-1 hover:text-foreground transition-colors font-medium"
     >
       {label}
       {active ? (
@@ -47,6 +50,23 @@ function SortHeader({
   )
 }
 
+function SeverityBadge({ severity }: { severity: UnifiedFinding["severity"] }) {
+  const color = FINDINGS_SEVERITY_COLORS[severity]
+  const label = FINDINGS_SEVERITY_LABELS[severity]
+  return (
+    <span
+      className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold"
+      style={{
+        color,
+        backgroundColor: `${color}18`,
+        border: `1px solid ${color}40`,
+      }}
+    >
+      {label}
+    </span>
+  )
+}
+
 export function FindingsTable({
   items,
   loading,
@@ -56,11 +76,19 @@ export function FindingsTable({
   onSelect,
 }: FindingsTableProps) {
   if (loading) {
-    return <p className="px-4 py-6 text-sm text-muted-foreground">{zh.common.loading}</p>
+    return (
+      <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+        {zh.common.loading}
+      </div>
+    )
   }
 
   if (items.length === 0) {
-    return <p className="px-4 py-6 text-sm text-muted-foreground">{zh.findings.empty}</p>
+    return (
+      <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+        {zh.findings.empty}
+      </div>
+    )
   }
 
   const toggleSort = (key: "createdAt" | "severity") => {
@@ -69,73 +97,61 @@ export function FindingsTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-xs">
-        <thead className="bg-surface-2 border-b border-border text-muted-foreground">
+    <div className="flex-1 min-h-0 overflow-auto">
+      <table className="w-full text-left text-xs border-collapse">
+        <thead className="sticky top-0 z-10 bg-surface-2 border-b border-border text-muted-foreground">
           <tr>
-            <th className="px-4 py-2 font-medium">{zh.findings.riskType}</th>
-            <th className="px-4 py-2 font-medium">
+            <th className="px-3 py-2.5 w-[72px]">
               <SortHeader
-                label={zh.common.severity}
+                label="等级"
                 active={sort === "severity"}
                 direction="asc"
                 onClick={() => toggleSort("severity")}
               />
             </th>
-            <th className="px-4 py-2 font-medium">{zh.findings.ruleName}</th>
-            <th className="px-4 py-2 font-medium">{zh.common.repoPr}</th>
-            <th className="px-4 py-2 font-medium">{zh.common.location}</th>
-            <th className="px-4 py-2 font-medium">
+            <th className="px-3 py-2.5 font-medium w-[88px]">类型</th>
+            <th className="px-3 py-2.5 font-medium min-w-[120px]">规则</th>
+            <th className="px-3 py-2.5 font-medium min-w-[100px]">仓库</th>
+            <th className="px-3 py-2.5 font-medium min-w-[140px]">文件</th>
+            <th className="px-3 py-2.5 font-medium w-[72px]">状态</th>
+            <th className="px-3 py-2.5 font-medium w-[100px] whitespace-nowrap">
               <SortHeader
-                label={zh.findings.discoveredAt}
+                label="发现时间"
                 active={sort === "createdAt"}
                 direction="desc"
                 onClick={() => toggleSort("createdAt")}
               />
             </th>
-            <th className="px-4 py-2 w-8" />
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
-          {items.map((row, idx) => {
-            const sev = severityConfig[row.severity] ?? severityConfig.low
+        <tbody className="divide-y divide-border/80">
+          {items.map((row) => {
             const selected = selectedId === row.id
             return (
-              <motion.tr
+              <tr
                 key={row.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: idx * 0.02 }}
                 onClick={() => onSelect(row)}
                 className={cn(
-                  "cursor-pointer hover:bg-surface-2/60",
-                  selected && "bg-ai-blue/5 ring-1 ring-inset ring-ai-blue/20",
+                  "cursor-pointer transition-colors",
+                  selected ? "bg-ai-blue/8" : "hover:bg-surface-2/50",
                 )}
               >
-                <td className="px-4 py-3 text-muted-foreground">{row.typeLabel}</td>
-                <td className="px-4 py-3">
-                  <span
-                    className={cn(
-                      "inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium",
-                      sev.bg,
-                      sev.color,
-                    )}
-                  >
-                    {sev.label}
-                  </span>
+                <td className="px-3 py-2.5">
+                  <SeverityBadge severity={row.severity} />
                 </td>
-                <td className="px-4 py-3 font-medium text-foreground max-w-[140px] truncate">
+                <td className="px-3 py-2.5 text-muted-foreground">{row.typeLabel}</td>
+                <td className="px-3 py-2.5 font-medium text-foreground max-w-[200px] truncate">
                   {row.rule}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">
+                <td className="px-3 py-2.5 text-muted-foreground font-mono text-[11px] truncate max-w-[140px]">
                   {row.repo}
-                  <span className="text-ai-blue">#{row.prNumber}</span>
                 </td>
-                <td className="px-4 py-3 font-mono text-muted-foreground max-w-[180px] truncate">
+                <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground max-w-[200px] truncate">
                   {row.file}
                   {row.line ? `:${row.line}` : ""}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                <td className="px-3 py-2.5 text-muted-foreground">{statusLabel(row.status)}</td>
+                <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap tabular-nums">
                   {row.discoveredAt
                     ? new Date(row.discoveredAt).toLocaleString("zh-CN", {
                         month: "2-digit",
@@ -145,10 +161,7 @@ export function FindingsTable({
                       })
                     : "—"}
                 </td>
-                <td className="px-4 py-3">
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
-                </td>
-              </motion.tr>
+              </tr>
             )
           })}
         </tbody>
