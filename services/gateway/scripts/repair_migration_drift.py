@@ -58,7 +58,16 @@ def main() -> None:
                 else set()
             )
 
-            target = version or "000"
+            if version == "012":
+                print(
+                    "Revision 012 was removed from the codebase (revert). "
+                    "Do not use alembic stamp while version is 012.\n"
+                    "Fix: UPDATE alembic_version SET version_num = '011';\n"
+                    "Then run: alembic upgrade head"
+                )
+                print(f"Version after repair: {version}")
+                return
+
             version_rank = {
                 None: -1,
                 "001": 1,
@@ -71,6 +80,7 @@ def main() -> None:
                 "008": 8,
                 "009": 9,
                 "010": 10,
+                "011": 11,
             }
 
             def behind(rev: str) -> bool:

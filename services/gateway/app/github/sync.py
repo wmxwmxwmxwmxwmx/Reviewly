@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.models import Repository
 from app.github import public_client
 from app.integrations.github.github_client import GitHubClient
@@ -106,14 +107,19 @@ async def _fetch_pr_files_and_commits(
     number: int,
     *,
     installation_id: str | None,
+    access_token: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     if installation_id:
         client = GitHubClient(installation_id)
         gh_files = await client.list_pull_files(owner, name, number)
         commits = await client.list_pull_commits(owner, name, number)
     else:
-        gh_files = await public_client.list_pull_files(owner, name, number)
-        commits = await public_client.list_pull_commits(owner, name, number)
+        gh_files = await public_client.list_pull_files(
+            owner, name, number, access_token=access_token
+        )
+        commits = await public_client.list_pull_commits(
+            owner, name, number, access_token=access_token
+        )
     return gh_files, len(commits)
 
 
@@ -240,11 +246,25 @@ async def sync_single_pull_request_public(
     number: int,
     *,
     owner_user_id: str | None = None,
+    access_token: str | None = None,
 ) -> tuple[str, str, bool]:
     try:
-        gh_pr = await public_client.get_pull_request(owner, repo, number)
+        has_auth = bool((access_token or "").strip() or settings.github_pat.strip())
+        logger.info(
+            "sync_single_pull_request_public %s/%s#%s has_user_token=%s authenticated=%s",
+            owner,
+            repo,
+            number,
+            bool((access_token or "").strip()),
+            has_auth,
+        )
+        gh_pr = await public_client.get_pull_request(
+            owner, repo, number, access_token=access_token
+        )
         try:
-            gh_repo = await public_client.get_repo_public(owner, repo)
+            gh_repo = await public_client.get_repo_public(
+                owner, repo, access_token=access_token
+            )
         except HTTPException:
             base_repo = _base_repo_from_pr(gh_pr)
             gh_repo = {
@@ -252,9 +272,15 @@ async def sync_single_pull_request_public(
                 "full_name": base_repo.get("full_name") or f"{owner}/{repo}",
                 "default_branch": base_repo.get("default_branch", "main"),
             }
-        patch = await public_client.get_pull_diff_patch(owner, repo, number)
+        patch = await public_client.get_pull_diff_patch(
+            owner, repo, number, access_token=access_token
+        )
         gh_files, commit_count = await _fetch_pr_files_and_commits(
-            owner, repo, number, installation_id=None
+            owner,
+            repo,
+            number,
+            installation_id=None,
+            access_token=access_token,
         )
         return await _persist_pull_request(
             session,

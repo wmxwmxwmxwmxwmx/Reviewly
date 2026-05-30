@@ -1,7 +1,9 @@
 """Repository import and GitHub sync endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -16,6 +18,7 @@ from app.services import repo_sync
 from app.services.activity_log import record_activity
 
 router = APIRouter(prefix="/api/repos", tags=["repos"])
+logger = logging.getLogger(__name__)
 
 
 class ImportRepositoryBody(BaseModel):
@@ -61,19 +64,25 @@ async def remove_repository(
     user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    team_ids = auth_users_repo.get_team_ids_for_user(db, user.id)
-    full_name = repos_repo.delete_repository_for_user(db, repo_id, user.id, team_ids)
-    if full_name is None:
-        raise api_error("Repository not found", 404)
-    record_activity(
-        db,
-        event_type="repo_removed",
-        actor=user.username,
-        action=f"Removed repository {full_name} from management",
-        repo=full_name,
-    )
-    db.commit()
-    return {"ok": True, "id": repo_id}
+    try:
+        team_ids = auth_users_repo.get_team_ids_for_user(db, user.id)
+        full_name = repos_repo.delete_repository_for_user(db, repo_id, user.id, team_ids)
+        if full_name is None:
+            raise api_error("Repository not found", 404)
+        record_activity(
+            db,
+            event_type="repo_removed",
+            actor=user.username,
+            action=f"Removed repository {full_name} from management",
+            repo=full_name,
+        )
+        db.commit()
+        return {"ok": True, "id": repo_id}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("delete repository failed repo_id=%s", repo_id)
+        raise
 
 
 @router.post("/{repo_id}/sync-prs")

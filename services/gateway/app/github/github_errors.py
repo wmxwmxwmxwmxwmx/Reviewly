@@ -40,31 +40,37 @@ def raise_for_github_response(
             raise api_error(
                 "GitHub API 调用频率已达上限，请稍后再试。",
                 429,
+                code="GITHUB_RATE_LIMIT",
             )
         raise api_error(
             "GitHub API 未认证调用次数已用尽（公开仓库也需要 Token 以提高限额）。"
-            "请在 services/gateway/.env 配置 GITHUB_PAT 后重启 Gateway。"
+            "请在 services/gateway/.env 配置 GITHUB_PAT，或在 PRism 内登录 GitHub 后重试。"
             "创建 Token：https://github.com/settings/tokens（`public_repo` 只读权限即可）。",
             429,
+            code="GITHUB_RATE_LIMIT",
         )
 
     if resp.status_code == 401:
         raise api_error(
-            "GITHUB_PAT 无效或已过期，请在 services/gateway/.env 更新后重启 Gateway。",
+            "GitHub 认证失败：Token 无效或已过期。"
+            "请在 services/gateway/.env 更新 GITHUB_PAT，或重新登录 GitHub。",
             401,
+            code="GITHUB_AUTH_FAILED",
         )
 
     if resp.status_code == 403:
         raise api_error(
             f"无法访问{resource}（权限不足或仓库为私有）。"
-            "请安装 GitHub App 或在 .env 配置 GITHUB_PAT。",
+            "请安装 GitHub App、在 PRism 登录 GitHub，或在 .env 配置 GITHUB_PAT。",
             403,
+            code="GITHUB_FORBIDDEN",
         )
 
     if resp.status_code == 404:
         raise api_error(
             f"未找到{resource}，请确认链接中的 owner、仓库名与 PR 编号是否正确。",
             404,
+            code="PR_NOT_FOUND",
         )
 
     if resp.status_code >= 500:

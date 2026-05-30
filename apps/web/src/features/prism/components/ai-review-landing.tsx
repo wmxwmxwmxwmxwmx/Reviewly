@@ -1,9 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import type { PullRequestListItem } from "@reviewly/shared"
 import { ArrowRight, Github, Loader2 } from "lucide-react"
 
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import { fetchPullRequests } from "@/lib/api/pull-requests"
+import { formatPrismApiError } from "@/lib/api/client"
 import { ExternalRepoOnboardDialog } from "@/features/prism/components/external-repo-onboard-dialog"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { useImportPrByUrl } from "@/hooks/use-import-pr-by-url"
@@ -19,6 +22,9 @@ export function AiReviewLanding() {
   const [inputUrl, setInputUrl] = useState("")
   const [focused, setFocused] = useState(false)
   const [localUrlError, setLocalUrlError] = useState<string | null>(null)
+  const [recentPrs, setRecentPrs] = useState<PullRequestListItem[]>([])
+  const [recentLoading, setRecentLoading] = useState(true)
+  const [recentError, setRecentError] = useState<string | null>(null)
   const { refresh: refreshRepos } = useReposStore()
   const {
     importing,
@@ -29,6 +35,27 @@ export function AiReviewLanding() {
   } = useImportPrByUrl()
 
   useRunningTask("aiReview", importing)
+
+  useEffect(() => {
+    const ac = new AbortController()
+    setRecentLoading(true)
+    void fetchPullRequests({ limit: "10", includeExternal: "true" }, ac.signal)
+      .then((res) => {
+        const sorted = [...res.items].sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        )
+        setRecentPrs(sorted.slice(0, 10))
+        setRecentError(null)
+      })
+      .catch((err) => {
+        if (ac.signal.aborted) return
+        setRecentError(formatPrismApiError(err, "加载最近 PR 失败"))
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setRecentLoading(false)
+      })
+    return () => ac.abort()
+  }, [])
 
   const submitUrl = useCallback(async () => {
     const trimmed = inputUrl.trim()
@@ -126,6 +153,40 @@ export function AiReviewLanding() {
         {importing && (
           <p className="text-[11px] text-muted-foreground px-0.5">{zh.common.importingPrHint}</p>
         )}
+      </div>
+
+      <div className="w-full max-w-xl space-y-2">
+        <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          {zh.aiReview.recentReviews}
+        </h2>
+        {recentLoading ? (
+          <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            {zh.common.loading}
+          </p>
+        ) : null}
+        {recentError ? (
+          <p className="text-[11px] text-risk-high">{recentError}</p>
+        ) : null}
+        {!recentLoading && !recentError && recentPrs.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground">{zh.aiReview.recentReviewsEmpty}</p>
+        ) : null}
+        <ul className="space-y-1">
+          {recentPrs.map((pr) => (
+            <li key={pr.id}>
+              <button
+                type="button"
+                onClick={() => navigate("ai-review", { prId: pr.id })}
+                className="w-full text-left rounded-md border border-border bg-card/40 px-3 py-2 hover:border-ai-blue/40 hover:bg-card transition-colors"
+              >
+                <span className="text-[11px] text-muted-foreground font-mono block truncate">
+                  {pr.repo}#{pr.number}
+                </span>
+                <span className="text-xs text-foreground line-clamp-1">{pr.title}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       </div>
 
       <button

@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 
 import { AddRepoDialog } from "@/features/prism/components/add-repo-dialog"
+import { RepoPrList } from "@/features/prism/components/repo-pr-list"
 import { RepositoryBadges } from "@/features/prism/components/repository-badges"
 import { RepositoryOnboardingProgress } from "@/features/prism/components/repository-onboarding-progress"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
@@ -624,6 +625,8 @@ function RepoCard({
       ) : (
         <RepositoryJobBar repoId={repo.id} seedJob={repo.activeJob} />
       )}
+
+      <RepoPrList repoFullName={`${repo.owner}/${repo.name}`} />
 
       {showAnalysisPanel && (
         <div className="mt-3 pt-3 border-t border-border">

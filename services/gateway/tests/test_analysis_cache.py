@@ -172,6 +172,33 @@ def test_get_latest_analysis_filters_by_version(session: Session) -> None:
     assert latest.get("summary") == "new"
 
 
+def test_get_latest_analysis_falls_back_when_version_drifts(session: Session) -> None:
+    _, pr, _version = _seed_pr(session)
+    drifted = build_analysis_version("acme/widget", pr.number, "driftsha111")
+    session.add(
+        AnalysisJob(
+            id="job-drift-fallback",
+            pull_request_id=pr.id,
+            status="completed",
+            progress=100,
+            chunk_index=1,
+            chunk_total=1,
+            analysis_version="acme/widget#7@oldonly",
+            head_sha="oldonly",
+            phase=PHASE_COMPLETED,
+            result_summary={"summary": "fallback"},
+            completed_at=datetime(2024, 6, 1, tzinfo=timezone.utc),
+        )
+    )
+    pr.analysis_version = drifted
+    pr.head_sha = "driftsha111"
+    session.commit()
+
+    latest = analysis_repo.get_latest_analysis(session, pr.id)
+    assert latest is not None
+    assert latest.get("summary") == "fallback"
+
+
 def test_aggregate_cache_stats(session: Session) -> None:
     _, pr, version = _seed_pr(session)
     session.add(

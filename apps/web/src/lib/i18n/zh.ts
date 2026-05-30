@@ -189,6 +189,15 @@ export const zh = {
     repoAnalysisTitle: "AI 分析结果",
     expandAnalysis: "展开",
     collapseAnalysis: "收起",
+    prListTitle: "合并请求",
+    expandPrList: "展开 PR 列表",
+    collapsePrList: "收起 PR 列表",
+    prListEmpty: "暂无合并请求",
+    prListLoadFailed: "PR 列表加载失败",
+    prListColTitle: "标题",
+    prListColAuthor: "作者",
+    prListColState: "状态",
+    prListColRisk: "风险",
     removeRepo: "取消管理",
     removeRepoTitle: "确认取消管理此仓库？",
     removeRepoDescription:
@@ -222,6 +231,8 @@ export const zh = {
   },
   aiReview: {
     openRepository: "打开仓库",
+    recentReviews: "最近评审",
+    recentReviewsEmpty: "暂无 PR，粘贴链接导入或从仓库同步",
   },
   adoptRepo: {
     title: "将此仓库加入团队管理？",

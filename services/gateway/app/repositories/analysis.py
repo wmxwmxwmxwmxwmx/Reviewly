@@ -56,6 +56,19 @@ def _completed_job_query(pull_request_id: str, analysis_version: str | None):
     return stmt.order_by(AnalysisJob.completed_at.desc()).limit(1)
 
 
+def _latest_completed_job(
+    session: Session,
+    pull_request_id: str,
+    analysis_version: str | None,
+) -> AnalysisJob | None:
+    """Prefer job matching current analysis_version; fall back to latest completed."""
+    if analysis_version:
+        job = session.scalar(_completed_job_query(pull_request_id, analysis_version))
+        if job is not None:
+            return job
+    return session.scalar(_completed_job_query(pull_request_id, None))
+
+
 def create_job(
     session: Session,
     pull_request_id: str,
@@ -185,7 +198,7 @@ def save_findings(session: Session, job_id: str, findings: list[dict]) -> None:
 def get_latest_analysis(session: Session, pull_request_id: str) -> dict | None:
     pr = session.get(PullRequest, pull_request_id)
     version = pr.analysis_version if pr else None
-    job = session.scalar(_completed_job_query(pull_request_id, version))
+    job = _latest_completed_job(session, pull_request_id, version)
     if job and job.result_summary:
         return deepcopy(job.result_summary)
     return None
@@ -202,7 +215,7 @@ def get_findings(session: Session, pull_request_id: str) -> list[dict]:
             return []
 
     version = pr.analysis_version if pr else None
-    job = session.scalar(_completed_job_query(pull_request_id, version))
+    job = _latest_completed_job(session, pull_request_id, version)
     if job:
         rows = session.scalars(
             select(AnalysisFinding).where(AnalysisFinding.job_id == job.id)
