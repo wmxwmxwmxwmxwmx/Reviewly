@@ -61,7 +61,7 @@ npm run dev:gateway
 ```bash
 cd services/gateway
 alembic upgrade head
-.venv\Scripts\python -m uvicorn app.main:app --port 3001 --reload
+.venv\Scripts\python -m uvicorn app.main:app --port 3001 --reload --reload-dir app --reload-exclude "data/*"
 ```
 
 拉取含数据库变更的代码后，若 Dashboard 返回「服务器内部错误」，请先执行 `alembic upgrade head`。

@@ -40,4 +40,6 @@ if (-not $env:GITHUB_PAT -and -not $env:GITHUB_APP_ID) {
     Write-Warning "GITHUB_PAT not set; set it in services/gateway/.env for higher GitHub API limits."
 }
 Write-Host "Starting gateway at http://localhost:3001"
-& $python -m uvicorn app.main:app --host 0.0.0.0 --port 3001 --reload
+& $python -m uvicorn app.main:app --host 0.0.0.0 --port 3001 --reload `
+  --reload-dir app `
+  --reload-exclude "data/*"
