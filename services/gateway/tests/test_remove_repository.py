@@ -9,7 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
-    AnalysisCacheEvent,
     AnalysisFinding,
     AnalysisJob,
     AuthUser,
@@ -17,7 +16,6 @@ from app.db.models import (
     Repository,
     Team,
     TeamMembership,
-    UserDismissedRepository,
 )
 from app.repositories import auth_users as auth_users_repo
 from app.repositories.seed_filter import SOURCE_TYPE_EXTERNAL, SOURCE_TYPE_GITHUB
@@ -149,10 +147,8 @@ def test_remove_repository_forbidden_for_team_non_owner(client: TestClient, db: 
     bypass = _bypass_user(db)
     team = Team(id="team-rm", name="Team RM")
     db.add_all([owner, team])
-    db.flush()
     db.add(TeamMembership(user_id=owner.id, team_id=team.id, role="member"))
     db.add(TeamMembership(user_id=bypass.id, team_id=team.id, role="member"))
-    db.flush()
     repo = _insert_repo(
         db,
         repo_id="repo-rm-team",
@@ -168,56 +164,9 @@ def test_remove_repository_forbidden_for_team_non_owner(client: TestClient, db: 
     assert db.get(Repository, repo.id) is not None
 
 
-def test_remove_repository_cascades_cache_events(client: TestClient, db: Session) -> None:
-    user = _bypass_user(db)
-    repo = _insert_repo(
-        db,
-        repo_id="repo-rm-cache",
-        full_name="acme/cache-events",
-        owner_user_id=user.id,
-    )
-    pr_id = "pr-rm-cache"
-    job_id = "job-pr-rm-cache"
-    db.add(
-        PullRequest(
-            id=pr_id,
-            repository_id=repo.id,
-            number=1,
-            github_id="gh-pr-rm-cache",
-            state="open",
-            risk_score=50,
-            payload={"id": pr_id},
-        )
-    )
-    db.flush()
-    db.add(
-        AnalysisJob(
-            id=job_id,
-            pull_request_id=pr_id,
-            status="completed",
-            progress=100,
-        )
-    )
-    db.flush()
-    db.add(
-        AnalysisCacheEvent(
-            id="ace-rm-1",
-            pull_request_id=pr_id,
-            job_id=job_id,
-            cache_hit=True,
-        )
-    )
-    db.commit()
-
-    r = client.delete(f"/api/repos/{repo.id}")
-    assert r.status_code == 200
-    db.expire_all()
-    assert db.get(AnalysisCacheEvent, "ace-rm-1") is None
-
-
 @patch("app.services.repo_sync.fetch_user_repositories", new_callable=AsyncMock)
 @patch("app.services.repo_sync._user_token", return_value="fake-token")
-def test_remove_connected_repo_not_restored_by_sync(
+def test_remove_connected_repo_restored_by_sync(
     _mock_token: AsyncMock,
     mock_fetch: AsyncMock,
     client: TestClient,
@@ -253,18 +202,12 @@ def test_remove_connected_repo_not_restored_by_sync(
     assert sync.status_code == 200
 
     row = db.scalar(select(Repository).where(Repository.full_name == "test-org/restored"))
-    assert row is None
-    dismissed = db.scalar(
-        select(UserDismissedRepository).where(
-            UserDismissedRepository.user_id == user.id,
-            UserDismissedRepository.full_name == "test-org/restored",
-        )
-    )
-    assert dismissed is not None
+    assert row is not None
+    assert row.source_type == SOURCE_TYPE_GITHUB
 
 
 @patch("app.api.v1.repos.repo_sync.import_repository_from_url", new_callable=AsyncMock)
-def test_remove_external_repo_blocked_by_import(
+def test_remove_external_repo_restored_by_import(
     mock_import: AsyncMock,
     client: TestClient,
     db: Session,
@@ -285,17 +228,21 @@ def test_remove_external_repo_blocked_by_import(
     db.expire_all()
     assert db.get(Repository, repo_id) is None
 
-    from app.core.errors import api_error
-
-    mock_import.side_effect = api_error(
-        "该仓库已从管理中移除，无法再次导入。如需重新接入请联系管理员清除移除记录。",
-        409,
-    )
+    mock_import.return_value = {
+        "id": "repo-ext-rm",
+        "fullName": "obra/superpowers",
+        "owner": "obra",
+        "name": "superpowers",
+        "defaultBranch": "main",
+        "openPrCount": 0,
+        "healthScore": 80,
+        "lastSyncTime": "2026-01-01T00:00:00Z",
+        "aiReviewEnabled": True,
+        "sourceType": SOURCE_TYPE_EXTERNAL,
+    }
     imported = client.post(
         "/api/repos/import",
         json={"url": "https://github.com/obra/superpowers"},
     )
-    assert imported.status_code == 409
+    assert imported.status_code == 200
     mock_import.assert_called_once()
-    db.expire_all()
-    assert db.get(Repository, repo_id) is None

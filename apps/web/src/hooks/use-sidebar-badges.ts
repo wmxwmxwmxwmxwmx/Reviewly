@@ -3,8 +3,6 @@
 import { useEffect, useMemo } from "react"
 
 import { useDashboardContext } from "@/features/prism/contexts/dashboard-context"
-import { useFindingsStatsOptional } from "@/features/prism/contexts/findings-stats-context"
-import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import {
   useRunningTasksStore,
   type RunningTaskModule,
@@ -45,9 +43,7 @@ function toBadge(count: number): string | null {
 }
 
 export function useSidebarBadges() {
-  const { activeView } = useNavigation()
   const { data: dashboard, error: dashboardError, loading, refetch } = useDashboardContext()
-  const findingsStatsCtx = useFindingsStatsOptional()
   const clientCounts = useRunningTasksStore()
 
   const serverCounts = dashboard?.runningTasks ?? defaultRunningTasks
@@ -85,19 +81,14 @@ export function useSidebarBadges() {
       return defaultBadges
     }
     const findingsTaskCount = totalCounts.security + totalCounts.performance
-    const filteredFindingsCount =
-      activeView === "findings" && findingsStatsCtx ? findingsStatsCtx.stats.total : null
-    const findingsBadgeCount = Math.max(
-      filteredFindingsCount ?? findingsOpenCount,
-      findingsTaskCount,
-    )
+    const findingsBadgeCount = Math.max(findingsOpenCount, findingsTaskCount)
     return {
       pullRequests: toBadge(totalCounts.pullRequests),
       aiReview: toBadge(totalCounts.aiReview),
       findings: toBadge(findingsBadgeCount),
       governance: toBadge(totalCounts.governance),
     }
-  }, [dashboard, totalCounts, findingsOpenCount, activeView, findingsStatsCtx])
+  }, [dashboard, totalCounts, findingsOpenCount])
 
   return { badges, error: dashboardError, loading }
 }

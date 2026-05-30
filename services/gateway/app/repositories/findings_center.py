@@ -167,11 +167,8 @@ def compute_stats(
     session: Session,
     *,
     finding_type: str | None = None,
-    severity: str | None = None,
     repo: str | None = None,
     repo_id: str | None = None,
-    status: str | None = None,
-    q: str | None = None,
 ) -> dict[str, int]:
     types = list(FINDING_TYPES)
     if finding_type in FINDING_TYPES:
@@ -180,16 +177,20 @@ def compute_stats(
     base = _base_query(
         session,
         finding_types=types,
-        severity=severity,
+        severity=None,
         repo=repo,
         repo_id=repo_id,
-        status=status,
-        q=q,
+        status=None,
+        q=None,
     )
     rows = session.execute(base).all()
 
     stats = {"total": 0, "critical": 0, "high": 0, "medium": 0, "low": 0}
     for f, _, _, _ in rows:
+        payload = f.payload or {}
+        st = payload.get("status", "open")
+        if st != "open":
+            continue
         stats["total"] += 1
         sev = f.severity
         if sev in stats:
@@ -201,11 +202,6 @@ def compute_trends(
     session: Session,
     *,
     finding_type: str | None = None,
-    severity: str | None = None,
-    repo: str | None = None,
-    repo_id: str | None = None,
-    status: str | None = None,
-    q: str | None = None,
     days: int = 7,
 ) -> list[dict[str, Any]]:
     types = list(FINDING_TYPES)
@@ -216,11 +212,11 @@ def compute_trends(
     base = _base_query(
         session,
         finding_types=types,
-        severity=severity,
-        repo=repo,
-        repo_id=repo_id,
-        status=status,
-        q=q,
+        severity=None,
+        repo=None,
+        repo_id=None,
+        status=None,
+        q=None,
     ).where(AnalysisJob.created_at >= since)
 
     rows = session.execute(base).all()

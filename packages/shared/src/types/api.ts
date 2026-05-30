@@ -84,30 +84,9 @@ export interface Repository {
   githubUpdatedAt?: string | null
   lastSyncTime: string
   healthScore: number
-  healthBreakdown?: RepoHealthBreakdown
   aiReviewEnabled: boolean
   aiAnalysis?: AiPersistedContent | null
   aiArchitectureAnalysis?: AiPersistedContent | null
-}
-
-export interface RepoHealthDeduction {
-  label: string
-  count: number
-  points: number
-}
-
-export interface RepoHealthBreakdown {
-  score: number
-  deductions: RepoHealthDeduction[]
-}
-
-export interface AiUsageSummary {
-  period: string
-  totalTokens: number
-  calls: number
-  costCny: number
-  byFeature: { feature: string; totalTokens: number; calls: number }[]
-  byModel: { model: string; totalTokens: number; calls: number }[]
 }
 
 export interface ImportRepositoryBody {

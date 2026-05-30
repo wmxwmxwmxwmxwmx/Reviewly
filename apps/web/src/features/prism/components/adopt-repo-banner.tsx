@@ -7,7 +7,6 @@ import type { PullRequest, Repository } from "@reviewly/shared"
 
 import { useRepositoryJobs } from "@/hooks/use-repository-jobs"
 import { adoptRepository } from "@/lib/api/repos"
-import { prNeedsAdoption } from "@/lib/repos-adopt"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
@@ -23,16 +22,17 @@ function isDismissed(repoId: string): boolean {
 export function shouldShowAdoptBanner(pr: PullRequest | null | undefined): boolean {
   if (!pr?.repoId) return false
   if (isDismissed(pr.repoId)) return false
-  return prNeedsAdoption(pr)
+  if (pr.repositoryType === "external") return true
+  if (pr.managed === false) return true
+  return pr.sourceType === "external"
 }
 
 interface AdoptRepoBannerProps {
   pr: PullRequest
   onAdopted?: (repository: Repository) => void
-  onRefreshPr?: () => void
 }
 
-export function AdoptRepoBanner({ pr, onAdopted, onRefreshPr }: AdoptRepoBannerProps) {
+export function AdoptRepoBanner({ pr, onAdopted }: AdoptRepoBannerProps) {
   const [hidden, setHidden] = useState(false)
   const [adopting, setAdopting] = useState(false)
   const [adoptError, setAdoptError] = useState<string | null>(null)
@@ -61,14 +61,13 @@ export function AdoptRepoBanner({ pr, onAdopted, onRefreshPr }: AdoptRepoBannerP
       const result = await adoptRepository(repoId)
       setAdopted(true)
       onAdopted?.(result.repository)
-      onRefreshPr?.()
       void refresh()
     } catch (e: unknown) {
       setAdoptError(e instanceof Error ? e.message : zh.adoptRepo.error)
     } finally {
       setAdopting(false)
     }
-  }, [repoId, adopting, onAdopted, onRefreshPr, refresh])
+  }, [repoId, adopting, onAdopted, refresh])
 
   if (hidden || !shouldShowAdoptBanner(pr)) return null
 

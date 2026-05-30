@@ -76,11 +76,6 @@ async def import_repository_from_url(
         metadata["team_id"] = team_ids[0]
 
     row, created = repos_repo.upsert_repository(session, metadata)
-    if row is None:
-        raise api_error(
-            "该仓库已从管理中移除，无法再次导入。如需重新接入请联系管理员清除移除记录。",
-            409,
-        )
     session.commit()
     if user:
         record_activity(
@@ -126,9 +121,7 @@ async def sync_repositories_for_user(session: Session, user: AuthUser) -> dict[s
         metadata["managed"] = True
         if team_ids:
             metadata["team_id"] = team_ids[0]
-        row, was_created = repos_repo.upsert_repository(session, metadata)
-        if row is None:
-            continue
+        _, was_created = repos_repo.upsert_repository(session, metadata)
         synced += 1
         if was_created:
             created += 1
@@ -191,9 +184,7 @@ async def sync_github_repositories(session: Session) -> dict[str, Any]:
         metadata["source_type"] = SOURCE_TYPE_GITHUB
         metadata["repository_type"] = REPOSITORY_TYPE_OWNED
         metadata["managed"] = True
-        row, was_created = repos_repo.upsert_repository(session, metadata)
-        if row is None:
-            continue
+        _, was_created = repos_repo.upsert_repository(session, metadata)
         synced += 1
         if was_created:
             created += 1
@@ -239,13 +230,11 @@ async def _sync_via_installations(session: Session) -> dict[str, Any]:
             metadata["source_type"] = SOURCE_TYPE_GITHUB
             metadata["repository_type"] = REPOSITORY_TYPE_OWNED
             metadata["managed"] = True
-            row, was_created = repos_repo.upsert_repository(
+            _, was_created = repos_repo.upsert_repository(
                 session,
                 metadata,
                 installation_id=inst_id,
             )
-            if row is None:
-                continue
             synced += 1
             if was_created:
                 created += 1

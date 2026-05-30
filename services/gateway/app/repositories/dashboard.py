@@ -19,7 +19,6 @@ from app.repositories.seed_filter import (
 )
 from app.services.activity_log import list_recent
 from app.services.analysis_cache import aggregate_cache_stats
-from app.services.repo_health import compute_repo_health
 
 
 def _count_active_analysis_jobs(session: Session) -> int:
@@ -264,7 +263,7 @@ def _enrich_dashboard(
                 "name": payload.get("fullName", repo.full_name).split("/")[-1],
                 "prs": repo_pr_count or payload.get("openPrCount", 0),
                 "issues": issue_count,
-                "health": compute_repo_health(session, repo.id, int(payload.get("openPrCount", 0))),
+                "health": payload.get("healthScore", 80),
             }
         )
 

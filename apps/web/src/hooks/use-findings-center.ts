@@ -11,7 +11,6 @@ import { PrismApiError } from "@/lib/api/client"
 import { fetchFindings } from "@/lib/api/findings"
 import { explainSecurityFinding } from "@/lib/api/security"
 import { optimizePerformanceFinding } from "@/lib/api/performance"
-import { useFindingsStatsOptional } from "@/features/prism/contexts/findings-stats-context"
 import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 
@@ -28,7 +27,6 @@ function buildAiInsight(content: string, model: string, provider: string): AiPer
 
 export function useFindingsCenter(initialTab: FindingsTab = "all") {
   const { settings } = useAISettings()
-  const findingsStatsCtx = useFindingsStatsOptional()
   const [tab, setTab] = useState<FindingsTab>(initialTab)
   const [items, setItems] = useState<UnifiedFinding[]>([])
   const [total, setTotal] = useState(0)
@@ -85,10 +83,6 @@ export function useFindingsCenter(initialTab: FindingsTab = "all") {
   useEffect(() => {
     setPage(1)
   }, [tab, severityFilter, repoFilter, statusFilter, searchQuery])
-
-  useEffect(() => {
-    findingsStatsCtx?.setStats(stats)
-  }, [stats, findingsStatsCtx])
 
   const apiType = tab === "all" ? undefined : tab
 

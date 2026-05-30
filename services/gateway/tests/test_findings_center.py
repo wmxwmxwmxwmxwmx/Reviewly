@@ -65,22 +65,3 @@ def test_findings_pagination(client: TestClient) -> None:
 def test_findings_invalid_type(client: TestClient) -> None:
     r = client.get("/api/findings?type=invalid")
     assert r.status_code == 400
-
-
-def test_findings_stats_follow_repo_filter(client: TestClient) -> None:
-    all_r = client.get("/api/findings?pageSize=1")
-    assert all_r.status_code == 200
-    all_stats = all_r.json()["stats"]["total"]
-    if all_stats == 0:
-        return
-
-    first = client.get("/api/findings?pageSize=1").json()["items"][0]
-    repo_name = first.get("repo") or ""
-    if not repo_name:
-        return
-
-    filtered = client.get(f"/api/findings?repo={repo_name.split('/')[0]}&pageSize=1")
-    assert filtered.status_code == 200
-    filtered_stats = filtered.json()["stats"]["total"]
-    assert filtered_stats <= all_stats
-    assert len(filtered.json()["trends"]["last7Days"]) >= 0

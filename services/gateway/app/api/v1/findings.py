@@ -39,15 +39,7 @@ def list_findings(
         page_size=page_size,
         sort=sort,
     )
-    filter_kwargs = {
-        "finding_type": type,
-        "severity": severity,
-        "repo": repo,
-        "repo_id": repo_id,
-        "status": status,
-        "q": q,
-    }
-    stats = findings_center.compute_stats(db, **filter_kwargs)
+    stats = findings_center.compute_stats(db, finding_type=type, repo=repo, repo_id=repo_id)
     return {
         "items": items,
         "total": total,
@@ -55,8 +47,8 @@ def list_findings(
         "pageSize": page_size,
         "stats": stats,
         "trends": {
-            "last7Days": findings_center.compute_trends(db, **filter_kwargs, days=7),
-            "last30Days": findings_center.compute_trends(db, **filter_kwargs, days=30),
+            "last7Days": findings_center.compute_trends(db, finding_type=type, days=7),
+            "last30Days": findings_center.compute_trends(db, finding_type=type, days=30),
         },
     }
 
