@@ -11,7 +11,7 @@ import {
   useAISettings,
 } from "@/features/prism/contexts/ai-settings-context"
 import { useAuth } from "@/features/prism/contexts/auth-context"
-import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import { ProfileDialog } from "@/features/prism/components/profile-dialog"
 import { useSecuritySettings } from "@/features/prism/contexts/security-settings-context"
 import { TwoFactorPinDialog } from "@/features/prism/components/two-factor-pin-dialog"
 import { SESSION_TIMEOUT_OPTIONS } from "@/features/prism/lib/security-settings"
@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils"
 
 export function SettingsView() {
   const { user, isAuthenticated, loading: authLoading } = useAuth()
-  const { navigate } = useNavigation()
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false)
   const { settings, providerLabel, hasApiKey, maskedApiKey, monthlyUsage, clearUsage, updateSettings, settingsHydrated } =
     useAISettings()
   const {
@@ -260,7 +260,7 @@ export function SettingsView() {
           <div className="px-4 py-2 border-t border-border bg-surface-2">
             <button
               type="button"
-              onClick={() => navigate("profile")}
+              onClick={() => setProfileDialogOpen(true)}
               className="text-xs text-ai-blue hover:underline"
             >
               {zh.accountMenu.viewFullProfile} →
@@ -368,6 +368,8 @@ export function SettingsView() {
         onOpenChange={setPinDialogOpen}
         onConfirm={handlePinDialogConfirm}
       />
+
+      <ProfileDialog open={profileDialogOpen} onOpenChange={setProfileDialogOpen} />
     </div>
   )
 }

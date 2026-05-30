@@ -31,7 +31,6 @@ export type NavView =
   | "repos"
   | "team"
   | "settings"
-  | "profile"
 
 const navItems: { icon: typeof LayoutDashboard; label: string; view: NavView }[] = [
   { icon: LayoutDashboard, label: zh.nav.dashboard, view: "dashboard" },

@@ -23,8 +23,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { GithubAccountDrawer } from "@/features/prism/components/github-account-drawer"
+import { GithubAccountDialog } from "@/features/prism/components/github-account-dialog"
 import { LogoutDialog } from "@/features/prism/components/logout-dialog"
+import { ProfileDialog } from "@/features/prism/components/profile-dialog"
 import { SwitchAccountDialog } from "@/features/prism/components/switch-account-dialog"
 import type { NavView } from "@/features/prism/components/sidebar"
 import { useAuth } from "@/features/prism/contexts/auth-context"
@@ -45,7 +46,8 @@ export function AccountMenu({ user, onNavigate }: AccountMenuProps) {
   const { toast } = useToast()
   const { logout, switchAccount } = useAuth()
   const { refresh: refreshRepos } = useReposStore()
-  const [githubDrawerOpen, setGithubDrawerOpen] = useState(false)
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false)
+  const [githubDialogOpen, setGithubDialogOpen] = useState(false)
   const [switchDialogOpen, setSwitchDialogOpen] = useState(false)
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -127,14 +129,14 @@ export function AccountMenu({ user, onNavigate }: AccountMenuProps) {
 
           <DropdownMenuItem
             className="cursor-pointer focus:bg-surface-2"
-            onSelect={() => onNavigate("profile")}
+            onSelect={() => setProfileDialogOpen(true)}
           >
             <User className="mr-2 h-3.5 w-3.5" />
             {zh.accountMenu.profile}
           </DropdownMenuItem>
           <DropdownMenuItem
             className="cursor-pointer focus:bg-surface-2"
-            onSelect={() => setGithubDrawerOpen(true)}
+            onSelect={() => setGithubDialogOpen(true)}
           >
             <Github className="mr-2 h-3.5 w-3.5" />
             {zh.accountMenu.githubAccount}
@@ -181,7 +183,8 @@ export function AccountMenu({ user, onNavigate }: AccountMenuProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <GithubAccountDrawer open={githubDrawerOpen} onOpenChange={setGithubDrawerOpen} />
+      <ProfileDialog open={profileDialogOpen} onOpenChange={setProfileDialogOpen} />
+      <GithubAccountDialog open={githubDialogOpen} onOpenChange={setGithubDialogOpen} />
       <SwitchAccountDialog
         open={switchDialogOpen}
         onOpenChange={setSwitchDialogOpen}

@@ -1,26 +1,25 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { CheckCircle2, AlertCircle, Loader2, RefreshCw } from "lucide-react"
+import { AlertCircle, CheckCircle2, Loader2, RefreshCw } from "lucide-react"
 import type { GithubAccountInfo } from "@reviewly/shared"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useAuth } from "@/features/prism/contexts/auth-context"
 import { fetchGithubAccount } from "@/lib/api/auth"
 import { PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
-interface GithubAccountDrawerProps {
+interface GithubAccountDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -46,7 +45,7 @@ function formatSyncedAt(iso: string | null | undefined): string {
   }
 }
 
-export function GithubAccountDrawer({ open, onOpenChange }: GithubAccountDrawerProps) {
+export function GithubAccountDialog({ open, onOpenChange }: GithubAccountDialogProps) {
   const { switchAccount } = useAuth()
   const [account, setAccount] = useState<GithubAccountInfo | null>(null)
   const [loading, setLoading] = useState(false)
@@ -78,16 +77,16 @@ export function GithubAccountDrawer({ open, onOpenChange }: GithubAccountDrawerP
   }
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange} direction="right">
-      <DrawerContent className="bg-panel border-border data-[vaul-drawer-direction=right]:sm:max-w-md">
-        <DrawerHeader className="border-b border-border">
-          <DrawerTitle className="text-foreground">{zh.accountMenu.githubAccountTitle}</DrawerTitle>
-          <DrawerDescription className="text-muted-foreground">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-panel border-border sm:max-w-md gap-0 p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
+          <DialogTitle className="text-foreground">{zh.accountMenu.githubAccountTitle}</DialogTitle>
+          <DialogDescription className="text-muted-foreground">
             {zh.accountMenu.githubAccountDesc}
-          </DrawerDescription>
-        </DrawerHeader>
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="max-h-[70vh] overflow-y-auto p-4 space-y-3">
           {loading && (
             <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin text-ai-blue" />
@@ -105,9 +104,7 @@ export function GithubAccountDrawer({ open, onOpenChange }: GithubAccountDrawerP
             <>
               <div className="flex items-center gap-3 rounded-md border border-border bg-surface-2 p-3">
                 <Avatar className="h-12 w-12 rounded-md border border-border">
-                  {account.avatarUrl ? (
-                    <AvatarImage src={account.avatarUrl} alt="" />
-                  ) : null}
+                  {account.avatarUrl ? <AvatarImage src={account.avatarUrl} alt="" /> : null}
                   <AvatarFallback className="rounded-md bg-gradient-to-br from-ai-blue to-ai-purple text-sm font-semibold text-white">
                     {account.login.slice(0, 2).toUpperCase()}
                   </AvatarFallback>
@@ -151,7 +148,7 @@ export function GithubAccountDrawer({ open, onOpenChange }: GithubAccountDrawerP
           )}
         </div>
 
-        <DrawerFooter className="border-t border-border">
+        <DialogFooter className="border-t border-border px-4 py-4 flex-col sm:flex-col gap-2">
           <button
             type="button"
             onClick={handleReauthorize}
@@ -160,17 +157,9 @@ export function GithubAccountDrawer({ open, onOpenChange }: GithubAccountDrawerP
             <RefreshCw className="h-3.5 w-3.5" />
             {zh.accountMenu.reauthorize}
           </button>
-          <DrawerClose asChild>
-            <button
-              type="button"
-              className="w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-foreground hover:bg-surface-3"
-            >
-              {zh.common.cancel}
-            </button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

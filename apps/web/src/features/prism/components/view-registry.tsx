@@ -10,7 +10,6 @@ import { GovernanceView } from "@/features/prism/views/governance-view"
 import { ReposView } from "@/features/prism/views/repos-view"
 import { TeamView } from "@/features/prism/views/team-view"
 import { SettingsView } from "@/features/prism/views/settings-view"
-import { ProfileView } from "@/features/prism/views/profile-view"
 
 export function StandardView({ view }: { view: Exclude<NavView, "ai-review"> }) {
   switch (view) {
@@ -32,7 +31,5 @@ export function StandardView({ view }: { view: Exclude<NavView, "ai-review"> }) 
       return <TeamView />
     case "settings":
       return <SettingsView />
-    case "profile":
-      return <ProfileView />
   }
 }
