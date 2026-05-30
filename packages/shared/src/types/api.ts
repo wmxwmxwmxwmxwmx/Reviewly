@@ -245,6 +245,8 @@ export interface ReviewComment {
   type: ReviewCommentType
   content: string
   createdAt: string
+  /** Present on POST /comments when status was updated. */
+  reviewStatus?: ReviewStatus
 }
 
 export interface ReviewTimelineEvent {

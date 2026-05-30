@@ -204,6 +204,7 @@ export function AiReviewWorkspace({
           prId={prId}
           aiPanelOpen={aiPanelOpen}
           onToggleAIPanel={onToggleAIPanel}
+          onReviewStatusChanged={bumpHistory}
         />
       </div>
     </div>

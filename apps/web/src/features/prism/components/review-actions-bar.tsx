@@ -1,8 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import type { ApprovalCheckResult, ReviewComment, ReviewCommentType } from "@reviewly/shared"
-import { CheckCircle2, MessageSquare, XCircle } from "lucide-react"
+import type {
+  ApprovalCheckResult,
+  ReviewComment,
+  ReviewCommentType,
+  ReviewStatus,
+} from "@reviewly/shared"
+import { CheckCircle2, MessageSquare, PlayCircle, XCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -12,29 +17,70 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import {
   fetchApprovalCheck,
   fetchReviewComments,
+  patchReviewStatus,
   postReviewComment,
 } from "@/lib/api/review-center"
+import {
+  REVIEW_STATUS_LABELS,
+  reviewStatusBadgeClass,
+} from "@/features/prism/lib/review-status-utils"
 import { PrismApiError } from "@/lib/api/client"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 
+const MANUAL_STATUSES: ReviewStatus[] = [
+  "OPEN",
+  "IN_REVIEW",
+  "CHANGES_REQUESTED",
+  "APPROVED",
+]
+
 interface ReviewActionsBarProps {
   prId: string
+  reviewStatus?: ReviewStatus
   onUpdated?: () => void
+  onStatusChange?: (status: ReviewStatus) => void
 }
 
-export function ReviewActionsBar({ prId, onUpdated }: ReviewActionsBarProps) {
+export function ReviewActionsBar({
+  prId,
+  reviewStatus = "OPEN",
+  onUpdated,
+  onStatusChange,
+}: ReviewActionsBarProps) {
   const { toast } = useToast()
+  const [status, setStatus] = useState<ReviewStatus>(reviewStatus)
   const [comments, setComments] = useState<ReviewComment[]>([])
   const [approvalCheck, setApprovalCheck] = useState<ApprovalCheckResult | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogType, setDialogType] = useState<ReviewCommentType>("COMMENT")
   const [content, setContent] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [statusUpdating, setStatusUpdating] = useState(false)
+
+  useEffect(() => {
+    setStatus(reviewStatus)
+  }, [reviewStatus])
+
+  const applyStatus = useCallback(
+    (next: ReviewStatus) => {
+      setStatus(next)
+      onStatusChange?.(next)
+      onUpdated?.()
+    },
+    [onStatusChange, onUpdated],
+  )
 
   const reload = useCallback(() => {
     const ac = new AbortController()
@@ -52,6 +98,27 @@ export function ReviewActionsBar({ prId, onUpdated }: ReviewActionsBarProps) {
 
   useEffect(() => reload(), [reload])
 
+  const changeStatus = async (next: ReviewStatus) => {
+    if (next === status) return
+    setStatusUpdating(true)
+    try {
+      const updated = await patchReviewStatus(prId, next)
+      applyStatus(updated.reviewStatus ?? next)
+      toast({ title: `状态已更新为「${REVIEW_STATUS_LABELS[next]}」` })
+      reload()
+    } catch (e) {
+      toast({
+        title: "状态更新失败",
+        description: e instanceof PrismApiError ? e.message : undefined,
+        variant: "destructive",
+      })
+    } finally {
+      setStatusUpdating(false)
+    }
+  }
+
+  const startReview = () => void changeStatus("IN_REVIEW")
+
   const openDialog = (type: ReviewCommentType) => {
     setDialogType(type)
     setContent("")
@@ -61,11 +128,19 @@ export function ReviewActionsBar({ prId, onUpdated }: ReviewActionsBarProps) {
   const submit = async () => {
     setSubmitting(true)
     try {
-      await postReviewComment(prId, { type: dialogType, content })
-      toast({ title: dialogType === "APPROVE" ? "已批准" : dialogType === "REQUEST_CHANGES" ? "已要求修改" : "评论已提交" })
+      const result = await postReviewComment(prId, { type: dialogType, content })
+      const nextStatus = result.reviewStatus
+      if (nextStatus) applyStatus(nextStatus)
+      toast({
+        title:
+          dialogType === "APPROVE"
+            ? "已批准"
+            : dialogType === "REQUEST_CHANGES"
+              ? "已要求修改"
+              : "评论已提交",
+      })
       setDialogOpen(false)
       reload()
-      onUpdated?.()
     } catch (e) {
       toast({
         title: "提交失败",
@@ -78,18 +153,63 @@ export function ReviewActionsBar({ prId, onUpdated }: ReviewActionsBarProps) {
   }
 
   const blocked = approvalCheck?.blocked ?? false
+  const terminal = status === "MERGED" || status === "CLOSED"
   const lastApproval = [...comments].reverse().find((c) => c.type === "APPROVE")
   const lastReject = [...comments].reverse().find((c) => c.type === "REQUEST_CHANGES")
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-foreground">人工审批</h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground">人工审批</h3>
+          <span
+            className={cn(
+              "text-[10px] px-2 py-0.5 rounded-full border font-medium",
+              reviewStatusBadgeClass(status),
+            )}
+          >
+            {REVIEW_STATUS_LABELS[status]}
+          </span>
+        </div>
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
           {lastApproval ? <span className="text-risk-low">{lastApproval.userName} 已批准</span> : null}
           {lastReject ? <span className="text-risk-high">{lastReject.userName} 要求修改</span> : null}
         </div>
       </div>
+
+      {!terminal ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] text-muted-foreground shrink-0">调整状态</span>
+          <Select
+            value={status}
+            onValueChange={(v) => void changeStatus(v as ReviewStatus)}
+            disabled={statusUpdating}
+          >
+            <SelectTrigger className="h-8 w-[140px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MANUAL_STATUSES.map((s) => (
+                <SelectItem key={s} value={s} className="text-xs">
+                  {REVIEW_STATUS_LABELS[s]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {status === "OPEN" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={statusUpdating}
+              onClick={startReview}
+            >
+              <PlayCircle className="w-3.5 h-3.5" />
+              开始评审
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {blocked ? (
         <div className="px-3 py-2 rounded-md bg-risk-high/10 border border-risk-high/25 text-[11px] text-risk-high">
@@ -104,32 +224,35 @@ export function ReviewActionsBar({ prId, onUpdated }: ReviewActionsBarProps) {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" variant="outline" onClick={() => openDialog("COMMENT")}>
-          <MessageSquare className="w-3.5 h-3.5" />
-          评论
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={blocked}
-          className={cn(blocked && "opacity-50 cursor-not-allowed")}
-          onClick={() => openDialog("APPROVE")}
-        >
-          <CheckCircle2 className="w-3.5 h-3.5 text-risk-low" />
-          批准
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => openDialog("REQUEST_CHANGES")}
-        >
-          <XCircle className="w-3.5 h-3.5 text-risk-high" />
-          要求修改
-        </Button>
-      </div>
+      {!terminal ? (
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={() => openDialog("COMMENT")}>
+            <MessageSquare className="w-3.5 h-3.5" />
+            评论
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={blocked || statusUpdating}
+            className={cn(blocked && "opacity-50 cursor-not-allowed")}
+            onClick={() => openDialog("APPROVE")}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-risk-low" />
+            批准
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={statusUpdating}
+            onClick={() => openDialog("REQUEST_CHANGES")}
+          >
+            <XCircle className="w-3.5 h-3.5 text-risk-high" />
+            要求修改
+          </Button>
+        </div>
+      ) : null}
 
       {comments.length > 0 ? (
         <div className="space-y-2 max-h-40 overflow-y-auto pt-2 border-t border-border">

@@ -162,7 +162,12 @@ def patch_review_status(
 ) -> dict:
     user_id, team_ids = _resolve_user_scope(db, user)
     updated = rc_repo.update_review_status(
-        db, pr_id, body.review_status, user_id=user_id, team_ids=team_ids
+        db,
+        pr_id,
+        body.review_status,
+        user=user,
+        user_id=user_id,
+        team_ids=team_ids,
     )
     if updated is None:
         raise api_error("合并请求不存在或状态无效", 404)

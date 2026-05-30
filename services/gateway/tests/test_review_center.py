@@ -41,7 +41,9 @@ def test_review_comment_and_timeline(client: TestClient) -> None:
         json={"type": "COMMENT", "content": "请补充单元测试"},
     )
     assert comment.status_code == 200, comment.text
-    assert comment.json().get("type") == "COMMENT"
+    body = comment.json()
+    assert body.get("type") == "COMMENT"
+    assert body.get("reviewStatus") in ("IN_REVIEW", "OPEN", "APPROVED", "CHANGES_REQUESTED")
 
     timeline = client.get(f"/api/review-center/pull-requests/{pr_id}/timeline")
     assert timeline.status_code == 200, timeline.text

@@ -99,6 +99,7 @@ def update_review_status(
     pr_id: str,
     status: str,
     *,
+    user: AuthUser | None = None,
     user_id: str | None = None,
     team_ids: list[str] | None = None,
 ) -> dict | None:
@@ -109,7 +110,31 @@ def update_review_status(
         return None
     if user_id and not pr_repo._user_can_access_pr(session, row, user_id=user_id, team_ids=team_ids):
         return None
+    previous = row.review_status or "OPEN"
+    if previous == status:
+        repo = session.get(Repository, row.repository_id)
+        return pr_repo._pr_dict(row, repo=repo)
+
     row.review_status = status
+    actor_name = user.username if user else "评审者"
+    event_content = STATUS_LABELS.get(status, status)
+    event_type = status
+    if status == "IN_REVIEW" and previous == "OPEN":
+        event_content = f"{actor_name} 开始评审"
+        event_type = "REVIEW_STARTED"
+    elif status == "OPEN" and previous != "OPEN":
+        event_content = f"{actor_name} 将 PR 标为待评审"
+        event_type = "STATUS_RESET"
+
+    append_timeline_event(
+        session,
+        pull_request_id=pr_id,
+        event_type=event_type,
+        actor=actor_name,
+        actor_type="user",
+        content=event_content,
+        payload={"from": previous, "to": status},
+    )
     session.commit()
     repo = session.get(Repository, row.repository_id)
     return pr_repo._pr_dict(row, repo=repo)
@@ -200,7 +225,7 @@ def add_review_comment(
         event_type = "CHANGES_REQUESTED"
         event_content = f"{actor_name} 要求修改"
     else:
-        if row.review_status == "OPEN":
+        if row.review_status in ("OPEN", "CHANGES_REQUESTED"):
             row.review_status = "IN_REVIEW"
         event_type = "COMMENT"
         event_content = f"{actor_name} 发表了评论"
@@ -215,7 +240,7 @@ def add_review_comment(
     )
     session.commit()
     session.refresh(comment)
-    return _comment_dict(comment)
+    return {**_comment_dict(comment), "reviewStatus": row.review_status or "OPEN"}
 
 
 def _default_comment_for_type(comment_type: str) -> str:

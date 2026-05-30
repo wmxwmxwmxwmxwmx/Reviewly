@@ -43,12 +43,14 @@ interface AIReviewViewProps {
   prId: string
   aiPanelOpen?: boolean
   onToggleAIPanel?: () => void
+  onReviewStatusChanged?: () => void
 }
 
 export function AIReviewView({
   prId,
   aiPanelOpen = true,
   onToggleAIPanel,
+  onReviewStatusChanged,
 }: AIReviewViewProps) {
   const { navigate } = useNavigation()
   const { settings, hasApiKey, recordUsage } = useAISettings()
@@ -60,7 +62,8 @@ export function AIReviewView({
   } = useAIReviewSession()
 
   const cached = getSession(prId)
-  const { data: pr, loading: prLoading, error: prError } = usePullRequest(prId)
+  const { data: pr, loading: prLoading, error: prError, reload: reloadPr, patchLocal } =
+    usePullRequest(prId)
   const { files: diffFiles, loading: diffLoading, error: diffError } = usePullRequestDiff(prId)
   const {
     findings,
@@ -584,7 +587,15 @@ ${diffContext || "（无 diff 内容）"}`,
                 />
                 <ReviewActionsBar
                   prId={prId}
-                  onUpdated={() => setReviewTimelineKey((k) => k + 1)}
+                  reviewStatus={pr.reviewStatus ?? "OPEN"}
+                  onUpdated={() => {
+                    setReviewTimelineKey((k) => k + 1)
+                    reloadPr()
+                  }}
+                  onStatusChange={(next) => {
+                    patchLocal({ reviewStatus: next })
+                    onReviewStatusChanged?.()
+                  }}
                 />
               </>
             ) : null}

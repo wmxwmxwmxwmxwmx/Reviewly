@@ -6,6 +6,7 @@ import type {
   ReviewCenterStats,
   ReviewComment,
   ReviewCommentType,
+  ReviewStatus,
   ReviewStatusCounts,
   ReviewTimelineEvent,
   RepoReviewGroup,
@@ -61,6 +62,18 @@ export function fetchApprovalCheck(prId: string, signal?: AbortSignal) {
     `/api/review-center/pull-requests/${prId}/approval-check`,
     { signal },
   )
+}
+
+export function patchReviewStatus(
+  prId: string,
+  reviewStatus: ReviewStatus,
+  signal?: AbortSignal,
+) {
+  return apiFetch<PullRequest>(`/api/review-center/pull-requests/${prId}/review-status`, {
+    method: "PATCH",
+    body: JSON.stringify({ reviewStatus }),
+    signal,
+  })
 }
 
 export function fetchPullRequestsWithCounts(
