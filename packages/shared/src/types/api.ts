@@ -229,6 +229,10 @@ export interface PullRequestListItem {
   riskLevel: "critical" | "high" | "medium" | "low"
   riskScore: number
   updatedAt: string
+  createdAt?: string
+  displayName?: string
+  note?: string
+  favorite?: boolean
   sourceType?: RepositorySourceType
   repositoryType?: RepositoryType
   managed?: boolean

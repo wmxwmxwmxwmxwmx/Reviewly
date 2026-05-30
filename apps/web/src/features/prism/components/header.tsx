@@ -1,25 +1,20 @@
 ﻿"use client"
 
-import { useCallback, useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import {
-  Github,
   ArrowRight,
-  Loader2,
   CheckCircle2,
-  Zap,
+  FolderGit2,
+  Loader2,
   Menu,
   PanelRight,
-  FolderGit2,
+  Zap,
 } from "lucide-react"
 import { RepositoryBadges } from "@/features/prism/components/repository-badges"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
-import { validateGitHubPrUrl } from "@/lib/github-pr-url"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import type { PullRequest } from "@reviewly/shared"
-
-const URL_AUTO_SUBMIT_MS = 600
 
 interface HeaderProps {
   prData: PullRequest
@@ -29,9 +24,6 @@ interface HeaderProps {
   hasFindings?: boolean
   onAnalyze: () => void
   onRescan?: () => void
-  onImportUrl: (url: string) => Promise<void>
-  importing?: boolean
-  importError?: string | null
   syncLabel?: string
   diffLoading?: boolean
   prLoading?: boolean
@@ -48,9 +40,6 @@ export function Header({
   hasFindings = false,
   onAnalyze,
   onRescan,
-  onImportUrl,
-  importing = false,
-  importError = null,
   syncLabel,
   diffLoading = false,
   prLoading = false,
@@ -59,39 +48,6 @@ export function Header({
   onToggleAIPanel,
 }: HeaderProps) {
   const { navigate } = useNavigation()
-  const [inputUrl, setInputUrl] = useState(prData.url ?? "")
-  const [focused, setFocused] = useState(false)
-  const [localUrlError, setLocalUrlError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setInputUrl(prData.url ?? "")
-  }, [prData.id, prData.url])
-
-  const submitUrl = useCallback(async () => {
-    const trimmed = inputUrl.trim()
-    if (!trimmed || importing) return
-    const validationError = validateGitHubPrUrl(trimmed)
-    if (validationError) {
-      setLocalUrlError(validationError)
-      return
-    }
-    setLocalUrlError(null)
-    await onImportUrl(trimmed)
-  }, [inputUrl, importing, onImportUrl])
-
-  useEffect(() => {
-    const trimmed = inputUrl.trim()
-    if (!trimmed || importing || analyzing) return
-    if (validateGitHubPrUrl(trimmed)) return
-    const currentUrl = (prData.url ?? "").trim()
-    if (trimmed === currentUrl) return
-
-    const timer = window.setTimeout(() => {
-      void submitUrl()
-    }, URL_AUTO_SUBMIT_MS)
-
-    return () => window.clearTimeout(timer)
-  }, [inputUrl, importing, analyzing, prData.url, submitUrl])
 
   const syncLooksSuccessful =
     Boolean(syncLabel) &&
@@ -100,101 +56,45 @@ export function Header({
       syncLabel === zh.common.importedFromGithub ||
       syncLabel === zh.common.syncComplete)
 
+  const displayTitle = prData.displayName?.trim() || prData.title
+
   return (
     <header className="sticky top-0 z-30 flex flex-col gap-2 border-b border-border bg-panel/95 backdrop-blur-sm shrink-0 overflow-hidden shadow-[0_18px_50px_rgba(0,0,0,0.20)] px-4 sm:px-5 py-2.5 min-w-0">
-      {/* Row 1: PR URL import */}
-      <div className="flex items-start gap-3 min-w-0">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 min-w-0 pb-0.5">
         {onMenuClick && (
           <button
             type="button"
             onClick={onMenuClick}
-            className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-accent transition-colors shrink-0 lg:hidden mt-5"
+            className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-accent transition-colors shrink-0 lg:hidden"
             aria-label="打开菜单"
           >
             <Menu className="w-5 h-5 text-foreground" />
           </button>
         )}
-        <div className="flex flex-col flex-1 min-w-0 max-w-3xl gap-1">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium px-0.5">
-            {zh.common.importPrUrl}
-          </span>
-          <div
-            className={cn(
-              "relative flex items-center gap-2 h-9 px-3 rounded-md border bg-surface-2 transition-all duration-200",
-              focused
-                ? "border-ai-blue shadow-[0_0_0_2px_rgba(56,189,248,0.15)]"
-                : "border-border hover:border-border-strong",
-              (importError || localUrlError) && "border-risk-high/50",
-            )}
-          >
-            <Github className="w-4 h-4 text-muted-foreground shrink-0" />
-            <input
-              type="text"
-              value={inputUrl}
-              onChange={(e) => {
-                setInputUrl(e.target.value)
-                if (localUrlError) setLocalUrlError(null)
-              }}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  void submitUrl()
-                }
-              }}
-              disabled={importing}
-              placeholder={zh.common.importPrPlaceholder}
-              aria-label={zh.common.importPrUrl}
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none min-w-0 font-mono text-xs disabled:opacity-60"
-            />
-            <button
-              type="button"
-              onClick={() => void submitUrl()}
-              disabled={importing || !inputUrl.trim()}
-              className="shrink-0 p-0.5 rounded hover:bg-accent disabled:opacity-40 disabled:pointer-events-none"
-              aria-label={importing ? zh.common.importingPr : zh.common.loadPr}
-            >
-              {importing ? (
-                <Loader2 className="w-3.5 h-3.5 text-ai-blue animate-spin" />
-              ) : (
-                <ArrowRight className="w-3.5 h-3.5 text-ai-blue" />
-              )}
-            </button>
-          </div>
-          {(localUrlError || importError) && (
-            <p className="text-[11px] text-risk-high leading-snug px-0.5">
-              {localUrlError ?? importError}
-            </p>
-          )}
-        </div>
-      </div>
 
-      {/* Row 2: PR context, branches, status, actions */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 min-w-0 pb-0.5">
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0 flex-1 basis-[12rem]">
-          <span className="text-sm font-medium text-foreground truncate max-w-[14rem] sm:max-w-xs">
-            {prData.repo}
-          </span>
-          <RepositoryBadges
-            sourceType={prData.sourceType}
-            managed={prData.managed}
-          />
-          <span className="shrink-0 text-xs font-mono text-muted-foreground px-1.5 py-0.5 rounded bg-surface-3 border border-border">
-            PR #{prData.number}
-          </span>
-          {prData.repoId ? (
-            <button
-              type="button"
-              onClick={() => navigate("repos", { repoId: prData.repoId })}
-              title={zh.aiReview.openRepository}
-              aria-label={zh.aiReview.openRepository}
-              className="inline-flex items-center gap-1 shrink-0 rounded-md border border-border bg-surface-2 px-2 py-1 text-[11px] font-medium text-muted-foreground hover:border-ai-blue/40 hover:text-ai-blue transition-colors"
-            >
-              <FolderGit2 className="h-3 w-3 shrink-0" />
-              <span className="hidden xl:inline">{zh.aiReview.openRepository}</span>
-            </button>
-          ) : null}
+        <div className="flex flex-col min-w-0 flex-1 basis-[12rem] gap-0.5">
+          <p className="text-sm font-semibold text-foreground truncate">{displayTitle}</p>
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0">
+            <span className="text-xs font-medium text-muted-foreground truncate max-w-[14rem] sm:max-w-xs">
+              {prData.repo}
+            </span>
+            <RepositoryBadges sourceType={prData.sourceType} managed={prData.managed} />
+            <span className="shrink-0 text-xs font-mono text-muted-foreground px-1.5 py-0.5 rounded bg-surface-3 border border-border">
+              PR #{prData.number}
+            </span>
+            {prData.repoId ? (
+              <button
+                type="button"
+                onClick={() => navigate("repos", { repoId: prData.repoId })}
+                title={zh.aiReview.openRepository}
+                aria-label={zh.aiReview.openRepository}
+                className="inline-flex items-center gap-1 shrink-0 rounded-md border border-border bg-surface-2 px-2 py-1 text-[11px] font-medium text-muted-foreground hover:border-ai-blue/40 hover:text-ai-blue transition-colors"
+              >
+                <FolderGit2 className="h-3 w-3 shrink-0" />
+                <span className="hidden xl:inline">{zh.aiReview.openRepository}</span>
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono shrink-0">
@@ -215,14 +115,7 @@ export function Header({
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0 ml-auto">
           <div className="hidden md:flex items-center gap-1.5 text-[11px] max-w-[11rem]">
-            {importing ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-ai-blue" />
-                <span className="text-muted-foreground truncate">
-                  {syncLabel ?? zh.common.importingPrHint}
-                </span>
-              </>
-            ) : syncLooksSuccessful ? (
+            {syncLooksSuccessful ? (
               <>
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-risk-low" />
                 <span className="text-muted-foreground truncate">{syncLabel}</span>
@@ -245,7 +138,7 @@ export function Header({
                   {scanning ? "规则扫描中…" : "AI 摘要生成中…"}
                 </span>
               </div>
-            ) : hasAnalysis && !importError ? (
+            ) : hasAnalysis ? (
               <div className="hidden md:flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <div className="w-1.5 h-1.5 rounded-full bg-risk-low" />
                 <span>{zh.common.analyzeDone}</span>
@@ -288,10 +181,10 @@ export function Header({
             <button
               type="button"
               onClick={onRescan}
-              disabled={analyzing || importing || diffLoading || prLoading}
+              disabled={analyzing || diffLoading || prLoading}
               className={cn(
                 "hidden sm:flex items-center h-8 px-3 rounded-md text-xs font-medium border border-border transition-colors shrink-0",
-                analyzing || importing || diffLoading || prLoading
+                analyzing || diffLoading || prLoading
                   ? "text-muted-foreground/50 cursor-not-allowed"
                   : "text-muted-foreground hover:text-foreground hover:bg-accent",
               )}
@@ -303,17 +196,17 @@ export function Header({
           <motion.button
             type="button"
             onClick={onAnalyze}
-            disabled={analyzing || importing || diffLoading || prLoading}
+            disabled={analyzing || diffLoading || prLoading}
             className={cn(
               "relative flex items-center gap-2 px-4 h-8 rounded-md text-sm font-medium text-white transition-all duration-200 overflow-hidden shrink-0",
-              analyzing || importing || diffLoading || prLoading
+              analyzing || diffLoading || prLoading
                 ? "bg-ai-blue-dim cursor-not-allowed"
                 : "bg-ai-blue hover:bg-sky-300 text-primary-foreground shadow-[0_0_0_0_rgba(56,189,248,0.3)] hover:shadow-[0_0_18px_2px_rgba(56,189,248,0.32)]",
             )}
-            whileHover={!analyzing && !importing && !diffLoading && !prLoading ? { scale: 1.02 } : {}}
-            whileTap={!analyzing && !importing && !diffLoading && !prLoading ? { scale: 0.97 } : {}}
+            whileHover={!analyzing && !diffLoading && !prLoading ? { scale: 1.02 } : {}}
+            whileTap={!analyzing && !diffLoading && !prLoading ? { scale: 0.97 } : {}}
           >
-            {!analyzing && !importing && (
+            {!analyzing && (
               <motion.div
                 className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
                 initial={{ x: "-100%" }}
@@ -329,9 +222,7 @@ export function Header({
             ) : (
               <>
                 <Zap className="w-3.5 h-3.5" />
-                <span>
-                  {hasFindings ? zh.common.regenerateSummary : zh.common.startAnalyze}
-                </span>
+                <span>{hasFindings ? zh.common.regenerateSummary : zh.common.startAnalyze}</span>
               </>
             )}
           </motion.button>

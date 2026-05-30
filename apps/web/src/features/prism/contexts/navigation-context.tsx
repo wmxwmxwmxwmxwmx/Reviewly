@@ -55,6 +55,8 @@ export type NavParams = {
   tab?: FindingsTab
   findingId?: string
   status?: string
+  /** Open AI review list without restoring last reviewed PR from session. */
+  aiReviewList?: boolean
 }
 
 interface NavigationContextValue {
@@ -71,12 +73,15 @@ const NavigationContext = createContext<NavigationContextValue | null>(null)
 function resolvePrId(
   view: NavView,
   params: NavParams | undefined,
-  lastReviewedPrId: string | null,
+  _lastReviewedPrId: string | null,
 ): string | null {
   if (view !== "ai-review") {
     return null
   }
-  const candidate = params?.prId ?? lastReviewedPrId ?? null
+  if (params?.aiReviewList) {
+    return null
+  }
+  const candidate = params?.prId ?? null
   if (isLegacyDemoPrId(candidate)) {
     return null
   }
@@ -124,11 +129,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const findingId = searchParams.get("findingId")
 
   const prId =
-    activeView === "ai-review"
-      ? isLegacyDemoPrId(urlPrId)
-        ? null
-        : urlPrId ?? (isLegacyDemoPrId(lastReviewedPrId) ? null : lastReviewedPrId)
-      : null
+    activeView === "ai-review" && urlPrId && !isLegacyDemoPrId(urlPrId) ? urlPrId : null
 
   useEffect(() => {
     clearLastReviewedPrIdIfLegacy()

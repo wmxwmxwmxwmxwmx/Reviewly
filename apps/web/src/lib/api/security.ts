@@ -18,6 +18,9 @@ export interface SecurityStats {
   status: string
 }
 
+/** Gateway caps pageSize at 100 (see domain.security_findings_list). */
+export const SECURITY_FINDINGS_MAX_PAGE_SIZE = 100
+
 export interface SecurityFindingsQuery {
   severity?: string
   repo?: string
@@ -39,8 +42,35 @@ function buildQuery(params: SecurityFindingsQuery): string {
 }
 
 export function fetchSecurityFindings(params: SecurityFindingsQuery = {}) {
-  const { signal, ...rest } = params
-  return apiFetch<SecurityFindingsPage>(`/api/security/findings${buildQuery(rest)}`, { signal })
+  const { signal, pageSize, ...rest } = params
+  const cappedPageSize =
+    pageSize != null
+      ? Math.min(Math.max(1, pageSize), SECURITY_FINDINGS_MAX_PAGE_SIZE)
+      : undefined
+  return apiFetch<SecurityFindingsPage>(
+    `/api/security/findings${buildQuery({ ...rest, pageSize: cappedPageSize })}`,
+    { signal },
+  )
+}
+
+/** Fetch all findings matching filters (paginates until total is exhausted). */
+export async function fetchAllSecurityFindings(
+  params: Omit<SecurityFindingsQuery, "page"> = {},
+): Promise<SecurityFindingsPage["items"]> {
+  const { signal, pageSize = SECURITY_FINDINGS_MAX_PAGE_SIZE, ...rest } = params
+  const size = Math.min(Math.max(1, pageSize), SECURITY_FINDINGS_MAX_PAGE_SIZE)
+  const items: SecurityFindingsPage["items"] = []
+  let page = 1
+  let total = 0
+
+  do {
+    const res = await fetchSecurityFindings({ ...rest, page, pageSize: size, signal })
+    items.push(...res.items)
+    total = res.total
+    page += 1
+  } while (items.length < total && !signal?.aborted)
+
+  return items
 }
 
 export function fetchSecurityStats(signal?: AbortSignal) {

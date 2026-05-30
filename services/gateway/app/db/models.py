@@ -131,6 +131,9 @@ class PullRequest(Base):
     base_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
     analysis_version: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     payload: Mapped[dict | None] = mapped_column(JSON)
+    display_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    favorite: Mapped[bool] = mapped_column(Boolean, default=False)
 
     analysis_jobs: Mapped[list[AnalysisJob]] = relationship(back_populates="pull_request")
 

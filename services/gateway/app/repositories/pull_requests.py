@@ -2,10 +2,18 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
-from app.db.models import PullRequest, PullRequestDiff, Repository
+from app.db.models import (
+    AnalysisCacheEvent,
+    AnalysisFinding,
+    AnalysisJob,
+    PullRequest,
+    PullRequestDiff,
+    PullRequestFile,
+    Repository,
+)
 from app.repositories.seed_filter import (
     LEGACY_SEED_PULL_REQUEST_IDS,
     SOURCE_TYPE_GITHUB,
@@ -100,6 +108,8 @@ def list_pull_requests(
         items = [p for p in items if author.lower() in p.get("author", "").lower()]
     if state:
         items = [p for p in items if p.get("state") == state]
+    items.sort(key=lambda p: p.get("updatedAt") or "", reverse=True)
+    items.sort(key=lambda p: not bool(p.get("favorite")))
     return items
 
 
@@ -212,6 +222,72 @@ def save_ai_summary(
     return deepcopy(summary)
 
 
+def update_pull_request_metadata(
+    session: Session,
+    pr_id: str,
+    *,
+    display_name: str | None = None,
+    note: str | None = None,
+    favorite: bool | None = None,
+    user_id: str | None = None,
+    team_ids: list[str] | None = None,
+) -> dict | None:
+    row = session.get(PullRequest, pr_id)
+    if row is None:
+        return None
+    repo = session.get(Repository, row.repository_id)
+    if repo is not None and (is_seed_repository(repo) or is_seed_pull_request(row, repo=repo)):
+        return None
+    if user_id and not _user_can_access_pr(session, row, user_id=user_id, team_ids=team_ids):
+        return None
+
+    if display_name is not None:
+        row.display_name = display_name.strip() or None
+    if note is not None:
+        row.note = note.strip() or None
+    if favorite is not None:
+        row.favorite = favorite
+
+    session.commit()
+    return _pr_dict(row, repo=repo)
+
+
+def delete_pull_request(
+    session: Session,
+    pr_id: str,
+    *,
+    user_id: str | None = None,
+    team_ids: list[str] | None = None,
+) -> bool:
+    row = session.get(PullRequest, pr_id)
+    if row is None:
+        return False
+    repo = session.get(Repository, row.repository_id)
+    if repo is not None and (is_seed_repository(repo) or is_seed_pull_request(row, repo=repo)):
+        return False
+    if user_id and not _user_can_access_pr(session, row, user_id=user_id, team_ids=team_ids):
+        return False
+
+    job_ids = list(
+        session.scalars(
+            select(AnalysisJob.id).where(AnalysisJob.pull_request_id == pr_id)
+        ).all()
+    )
+    if job_ids:
+        session.execute(delete(AnalysisFinding).where(AnalysisFinding.job_id.in_(job_ids)))
+        session.execute(delete(AnalysisJob).where(AnalysisJob.id.in_(job_ids)))
+
+    session.execute(delete(AnalysisCacheEvent).where(AnalysisCacheEvent.pull_request_id == pr_id))
+    session.execute(delete(PullRequestFile).where(PullRequestFile.pull_request_id == pr_id))
+    diff_row = session.get(PullRequestDiff, pr_id)
+    if diff_row is not None:
+        session.delete(diff_row)
+
+    session.delete(row)
+    session.commit()
+    return True
+
+
 def upsert_pull_request(
     session: Session,
     *,
@@ -294,4 +370,9 @@ def _pr_dict(row: PullRequest, repo: Repository | None = None) -> dict:
         data["baseSha"] = row.base_sha
     if row.analysis_version:
         data["analysisVersion"] = row.analysis_version
+    if row.display_name:
+        data["displayName"] = row.display_name
+    if row.note:
+        data["note"] = row.note
+    data["favorite"] = bool(row.favorite)
     return data

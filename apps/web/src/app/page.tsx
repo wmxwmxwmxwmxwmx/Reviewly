@@ -11,8 +11,7 @@ import { ReposProvider } from "@/features/prism/contexts/repos-context"
 import { RunningTasksProvider } from "@/features/prism/contexts/running-tasks-context"
 import { DashboardProvider } from "@/features/prism/contexts/dashboard-context"
 import { NavigationProvider, useNavigation } from "@/features/prism/contexts/navigation-context"
-import { AiReviewLanding } from "@/features/prism/components/ai-review-landing"
-import { AIReviewView } from "@/features/prism/views/ai-review-view"
+import { AiReviewWorkspace } from "@/features/prism/views/ai-review-workspace"
 import { StandardView } from "@/features/prism/components/view-registry"
 import { Toaster } from "@/components/ui/toaster"
 import { ErrorBoundary } from "@/components/error-boundary"
@@ -22,7 +21,11 @@ function PRismPageContent() {
   const [aiPanelOpen, setAiPanelOpen] = useState(true)
 
   const handleViewChange = (view: typeof activeView) => {
-    navigate(view)
+    if (view === "ai-review") {
+      navigate("ai-review", { aiReviewList: true })
+    } else {
+      navigate(view)
+    }
     setSidebarOpen(false)
   }
 
@@ -73,18 +76,15 @@ function PRismPageContent() {
           </div>
         )}
 
-        {activeView === "ai-review" && prId ? (
-          <ErrorBoundary section="AI 评审" key={`ai-review-${prId}`}>
-            <AIReviewView
-              key={prId}
+        {activeView === "ai-review" ? (
+          <ErrorBoundary section="AI 评审" key={`ai-review-${prId ?? "workspace"}`}>
+            <AiReviewWorkspace
               prId={prId}
               onMenuClick={() => setSidebarOpen(true)}
               aiPanelOpen={aiPanelOpen}
               onToggleAIPanel={() => setAiPanelOpen((open) => !open)}
             />
           </ErrorBoundary>
-        ) : activeView === "ai-review" ? (
-          <AiReviewLanding />
         ) : (
           <main className="flex-1 overflow-y-auto">
             <ErrorBoundary section="当前视图" key={activeView}>
@@ -94,7 +94,7 @@ function PRismPageContent() {
         )}
       </div>
 
-      {activeView === "ai-review" && aiPanelOpen && (
+      {activeView === "ai-review" && prId && aiPanelOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/40 xl:hidden"
           onClick={() => setAiPanelOpen(false)}

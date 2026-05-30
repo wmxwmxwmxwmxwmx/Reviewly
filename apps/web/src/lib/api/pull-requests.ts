@@ -52,3 +52,28 @@ export function importPullRequestByUrl(url: string, signal?: AbortSignal) {
     throw err
   })
 }
+
+export type PatchPullRequestPayload = {
+  displayName?: string
+  note?: string
+  favorite?: boolean
+}
+
+export function patchPullRequest(
+  id: string,
+  body: PatchPullRequestPayload,
+  signal?: AbortSignal,
+) {
+  return apiFetch<PullRequest>(`/api/pull-requests/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+    signal,
+  })
+}
+
+export function deletePullRequest(id: string, signal?: AbortSignal) {
+  return apiFetch<{ ok: boolean; id: string }>(`/api/pull-requests/${id}`, {
+    method: "DELETE",
+    signal,
+  })
+}

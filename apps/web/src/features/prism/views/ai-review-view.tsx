@@ -21,7 +21,7 @@ import {
   chatCompletionStream,
   patchPrAiSummary,
 } from "@/lib/api/ai-chat"
-import { useImportPrByUrl, PENDING_AUTO_ANALYZE_KEY } from "@/hooks/use-import-pr-by-url"
+import { PENDING_AUTO_ANALYZE_KEY } from "@/hooks/use-import-pr-by-url"
 import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
 import {
   buildBoundedDiffContext,
@@ -34,20 +34,16 @@ import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { AdoptRepoBanner } from "@/features/prism/components/adopt-repo-banner"
 import { PrArchitectureImpact } from "@/features/prism/components/pr-architecture-impact"
-import { ExternalRepoOnboardDialog } from "@/features/prism/components/external-repo-onboard-dialog"
-import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { Skeleton } from "@/components/ui/skeleton"
 
 interface AIReviewViewProps {
   prId: string
-  onMenuClick?: () => void
   aiPanelOpen?: boolean
   onToggleAIPanel?: () => void
 }
 
 export function AIReviewView({
   prId,
-  onMenuClick,
   aiPanelOpen = true,
   onToggleAIPanel,
 }: AIReviewViewProps) {
@@ -100,37 +96,7 @@ export function AIReviewView({
   const analyzeAbortRef = useRef<AbortController | null>(null)
   const handleRescanRef = useRef<((options?: { force?: boolean }) => Promise<void>) | null>(null)
 
-  const { refresh: refreshRepos } = useReposStore()
-  const {
-    importing,
-    importError,
-    handleImportUrl,
-    pendingOnboardRepoId,
-    clearPendingOnboard,
-  } = useImportPrByUrl({
-    currentPrId: prId,
-    onBeforeImport: () => {
-      setAnalysisError(null)
-      setSyncLabel(zh.common.importingPrHint)
-    },
-    onImportSuccess: (result) => {
-      if (result.source === "cache") {
-        setSyncLabel(zh.common.loaded)
-      } else if (result.source === "github_app") {
-        setSyncLabel(zh.common.syncedFromGithub)
-      } else {
-        setSyncLabel(zh.common.importedFromGithub)
-      }
-    },
-    onImportError: () => {
-      setSyncLabel(zh.common.analyzeReady)
-    },
-    onSamePrImport: () => {
-      void handleRescanRef.current?.()
-    },
-  })
-
-  useRunningTask("aiReview", analyzing || importing)
+  useRunningTask("aiReview", analyzing)
 
   useEffect(() => {
     setLastReviewedPrId(prId)
@@ -434,12 +400,12 @@ ${diffContext || "（无 diff 内容）"}`,
   handleRescanRef.current = handleRescan
 
   useEffect(() => {
-    if (prLoading || diffLoading || !pr || importing) return
+    if (prLoading || diffLoading || !pr) return
     const pendingPrId = sessionStorage.getItem(PENDING_AUTO_ANALYZE_KEY)
     if (!pendingPrId || pendingPrId !== prId) return
     sessionStorage.removeItem(PENDING_AUTO_ANALYZE_KEY)
     void handleRescanRef.current?.({ force: false })
-  }, [prId, prLoading, diffLoading, pr, importing])
+  }, [prId, prLoading, diffLoading, pr])
 
   const handleRegenerateSummary = useCallback(async () => {
     if (analyzing || prLoading || diffLoading || !pr) return
@@ -504,15 +470,6 @@ ${diffContext || "（无 diff 内容）"}`,
 
   return (
     <div className="flex flex-1 min-w-0 overflow-hidden">
-      <ExternalRepoOnboardDialog
-        repoId={pendingOnboardRepoId}
-        open={Boolean(pendingOnboardRepoId)}
-        onOpenChange={(open) => {
-          if (!open) clearPendingOnboard()
-        }}
-        repoLabel={pr?.repo}
-        onOnboarded={() => void refreshRepos()}
-      />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <main className="flex-1 overflow-y-auto">
           {pr ? (
@@ -524,13 +481,9 @@ ${diffContext || "（无 diff 内容）"}`,
               hasFindings={hasFindings}
               onAnalyze={handleAnalyze}
               onRescan={hasFindings ? handleRescan : undefined}
-              onImportUrl={handleImportUrl}
-              importing={importing}
-              importError={importError}
               syncLabel={syncLabel}
               diffLoading={diffLoading}
               prLoading={prLoading}
-              onMenuClick={onMenuClick}
               aiPanelOpen={aiPanelOpen}
               onToggleAIPanel={onToggleAIPanel}
             />

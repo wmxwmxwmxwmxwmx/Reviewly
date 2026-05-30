@@ -65,6 +65,14 @@ class PrAiSummaryBody(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class PatchPullRequestBody(BaseModel):
+    display_name: str | None = Field(default=None, validation_alias="displayName")
+    note: str | None = None
+    favorite: bool | None = None
+
+    model_config = {"populate_by_name": True}
+
+
 @router.get("/dashboard")
 def dashboard(
     db: Session = Depends(get_db),
@@ -262,6 +270,42 @@ def pull_request(
     if not pr:
         raise api_error("合并请求不存在", 404)
     return pr
+
+
+@router.patch("/pull-requests/{pr_id}")
+def patch_pull_request(
+    pr_id: str,
+    body: PatchPullRequestBody,
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> dict:
+    user_id, team_ids = _resolve_user_scope(db, user)
+    if body.display_name is None and body.note is None and body.favorite is None:
+        raise api_error("请求参数无效", 400)
+    updated = pr_repo.update_pull_request_metadata(
+        db,
+        pr_id,
+        display_name=body.display_name,
+        note=body.note,
+        favorite=body.favorite,
+        user_id=user_id,
+        team_ids=team_ids,
+    )
+    if not updated:
+        raise api_error("合并请求不存在", 404)
+    return updated
+
+
+@router.delete("/pull-requests/{pr_id}")
+def delete_pull_request(
+    pr_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> dict:
+    user_id, team_ids = _resolve_user_scope(db, user)
+    if not pr_repo.delete_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids):
+        raise api_error("合并请求不存在", 404)
+    return {"ok": True, "id": pr_id}
 
 
 @router.get("/pull-requests/{pr_id}/diff")
