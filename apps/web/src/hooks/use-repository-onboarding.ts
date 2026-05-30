@@ -11,8 +11,11 @@ import { zh } from "@/lib/i18n/zh"
 
 export { mapJobToOnboardingPhase, ONBOARDING_PHASES } from "@/lib/repository-onboarding"
 
-export function useRepositoryOnboarding(repoId: string | null) {
-  const [onboarding, setOnboarding] = useState(false)
+export function useRepositoryOnboarding(
+  repoId: string | null,
+  options?: { resumeJob?: boolean },
+) {
+  const [onboarding, setOnboarding] = useState(() => Boolean(options?.resumeJob))
   const [onboardError, setOnboardError] = useState<string | null>(null)
   const [repository, setRepository] = useState<Repository | null>(null)
 

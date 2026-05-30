@@ -6,6 +6,7 @@ import type { RepoAnalysisStatusResponse, RepositoryJob } from "@reviewly/shared
 
 import { fetchRepoAnalysisStatus } from "@/lib/api/repos"
 import { isAbortError } from "@/lib/abort-utils"
+import { PrismApiError } from "@/lib/api/client"
 
 const TERMINAL = new Set(["success", "failed", "cancelled"])
 
@@ -34,7 +35,12 @@ export function useRepositoryJobs(repoId: string | null, enabled = true) {
       return data
     } catch (e: unknown) {
       if (!isAbortError(e) && !ac.signal.aborted) {
-        setError(e instanceof Error ? e.message : "加载任务状态失败")
+        if (e instanceof PrismApiError && e.status === 404) {
+          setStatus(null)
+          setError(null)
+        } else {
+          setError(e instanceof Error ? e.message : "加载任务状态失败")
+        }
       }
       return null
     } finally {
