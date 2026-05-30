@@ -15,7 +15,7 @@ export function useRepos() {
   useEffect(() => {
     const ac = new AbortController()
     setLoading(true)
-    fetchRepos(ac.signal)
+    fetchRepos({ signal: ac.signal })
       .then(setRepos)
       .catch((e: unknown) => {
         if (isAbortError(e)) return

@@ -64,6 +64,7 @@ class Repository(Base):
     owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("auth_users.id"), index=True)
     visibility: Mapped[str | None] = mapped_column(String(32), default="private")
     source: Mapped[str | None] = mapped_column(String(32))
+    source_type: Mapped[str] = mapped_column(String(32), default="github")
     full_name: Mapped[str] = mapped_column(String(512))
     github_id: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
     owner: Mapped[str | None] = mapped_column(String(255))

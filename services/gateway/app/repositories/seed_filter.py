@@ -13,6 +13,39 @@ LEGACY_SEED_PULL_REQUEST_IDS: frozenset[str] = frozenset({DEFAULT_PR_ID})
 LEGACY_SEED_USER_IDS: frozenset[str] = frozenset({"u1"})
 LEGACY_SEED_GOVERNANCE_RULE_IDS: frozenset[str] = frozenset({"g1"})
 
+SOURCE_TYPE_GITHUB = "github"
+SOURCE_TYPE_EXTERNAL = "external"
+
+
+def is_connected_repository(row: Repository) -> bool:
+    return row.source_type in (None, SOURCE_TYPE_GITHUB)
+
+
+def is_external_repository(row: Repository) -> bool:
+    return row.source_type == SOURCE_TYPE_EXTERNAL
+
+
+def connected_repository_predicate():
+    """SQLAlchemy expression: connected (OAuth-owned) repository asset."""
+    return or_(Repository.source_type == SOURCE_TYPE_GITHUB, Repository.source_type.is_(None))
+
+
+def external_repository_predicate():
+    return Repository.source_type == SOURCE_TYPE_EXTERNAL
+
+
+def only_connected_repositories(statement: Select) -> Select:
+    return statement.where(connected_repository_predicate())
+
+
+def only_external_repositories(statement: Select) -> Select:
+    return statement.where(external_repository_predicate())
+
+
+def only_connected_findings(statement: Select) -> Select:
+    """Apply to selects that already join PullRequest and Repository."""
+    return statement.where(connected_repository_predicate())
+
 
 def is_seed_repository(row: Repository) -> bool:
     if row.source in ("test", "github"):

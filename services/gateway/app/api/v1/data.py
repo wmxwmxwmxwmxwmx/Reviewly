@@ -87,11 +87,13 @@ async def dashboard_weekly_summary(
 def repos(
     db: Session = Depends(get_db),
     user: AuthUser | None = Depends(get_optional_user),
+    type: str = Query(default="github", alias="type"),
 ) -> list:
+    repo_type = type if type in ("github", "external", "all") else "github"
     if user and not settings.prism_auth_bypass:
         team_ids = auth_users_repo.get_team_ids_for_user(db, user.id)
-        return repos_repo.list_repos(db, user_id=user.id, team_ids=team_ids)
-    return repos_repo.list_repos(db)
+        return repos_repo.list_repos(db, user_id=user.id, team_ids=team_ids, repo_type=repo_type)
+    return repos_repo.list_repos(db, repo_type=repo_type)
 
 
 @router.get("/repos/{repo_id}/analyze-context")
@@ -169,14 +171,27 @@ def pull_requests(
     state: str | None = None,
     cursor: str | None = None,
     limit: int = Query(default=50, le=100),
+    include_external: bool = Query(default=False, alias="includeExternal"),
 ) -> dict:
-    items = pr_repo.list_pull_requests(db, repo=repo, risk=risk, author=author, state=state)
+    items = pr_repo.list_pull_requests(
+        db,
+        repo=repo,
+        risk=risk,
+        author=author,
+        state=state,
+        include_external=include_external,
+    )
     return {"items": items[:limit], "cursor": cursor, "hasMore": len(items) > limit}
 
 
 @router.post("/pull-requests/import")
-async def import_pull_request(body: ImportPrBody, db: Session = Depends(get_db)) -> dict:
-    return await import_pull_request_by_url(db, body.resolved_url())
+async def import_pull_request(
+    body: ImportPrBody,
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> dict:
+    user_id = user.id if user and not settings.prism_auth_bypass else None
+    return await import_pull_request_by_url(db, body.resolved_url(), user_id=user_id)
 
 
 @router.get("/pull-requests/{pr_id}")

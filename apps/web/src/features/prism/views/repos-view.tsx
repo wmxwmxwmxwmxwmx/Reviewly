@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo } from "react"
 import { motion } from "framer-motion"
 import {
   BookOpen,
@@ -21,6 +22,7 @@ import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { toast } from "@/hooks/use-toast"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
+import type { Repository } from "@reviewly/shared"
 
 function formatSyncTime(iso: string) {
   if (!iso) return "未同步"
@@ -51,6 +53,15 @@ export function ReposView() {
     refresh,
     analyzeRepository,
   } = useReposStore()
+
+  const connectedRepos = useMemo(
+    () => repos.filter((repo) => (repo.sourceType ?? "github") === "github"),
+    [repos],
+  )
+  const externalRepos = useMemo(
+    () => repos.filter((repo) => repo.sourceType === "external"),
+    [repos],
+  )
 
   const handleSync = async () => {
     try {
@@ -134,178 +145,240 @@ export function ReposView() {
         </p>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-        {!loading &&
-          repos.map((repo, idx) => {
-            const health = repo.healthScore
-            const isAnalyzing = analyzingRepoId === repo.id
-            const analysisError = analysisErrorsByRepoId[repo.id]
-            const analysisContent = repo.aiAnalysis?.content
-            const hasAnalysis = Boolean(analysisContent)
-            const showAnalysisPanel = isAnalyzing || hasAnalysis || Boolean(analysisError)
-
-            return (
-              <motion.div
+      {!loading && connectedRepos.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {zh.repos.connectedReposSection}
+          </h2>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {connectedRepos.map((repo, idx) => (
+              <RepoCard
                 key={repo.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.05 }}
-                className="p-4 rounded-lg bg-surface-2 border border-border hover:border-ai-blue/50 transition-colors"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      {repo.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={repo.avatarUrl}
-                          alt=""
-                          className="w-6 h-6 rounded-full shrink-0"
-                        />
-                      ) : null}
-                      <span className="text-sm font-medium text-foreground font-mono truncate">
-                        {repo.owner}/{repo.name}
-                      </span>
-                      {repo.htmlUrl ? (
-                        <a
-                          href={repo.htmlUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-ai-blue shrink-0"
-                          aria-label={zh.repos.viewOnGitHub}
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      ) : null}
-                    </div>
-                    {repo.description ? (
-                      <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                        {repo.description}
-                      </p>
-                    ) : null}
-                    <div className="mt-1 flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-3 text-muted-foreground">
-                        {zh.repos.defaultBranch}：{repo.defaultBranch}
-                      </span>
-                      {repo.language ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-3 text-muted-foreground flex items-center gap-1">
-                          <Code2 className="w-3 h-3" />
-                          {repo.language}
-                        </span>
-                      ) : null}
-                      {repo.aiReviewEnabled && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-ai-blue/20 text-ai-blue">
-                          {zh.repos.aiAvailable}
-                        </span>
-                      )}
-                      <span
-                        className={cn(
-                          "text-[10px] px-1.5 py-0.5 rounded",
-                          hasAnalysis
-                            ? "bg-risk-low/15 text-risk-low"
-                            : "bg-surface-3 text-muted-foreground",
-                        )}
-                      >
-                        {hasAnalysis ? zh.repos.aiAnalysisReady : zh.repos.aiAnalysisPending}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="p-1 hover:bg-surface-3 rounded transition-colors shrink-0"
-                    aria-label="设置"
-                  >
-                    <Settings className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                </div>
+                repo={repo}
+                idx={idx}
+                analyzingRepoId={analyzingRepoId}
+                analysisErrorsByRepoId={analysisErrorsByRepoId}
+                analyzeRepository={analyzeRepository}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
-                <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground flex-wrap">
-                  {repo.stars != null && (
-                    <span className="flex items-center gap-1">
-                      <Star className="w-3 h-3 opacity-70" />
-                      {repo.stars} {zh.repos.stars}
-                    </span>
-                  )}
-                  {repo.forks != null && (
-                    <span className="flex items-center gap-1">
-                      <GitFork className="w-3 h-3 opacity-70" />
-                      {repo.forks} {zh.repos.forks}
-                    </span>
-                  )}
-                  <span className="flex items-center gap-1">
-                    <GitBranch className="w-3 h-3" />
-                    {repo.openPrCount} {zh.repos.openPrs}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {formatSyncTime(repo.lastSyncTime || repo.pushedAt || "")}
-                  </span>
-                </div>
-
-                <div className="mt-3">
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-muted-foreground">{zh.repos.health}</span>
-                    <span
-                      className={cn(
-                        "font-medium",
-                        health >= 85 ? "text-risk-low" : health >= 70 ? "text-risk-medium" : "text-risk-high",
-                      )}
-                    >
-                      {health}%
-                    </span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-surface-3 overflow-hidden">
-                    <motion.div
-                      className={cn(
-                        "h-full rounded-full",
-                        health >= 85 ? "bg-risk-low" : health >= 70 ? "bg-risk-medium" : "bg-risk-high",
-                      )}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${health}%` }}
-                      transition={{ duration: 0.6, delay: idx * 0.1 }}
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-3 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void analyzeRepository(repo.id)}
-                    disabled={Boolean(analyzingRepoId)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-ai-blue/15 text-ai-blue hover:bg-ai-blue/25 disabled:opacity-50"
-                  >
-                    {isAnalyzing ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <BrainCircuit className="w-3.5 h-3.5" />
-                    )}
-                    {isAnalyzing
-                      ? zh.repos.analyzingRepo
-                      : hasAnalysis
-                        ? zh.actions.regenerate
-                        : zh.actions.analyzeRepo}
-                  </button>
-                </div>
-
-                {showAnalysisPanel && (
-                  <div className="mt-3 pt-3 border-t border-border">
-                    {analysisError && (
-                      <p className="text-xs text-risk-high mb-2">{analysisError}</p>
-                    )}
-                    {isAnalyzing && !analysisContent && (
-                      <p className="text-xs text-muted-foreground">{zh.repos.generatingAnalysis}</p>
-                    )}
-                    {analysisContent && (
-                      <div className="text-xs max-h-64 overflow-y-auto">
-                        <SummaryMarkdown content={analysisContent} />
-                      </div>
-                    )}
-                  </div>
-                )}
-              </motion.div>
-            )
-          })}
-      </div>
+      {!loading && externalRepos.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {zh.repos.externalReposSection}
+          </h2>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {externalRepos.map((repo, idx) => (
+              <RepoCard
+                key={repo.id}
+                repo={repo}
+                idx={idx}
+                analyzingRepoId={analyzingRepoId}
+                analysisErrorsByRepoId={analysisErrorsByRepoId}
+                analyzeRepository={analyzeRepository}
+                isExternal
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
+  )
+}
+
+function RepoCard({
+  repo,
+  idx,
+  analyzingRepoId,
+  analysisErrorsByRepoId,
+  analyzeRepository,
+  isExternal = false,
+}: {
+  repo: Repository
+  idx: number
+  analyzingRepoId: string | null
+  analysisErrorsByRepoId: Record<string, string>
+  analyzeRepository: (repoId: string) => Promise<void>
+  isExternal?: boolean
+}) {
+  const health = repo.healthScore
+  const isAnalyzing = analyzingRepoId === repo.id
+  const analysisError = analysisErrorsByRepoId[repo.id]
+  const analysisContent = repo.aiAnalysis?.content
+  const hasAnalysis = Boolean(analysisContent)
+  const showAnalysisPanel = isAnalyzing || hasAnalysis || Boolean(analysisError)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: idx * 0.05 }}
+      className="p-4 rounded-lg bg-surface-2 border border-border hover:border-ai-blue/50 transition-colors"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            {repo.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={repo.avatarUrl}
+                alt=""
+                className="w-6 h-6 rounded-full shrink-0"
+              />
+            ) : null}
+            <span className="text-sm font-medium text-foreground font-mono truncate">
+              {repo.owner}/{repo.name}
+            </span>
+            {isExternal ? (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded bg-risk-medium/15 text-risk-medium border border-risk-medium/30"
+                title={zh.repos.externalRepoHint}
+              >
+                {zh.repos.externalRepoBadge}
+              </span>
+            ) : null}
+            {repo.htmlUrl ? (
+              <a
+                href={repo.htmlUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-ai-blue shrink-0"
+                aria-label={zh.repos.viewOnGitHub}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            ) : null}
+          </div>
+          {isExternal ? (
+            <p className="mt-1 text-[11px] text-muted-foreground">{zh.repos.externalRepoHint}</p>
+          ) : null}
+          {repo.description ? (
+            <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+              {repo.description}
+            </p>
+          ) : null}
+          <div className="mt-1 flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-3 text-muted-foreground">
+              {zh.repos.defaultBranch}：{repo.defaultBranch}
+            </span>
+            {repo.language ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-3 text-muted-foreground flex items-center gap-1">
+                <Code2 className="w-3 h-3" />
+                {repo.language}
+              </span>
+            ) : null}
+            {repo.aiReviewEnabled && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-ai-blue/20 text-ai-blue">
+                {zh.repos.aiAvailable}
+              </span>
+            )}
+            <span
+              className={cn(
+                "text-[10px] px-1.5 py-0.5 rounded",
+                hasAnalysis
+                  ? "bg-risk-low/15 text-risk-low"
+                  : "bg-surface-3 text-muted-foreground",
+              )}
+            >
+              {hasAnalysis ? zh.repos.aiAnalysisReady : zh.repos.aiAnalysisPending}
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="p-1 hover:bg-surface-3 rounded transition-colors shrink-0"
+          aria-label="设置"
+        >
+          <Settings className="w-4 h-4 text-muted-foreground" />
+        </button>
+      </div>
+
+      <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground flex-wrap">
+        {repo.stars != null && (
+          <span className="flex items-center gap-1">
+            <Star className="w-3 h-3 opacity-70" />
+            {repo.stars} {zh.repos.stars}
+          </span>
+        )}
+        {repo.forks != null && (
+          <span className="flex items-center gap-1">
+            <GitFork className="w-3 h-3 opacity-70" />
+            {repo.forks} {zh.repos.forks}
+          </span>
+        )}
+        <span className="flex items-center gap-1">
+          <GitBranch className="w-3 h-3" />
+          {repo.openPrCount} {zh.repos.openPrs}
+        </span>
+        <span className="flex items-center gap-1">
+          <Clock className="w-3 h-3" />
+          {formatSyncTime(repo.lastSyncTime || repo.pushedAt || "")}
+        </span>
+      </div>
+
+      <div className="mt-3">
+        <div className="flex items-center justify-between text-xs mb-1">
+          <span className="text-muted-foreground">{zh.repos.health}</span>
+          <span
+            className={cn(
+              "font-medium",
+              health >= 85 ? "text-risk-low" : health >= 70 ? "text-risk-medium" : "text-risk-high",
+            )}
+          >
+            {health}%
+          </span>
+        </div>
+        <div className="h-1.5 rounded-full bg-surface-3 overflow-hidden">
+          <motion.div
+            className={cn(
+              "h-full rounded-full",
+              health >= 85 ? "bg-risk-low" : health >= 70 ? "bg-risk-medium" : "bg-risk-high",
+            )}
+            initial={{ width: 0 }}
+            animate={{ width: `${health}%` }}
+            transition={{ duration: 0.6, delay: idx * 0.1 }}
+          />
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void analyzeRepository(repo.id)}
+          disabled={Boolean(analyzingRepoId)}
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-ai-blue/15 text-ai-blue hover:bg-ai-blue/25 disabled:opacity-50"
+        >
+          {isAnalyzing ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <BrainCircuit className="w-3.5 h-3.5" />
+          )}
+          {isAnalyzing
+            ? zh.repos.analyzingRepo
+            : hasAnalysis
+              ? zh.actions.regenerate
+              : zh.actions.analyzeRepo}
+        </button>
+      </div>
+
+      {showAnalysisPanel && (
+        <div className="mt-3 pt-3 border-t border-border">
+          {analysisError && (
+            <p className="text-xs text-risk-high mb-2">{analysisError}</p>
+          )}
+          {isAnalyzing && !analysisContent && (
+            <p className="text-xs text-muted-foreground">{zh.repos.generatingAnalysis}</p>
+          )}
+          {analysisContent && (
+            <div className="text-xs max-h-64 overflow-y-auto">
+              <SummaryMarkdown content={analysisContent} />
+            </div>
+          )}
+        </div>
+      )}
+    </motion.div>
   )
 }

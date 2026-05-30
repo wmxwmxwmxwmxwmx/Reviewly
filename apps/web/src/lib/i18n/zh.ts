@@ -144,6 +144,10 @@ export const zh = {
     health: "健康度",
     analyzingRepo: "分析中…",
     generatingAnalysis: "正在生成仓库分析…",
+    connectedReposSection: "已连接仓库",
+    externalReposSection: "外部仓库",
+    externalRepoBadge: "External",
+    externalRepoHint: "此仓库通过 URL 导入，不参与团队统计与治理分析",
   },
   architecture: {
     scanGraph: "扫描依赖图",
@@ -210,6 +214,8 @@ export const zh = {
     importPrPlaceholder: "https://github.com/owner/repo/pull/123",
     importingPr: "正在导入…",
     importingPrHint: "正在导入 PR…",
+    externalRepoReviewHint:
+      "该仓库不属于当前用户，仅用于 AI 分析，不会参与 Dashboard、Security、Performance、Governance 与 Team Analytics 统计。",
     importFailed: "无法导入 PR",
     syncComplete: "同步完成",
     loaded: "已加载",

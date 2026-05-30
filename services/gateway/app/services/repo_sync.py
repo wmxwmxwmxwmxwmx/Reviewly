@@ -17,6 +17,7 @@ from app.github.repo_mapper import github_repo_to_metadata
 from app.github.repositories import fetch_repo_by_url, fetch_user_repositories
 from app.repositories import auth_users as auth_users_repo
 from app.repositories import repos as repos_repo
+from app.repositories.seed_filter import SOURCE_TYPE_EXTERNAL, SOURCE_TYPE_GITHUB
 from app.services.activity_log import record_activity
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,7 @@ async def import_repository_from_url(
     metadata["owner_user_id"] = user.id if user else None
     metadata["visibility"] = "private"
     metadata["source"] = "oauth" if user else "pat"
+    metadata["source_type"] = SOURCE_TYPE_EXTERNAL
     if team_ids:
         metadata["team_id"] = team_ids[0]
 
@@ -112,6 +114,7 @@ async def sync_repositories_for_user(session: Session, user: AuthUser) -> dict[s
         metadata["owner_user_id"] = user.id
         metadata["visibility"] = "private"
         metadata["source"] = "oauth"
+        metadata["source_type"] = SOURCE_TYPE_GITHUB
         if team_ids:
             metadata["team_id"] = team_ids[0]
         _, was_created = repos_repo.upsert_repository(session, metadata)
@@ -174,6 +177,7 @@ async def sync_github_repositories(session: Session) -> dict[str, Any]:
             last_synced_at=last_synced,
         )
         metadata["source"] = "pat"
+        metadata["source_type"] = SOURCE_TYPE_GITHUB
         _, was_created = repos_repo.upsert_repository(session, metadata)
         synced += 1
         if was_created:
@@ -217,6 +221,7 @@ async def _sync_via_installations(session: Session) -> dict[str, Any]:
                 installation_id=inst_id,
             )
             metadata["source"] = "webhook"
+            metadata["source_type"] = SOURCE_TYPE_GITHUB
             _, was_created = repos_repo.upsert_repository(
                 session,
                 metadata,

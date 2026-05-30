@@ -14,6 +14,7 @@ from app.grpc_client.engine import get_engine_client
 from app.repositories import pull_request_files as pr_files_repo
 from app.repositories import pull_requests as pr_repo
 from app.repositories import repos as repos_repo
+from app.repositories.seed_filter import SOURCE_TYPE_EXTERNAL, SOURCE_TYPE_GITHUB
 
 
 def _risk_level(score: int) -> str:
@@ -101,10 +102,14 @@ async def _persist_pull_request(
     patch: str,
     gh_files: list[dict[str, Any]] | None = None,
     commit_count: int | None = None,
+    owner_user_id: str | None = None,
+    repo_source_type: str | None = None,
 ) -> str:
     engine = get_engine_client()
     full_name = gh_repo.get("full_name") or f"{owner}/{name}"
     repo_id = f"repo-{gh_repo['id']}"
+    if repo_source_type is None:
+        repo_source_type = SOURCE_TYPE_GITHUB if installation_id else SOURCE_TYPE_EXTERNAL
     repo_payload = {
         "id": repo_id,
         "fullName": full_name,
@@ -119,6 +124,8 @@ async def _persist_pull_request(
         full_name=full_name,
         installation_id=installation_id,
         payload=repo_payload,
+        source_type=repo_source_type,
+        owner_user_id=owner_user_id,
     )
     pr_id, pr_payload = _map_pr(gh_pr, repo_id, name)
     if commit_count is not None:
@@ -156,6 +163,7 @@ async def sync_single_pull_request(
     number: int,
     *,
     installation_id: str,
+    owner_user_id: str | None = None,
 ) -> str:
     client = GitHubClient(installation_id)
     gh_pr = await client.get_pull_request(owner, repo, number)
@@ -181,6 +189,8 @@ async def sync_single_pull_request(
         patch=patch,
         gh_files=gh_files,
         commit_count=commit_count,
+        owner_user_id=owner_user_id,
+        repo_source_type=SOURCE_TYPE_GITHUB,
     )
 
 
@@ -189,6 +199,8 @@ async def sync_single_pull_request_public(
     owner: str,
     repo: str,
     number: int,
+    *,
+    owner_user_id: str | None = None,
 ) -> str:
     gh_pr = await public_client.get_pull_request(owner, repo, number)
     try:
@@ -214,6 +226,8 @@ async def sync_single_pull_request_public(
         patch=patch,
         gh_files=gh_files,
         commit_count=commit_count,
+        owner_user_id=owner_user_id,
+        repo_source_type=SOURCE_TYPE_EXTERNAL,
     )
 
 
@@ -242,6 +256,7 @@ async def sync_installation(session: Session, installation_id: str) -> dict[str,
             full_name=full_name,
             installation_id=installation_id,
             payload=payload,
+            source_type=SOURCE_TYPE_GITHUB,
         )
         synced_repos += 1
 

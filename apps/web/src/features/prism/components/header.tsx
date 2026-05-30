@@ -168,6 +168,14 @@ export function Header({
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="text-sm font-medium text-foreground truncate">{prData.repo}</span>
+            {prData.sourceType === "external" ? (
+              <span
+                className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-risk-medium/15 text-risk-medium border border-risk-medium/30"
+                title={zh.repos.externalRepoHint}
+              >
+                {zh.repos.externalRepoBadge}
+              </span>
+            ) : null}
             <span className="shrink-0 text-xs font-mono text-muted-foreground px-1.5 py-0.5 rounded bg-surface-3 border border-border">
               PR #{prData.number}
             </span>

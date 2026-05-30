@@ -13,7 +13,12 @@ from app.github.url_parser import parse_github_pr_url
 from app.repositories import pull_requests as pr_repo
 
 
-async def import_pull_request_by_url(session: Session, url: str) -> dict[str, str]:
+async def import_pull_request_by_url(
+    session: Session,
+    url: str,
+    *,
+    user_id: str | None = None,
+) -> dict[str, str]:
     parsed = parse_github_pr_url(url)
 
     cached = pr_repo.find_by_repo_number(session, parsed.owner, parsed.repo, parsed.number)
@@ -36,6 +41,7 @@ async def import_pull_request_by_url(session: Session, url: str) -> dict[str, st
                     parsed.repo,
                     parsed.number,
                     installation_id=installation_id,
+                    owner_user_id=user_id,
                 )
                 return {"prId": pr_id, "source": "github_app"}
             except HTTPException as exc:
@@ -47,6 +53,7 @@ async def import_pull_request_by_url(session: Session, url: str) -> dict[str, st
             parsed.owner,
             parsed.repo,
             parsed.number,
+            owner_user_id=user_id,
         )
         return {"prId": pr_id, "source": "github_public"}
     except HTTPException as exc:

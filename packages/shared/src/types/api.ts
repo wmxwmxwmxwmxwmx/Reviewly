@@ -21,12 +21,15 @@ export interface AiPersistedContent {
 /** @deprecated Use AiPersistedContent */
 export type RepositoryAiAnalysis = AiPersistedContent
 
+export type RepositorySourceType = "github" | "external"
+
 export interface Repository {
   id: string
   githubId?: string | null
   fullName: string
   name: string
   owner: string
+  sourceType?: RepositorySourceType
   description?: string | null
   language?: string | null
   stars?: number
@@ -117,6 +120,7 @@ export interface PullRequestListItem {
   riskLevel: "critical" | "high" | "medium" | "low"
   riskScore: number
   updatedAt: string
+  sourceType?: RepositorySourceType
 }
 
 export interface PullRequest extends PullRequestListItem {

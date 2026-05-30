@@ -64,8 +64,20 @@ def record_activity(
     return row
 
 
-def list_recent(session: Session, limit: int = 20) -> list[dict[str, Any]]:
+def list_recent(session: Session, limit: int = 20, *, connected_only: bool = False) -> list[dict[str, Any]]:
     rows = session.scalars(
-        select(ActivityEvent).order_by(ActivityEvent.created_at.desc()).limit(limit)
+        select(ActivityEvent).order_by(ActivityEvent.created_at.desc()).limit(limit * 3 if connected_only else limit)
     ).all()
+    if connected_only:
+        from app.db.models import Repository
+        from app.repositories.seed_filter import external_repository_predicate, is_connected_repository
+
+        external_rows = session.scalars(
+            select(Repository.full_name).where(external_repository_predicate())
+        ).all()
+        external_names = {name for name in external_rows if name}
+        rows = [r for r in rows if not r.repo or r.repo not in external_names]
+        rows = rows[:limit]
+    else:
+        rows = rows[:limit]
     return [_event_to_api(r) for r in rows]

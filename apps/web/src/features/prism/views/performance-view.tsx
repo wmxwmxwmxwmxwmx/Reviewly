@@ -151,7 +151,9 @@ export function PerformanceView() {
               className="ml-2 h-7 text-xs bg-surface-2 border border-border rounded-md px-2 text-foreground"
             >
               <option value="">{zh.common.allRepos}</option>
-              {repos.map((r) => (
+              {repos
+                .filter((r) => (r.sourceType ?? "github") === "github")
+                .map((r) => (
                 <option key={r.id} value={r.fullName}>
                   {r.fullName}
                 </option>

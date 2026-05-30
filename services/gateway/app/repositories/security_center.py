@@ -13,6 +13,7 @@ from app.repositories.seed_filter import (
     exclude_seed_findings,
     is_seed_pull_request,
     is_seed_repository,
+    only_connected_findings,
 )
 
 RULE_LABELS: dict[str, str] = {
@@ -144,7 +145,7 @@ def list_security_findings_filtered(
             )
         )
 
-    base = exclude_seed_findings(base)
+    base = only_connected_findings(exclude_seed_findings(base))
 
     count_stmt = select(func.count()).select_from(base.subquery())
     total = session.scalar(count_stmt) or 0

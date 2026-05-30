@@ -11,7 +11,10 @@ from app.repositories import settings as settings_repo
 from app.repositories.seed_filter import (
     exclude_seed_findings,
     exclude_seed_repositories,
+    is_connected_repository,
     is_seed_pull_request,
+    only_connected_findings,
+    only_connected_repositories,
 )
 from app.services.activity_log import list_recent
 
@@ -34,13 +37,15 @@ def _is_high_risk(level: str) -> bool:
 
 
 def _count_findings(session: Session, finding_type: str) -> int:
-    stmt = exclude_seed_findings(
-        select(func.count(AnalysisFinding.id))
-        .select_from(AnalysisFinding)
-        .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
-        .join(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
-        .join(Repository, PullRequest.repository_id == Repository.id)
-        .where(AnalysisFinding.type == finding_type)
+    stmt = only_connected_findings(
+        exclude_seed_findings(
+            select(func.count(AnalysisFinding.id))
+            .select_from(AnalysisFinding)
+            .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
+            .join(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
+            .join(Repository, PullRequest.repository_id == Repository.id)
+            .where(AnalysisFinding.type == finding_type)
+        )
     )
     return session.scalar(stmt) or 0
 
@@ -55,7 +60,7 @@ def _scoped_repository_ids(
         return None
     from app.repositories import repos as repos_repo
 
-    rows = repos_repo.list_repos(session, user_id=user_id, team_ids=team_ids)
+    rows = repos_repo.list_repos(session, user_id=user_id, team_ids=team_ids, repo_type="github")
     return {str(r["id"]) for r in rows}
 
 
@@ -108,7 +113,9 @@ def _enrich_dashboard(
         open_prs = [
             pr
             for pr in open_prs
-            if not is_seed_pull_request(pr, repo=open_pr_repo_map.get(pr.repository_id))
+            if (repo_row := open_pr_repo_map.get(pr.repository_id)) is not None
+            and not is_seed_pull_request(pr, repo=repo_row)
+            and is_connected_repository(repo_row)
         ]
     if scoped_repo_ids is not None:
         open_prs = [pr for pr in open_prs if pr.repository_id in scoped_repo_ids]
@@ -143,6 +150,8 @@ def _enrich_dashboard(
             continue
         job_repo = session.get(Repository, pr.repository_id)
         if job_repo is not None and is_seed_pull_request(pr, repo=job_repo):
+            continue
+        if job_repo is not None and not is_connected_repository(job_repo):
             continue
         if scoped_repo_ids is not None and pr.repository_id not in scoped_repo_ids:
             continue
@@ -181,9 +190,9 @@ def _enrich_dashboard(
             }
         )
 
-    activities = list_recent(session, limit=20)
+    activities = list_recent(session, limit=20, connected_only=True)
 
-    repos_query = exclude_seed_repositories(select(Repository))
+    repos_query = only_connected_repositories(exclude_seed_repositories(select(Repository)))
     if scoped_repo_ids is not None:
         if not scoped_repo_ids:
             repos = []
@@ -199,13 +208,15 @@ def _enrich_dashboard(
         payload = repo.payload or {}
         repo_pr_count = sum(1 for pr in open_prs if pr.repository_id == repo.id)
         issue_count = session.scalar(
-            exclude_seed_findings(
-                select(func.count())
-                .select_from(AnalysisFinding)
-                .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
-                .join(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
-                .join(Repository, PullRequest.repository_id == Repository.id)
-                .where(PullRequest.repository_id == repo.id)
+            only_connected_findings(
+                exclude_seed_findings(
+                    select(func.count())
+                    .select_from(AnalysisFinding)
+                    .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
+                    .join(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
+                    .join(Repository, PullRequest.repository_id == Repository.id)
+                    .where(PullRequest.repository_id == repo.id)
+                )
             )
         ) or 0
         top_repos.append(

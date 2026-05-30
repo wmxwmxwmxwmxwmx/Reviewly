@@ -132,7 +132,7 @@ export function ReposProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     setError(null)
     try {
-      const data = await fetchRepos()
+      const data = await fetchRepos({ type: "all" })
       setRepos(data)
     } catch (e: unknown) {
       setError(e instanceof PrismApiError ? e.message : "加载仓库失败")

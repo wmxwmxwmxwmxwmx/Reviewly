@@ -10,14 +10,18 @@ import { apiFetch } from "./client"
 
 export type SyncReposResult = SyncRepositoriesResponse
 
+export type RepoListType = "github" | "external" | "all"
+
 export type SaveRepoAiAnalysisPayload = {
   content: string
   model?: string
   provider?: string
 }
 
-export function fetchRepos(signal?: AbortSignal) {
-  return apiFetch<Repository[]>("/api/repos", { signal })
+export function fetchRepos(options?: { type?: RepoListType; signal?: AbortSignal }) {
+  const type = options?.type ?? "github"
+  const qs = type === "github" ? "" : `?type=${encodeURIComponent(type)}`
+  return apiFetch<Repository[]>(`/api/repos${qs}`, { signal: options?.signal })
 }
 
 export function syncRepositories(signal?: AbortSignal) {

@@ -9,7 +9,14 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AnalysisFinding, AnalysisJob, PullRequest, Repository
 from app.repositories.ai_persisted import extract_from_settings
-from app.repositories.seed_filter import exclude_seed_repositories, is_seed_repository
+from app.repositories.seed_filter import (
+    SOURCE_TYPE_EXTERNAL,
+    SOURCE_TYPE_GITHUB,
+    exclude_seed_repositories,
+    is_seed_repository,
+    only_connected_repositories,
+    only_external_repositories,
+)
 from app.services.repo_health import compute_repo_health
 
 
@@ -37,6 +44,19 @@ def get_repository_by_full_name(session: Session, full_name: str) -> Repository 
 
 def get_repository_by_github_id(session: Session, github_id: str) -> Repository | None:
     return session.scalar(select(Repository).where(Repository.github_id == github_id).limit(1))
+
+
+def _apply_source_type(row: Repository, metadata: dict[str, Any], *, created: bool) -> None:
+    source_type = metadata.get("source_type")
+    if source_type is None:
+        if created and row.source_type is None:
+            row.source_type = SOURCE_TYPE_GITHUB
+        return
+    if created:
+        row.source_type = source_type
+    elif source_type == SOURCE_TYPE_GITHUB:
+        row.source_type = SOURCE_TYPE_GITHUB
+    # Never downgrade connected -> external on update.
 
 
 def _apply_metadata_to_row(session: Session, row: Repository, metadata: dict[str, Any]) -> None:
@@ -110,6 +130,7 @@ def upsert_repository(
         )
         session.add(row)
 
+    _apply_source_type(row, metadata, created=created)
     _apply_metadata_to_row(session, row, metadata)
     session.flush()
     return row, created
@@ -173,6 +194,7 @@ def _repo_to_api(session: Session, row: Repository) -> dict:
 
     data["aiAnalysis"] = extract_from_settings(row.settings, "aiAnalysis")
     data["aiArchitectureAnalysis"] = extract_from_settings(row.settings, "aiArchitectureAnalysis")
+    data["sourceType"] = row.source_type or SOURCE_TYPE_GITHUB
     return data
 
 
@@ -201,21 +223,31 @@ def list_repos(
     *,
     user_id: str | None = None,
     team_ids: list[str] | None = None,
+    repo_type: str = SOURCE_TYPE_GITHUB,
 ) -> list[dict]:
     from sqlalchemy import or_
 
     query = exclude_seed_repositories(select(Repository))
+    if repo_type == SOURCE_TYPE_GITHUB:
+        query = only_connected_repositories(query)
+    elif repo_type == SOURCE_TYPE_EXTERNAL:
+        query = only_external_repositories(query)
+    # repo_type == "all": no source_type filter
+
     if user_id:
         team_ids = team_ids or []
-        conditions = [
-            Repository.owner_user_id == user_id,
-            Repository.owner_user_id.is_(None),
-        ]
-        if team_ids:
-            conditions.append(
-                (Repository.team_id.in_(team_ids)) & (Repository.visibility == "team")
-            )
-        query = query.where(or_(*conditions))
+        if repo_type == SOURCE_TYPE_EXTERNAL:
+            query = query.where(Repository.owner_user_id == user_id)
+        else:
+            conditions = [
+                Repository.owner_user_id == user_id,
+                Repository.owner_user_id.is_(None),
+            ]
+            if team_ids:
+                conditions.append(
+                    (Repository.team_id.in_(team_ids)) & (Repository.visibility == "team")
+                )
+            query = query.where(or_(*conditions))
     rows = session.scalars(query.order_by(Repository.full_name)).all()
     return [_repo_to_api(session, r) for r in rows]
 
@@ -316,6 +348,8 @@ def upsert_repo(
     full_name: str,
     installation_id: str | None = None,
     payload: dict | None = None,
+    source_type: str | None = None,
+    owner_user_id: str | None = None,
 ) -> Repository:
     """Legacy upsert used by GitHub sync/webhook paths."""
     github_id = None
@@ -337,6 +371,10 @@ def upsert_repo(
         "payload": payload,
         "installation_id": installation_id,
     }
+    if source_type is not None:
+        metadata["source_type"] = source_type
+    if owner_user_id is not None:
+        metadata["owner_user_id"] = owner_user_id
     row, _ = upsert_repository(session, metadata, installation_id=installation_id)
     return row
 

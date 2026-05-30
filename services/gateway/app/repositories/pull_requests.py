@@ -8,9 +8,11 @@ from sqlalchemy.orm import Session
 from app.db.models import PullRequest, PullRequestDiff, Repository
 from app.repositories.seed_filter import (
     LEGACY_SEED_PULL_REQUEST_IDS,
+    SOURCE_TYPE_GITHUB,
     exclude_seed_repositories,
     is_seed_pull_request,
     is_seed_repository,
+    only_connected_repositories,
 )
 
 
@@ -21,10 +23,13 @@ def list_pull_requests(
     risk: str | None = None,
     author: str | None = None,
     state: str | None = None,
+    include_external: bool = False,
 ) -> list[dict]:
     stmt = exclude_seed_repositories(
         select(PullRequest).join(Repository, PullRequest.repository_id == Repository.id)
     )
+    if not include_external:
+        stmt = only_connected_repositories(stmt)
     rows = session.scalars(stmt).all()
     if rows:
         repo_map = {
@@ -40,7 +45,7 @@ def list_pull_requests(
             for r in rows
             if not is_seed_pull_request(r, repo=repo_map.get(r.repository_id))
         ]
-    items = [_pr_dict(r) for r in rows]
+    items = [_pr_dict(r, repo=repo_map.get(r.repository_id)) for r in rows]
     if repo:
         items = [p for p in items if repo in p.get("repo", "")]
     if risk:
@@ -81,7 +86,7 @@ def get_pull_request(session: Session, pr_id: str) -> dict | None:
     repo = session.get(Repository, row.repository_id)
     if repo is not None and (is_seed_repository(repo) or is_seed_pull_request(row, repo=repo)):
         return None
-    return _pr_dict(row)
+    return _pr_dict(row, repo=repo)
 
 
 def get_diff(session: Session, pr_id: str) -> list[dict]:
@@ -167,13 +172,17 @@ def upsert_pull_request(
     return row
 
 
-def _pr_dict(row: PullRequest) -> dict:
+def _pr_dict(row: PullRequest, repo: Repository | None = None) -> dict:
     if row.payload:
-        return deepcopy(row.payload)
-    return {
-        "id": row.id,
-        "repoId": row.repository_id,
-        "number": row.number,
-        "state": row.state,
-        "riskScore": row.risk_score,
-    }
+        data = deepcopy(row.payload)
+    else:
+        data = {
+            "id": row.id,
+            "repoId": row.repository_id,
+            "number": row.number,
+            "state": row.state,
+            "riskScore": row.risk_score,
+        }
+    if repo is not None:
+        data["sourceType"] = repo.source_type or SOURCE_TYPE_GITHUB
+    return data
