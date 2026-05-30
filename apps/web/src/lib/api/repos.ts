@@ -84,6 +84,13 @@ export function saveRepoArchitectureAnalysis(
   })
 }
 
+export function removeRepository(repoId: string, signal?: AbortSignal) {
+  return apiFetch<{ ok: boolean; id: string }>(`/api/repos/${repoId}`, {
+    method: "DELETE",
+    signal,
+  })
+}
+
 export function cloneRepo(repoId: string, signal?: AbortSignal) {
   return apiFetch<{ status: string }>(`/api/repos/${repoId}/clone`, {
     method: "POST",

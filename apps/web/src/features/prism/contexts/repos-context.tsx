@@ -22,6 +22,7 @@ import { useAuth } from "@/features/prism/contexts/auth-context"
 import {
   fetchRepoAnalyzeContext,
   fetchRepos,
+  removeRepository,
   saveRepoAiAnalysis,
   syncMyRepositories,
 } from "@/lib/api/repos"
@@ -39,6 +40,8 @@ interface ReposContextValue {
   sync: () => Promise<SyncRepositoriesResponse>
   importRepo: (url: string) => Promise<Repository | null>
   analyzeRepository: (repoId: string) => Promise<void>
+  removeRepo: (repoId: string) => Promise<void>
+  removingRepoId: string | null
   clearAnalysisError: (repoId: string) => void
 }
 
@@ -119,6 +122,7 @@ export function ReposProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [analyzingRepoId, setAnalyzingRepoId] = useState<string | null>(null)
+  const [removingRepoId, setRemovingRepoId] = useState<string | null>(null)
   const [analysisErrorsByRepoId, setAnalysisErrorsByRepoId] = useState<Record<string, string>>({})
   const analyzeAbortRef = useRef<AbortController | null>(null)
 
@@ -188,6 +192,30 @@ export function ReposProvider({ children }: { children: ReactNode }) {
       return next
     })
   }, [])
+
+  const removeRepo = useCallback(
+    async (repoId: string) => {
+      setSyncError(null)
+      setRemovingRepoId(repoId)
+      try {
+        await removeRepository(repoId)
+        setRepos((prev) => prev.filter((r) => r.id !== repoId))
+        setAnalysisErrorsByRepoId((prev) => {
+          if (!prev[repoId]) return prev
+          const next = { ...prev }
+          delete next[repoId]
+          return next
+        })
+        await refresh()
+      } catch (e: unknown) {
+        setSyncError(e instanceof PrismApiError ? e.message : "取消管理失败")
+        throw e
+      } finally {
+        setRemovingRepoId((current) => (current === repoId ? null : current))
+      }
+    },
+    [refresh],
+  )
 
   const analyzeRepository = useCallback(
     async (repoId: string) => {
@@ -307,10 +335,12 @@ export function ReposProvider({ children }: { children: ReactNode }) {
       syncError,
       analyzingRepoId,
       analysisErrorsByRepoId,
+      removingRepoId,
       refresh,
       sync,
       importRepo,
       analyzeRepository,
+      removeRepo,
       clearAnalysisError,
     }),
     [
@@ -322,10 +352,12 @@ export function ReposProvider({ children }: { children: ReactNode }) {
       syncError,
       analyzingRepoId,
       analysisErrorsByRepoId,
+      removingRepoId,
       refresh,
       sync,
       importRepo,
       analyzeRepository,
+      removeRepo,
       clearAnalysisError,
     ],
   )

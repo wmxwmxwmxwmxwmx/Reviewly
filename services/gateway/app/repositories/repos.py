@@ -1,13 +1,29 @@
 from __future__ import annotations
 
+import logging
+import shutil
 from copy import deepcopy
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.db.models import AnalysisFinding, AnalysisJob, PullRequest, Repository
+from app.core.config import settings
+from app.core.errors import api_error
+from app.db.models import (
+    ActivityEvent,
+    AnalysisFinding,
+    AnalysisJob,
+    GovernanceViolation,
+    PullRequest,
+    PullRequestDiff,
+    PullRequestFile,
+    Repository,
+)
+
+logger = logging.getLogger(__name__)
 from app.repositories.ai_persisted import extract_from_settings
 from app.repositories.seed_filter import (
     SOURCE_TYPE_EXTERNAL,
@@ -265,6 +281,53 @@ def get_repo_row_for_user(session: Session, repo_id: str, user_id: str, team_ids
     if row.visibility == "team" and row.team_id and row.team_id in team_ids:
         return row
     return None
+
+
+def _purge_repo_clone_cache(repo_id: str) -> None:
+    cache_dir = Path(settings.prism_repo_cache_dir) / repo_id
+    if not cache_dir.exists():
+        return
+    try:
+        shutil.rmtree(cache_dir)
+    except OSError as exc:
+        logger.warning("Failed to purge clone cache for %s: %s", repo_id, exc)
+
+
+def _delete_repository_cascade(session: Session, repo_id: str) -> None:
+    pr_ids = list(
+        session.scalars(select(PullRequest.id).where(PullRequest.repository_id == repo_id)).all()
+    )
+    if pr_ids:
+        job_ids = select(AnalysisJob.id).where(AnalysisJob.pull_request_id.in_(pr_ids))
+        session.execute(delete(AnalysisFinding).where(AnalysisFinding.job_id.in_(job_ids)))
+        session.execute(delete(AnalysisJob).where(AnalysisJob.pull_request_id.in_(pr_ids)))
+        session.execute(
+            delete(GovernanceViolation).where(GovernanceViolation.pull_request_id.in_(pr_ids))
+        )
+        session.execute(delete(ActivityEvent).where(ActivityEvent.pull_request_id.in_(pr_ids)))
+        session.execute(delete(PullRequestDiff).where(PullRequestDiff.pull_request_id.in_(pr_ids)))
+        session.execute(delete(PullRequestFile).where(PullRequestFile.pull_request_id.in_(pr_ids)))
+        session.execute(delete(PullRequest).where(PullRequest.id.in_(pr_ids)))
+    session.execute(delete(Repository).where(Repository.id == repo_id))
+    session.flush()
+
+
+def delete_repository_for_user(
+    session: Session,
+    repo_id: str,
+    user_id: str,
+    team_ids: list[str],
+) -> str | None:
+    """Remove a repository from management. Returns full_name on success, None if not found."""
+    row = get_repo_row_for_user(session, repo_id, user_id, team_ids)
+    if row is None:
+        return None
+    if row.owner_user_id not in (None, user_id):
+        raise api_error("您没有权限取消管理此仓库", 403)
+    full_name = row.full_name
+    _delete_repository_cascade(session, repo_id)
+    _purge_repo_clone_cache(repo_id)
+    return full_name
 
 
 def get_repo(session: Session, repo_id: str) -> dict | None:
