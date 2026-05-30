@@ -87,4 +87,5 @@ async def generic_handler(_: Request, exc: Exception) -> JSONResponse:
         if isinstance(detail, dict):
             return JSONResponse(status_code=exc.status_code, content=detail)
         return JSONResponse(status_code=exc.status_code, content={"error": str(detail)})
+    logger.exception("Unhandled server error")
     return JSONResponse(status_code=500, content={"error": "服务器内部错误"})

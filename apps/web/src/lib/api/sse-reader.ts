@@ -1,3 +1,9 @@
+import type { ApiError } from "@reviewly/shared"
+
+import { getAuthToken } from "@/lib/auth/storage"
+
+import { extractApiErrorMessage } from "./client"
+
 export type SseReaderOptions = {
   signal?: AbortSignal
   onDelta: (text: string) => void
@@ -14,11 +20,19 @@ export async function readSseResponse(
   options: SseReaderOptions,
 ): Promise<void> {
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    const msg =
-      typeof err === "object" && err && "detail" in err
-        ? String((err as { detail?: { error?: string } }).detail?.error ?? response.statusText)
-        : response.statusText
+    const text = await response.text()
+    let msg = response.statusText || "请求失败"
+    try {
+      const err = JSON.parse(text) as ApiError
+      msg = extractApiErrorMessage(err, msg)
+    } catch {
+      if (/internal server error|socket hang up|ECONNRESET/i.test(text)) {
+        msg =
+          "后端服务不可用或请求超时。请确认 Gateway 在 localhost:3001 运行，且仅有一个实例。"
+      } else if (text.trim()) {
+        msg = text.length > 280 ? `${text.slice(0, 280)}…` : text
+      }
+    }
     options.onError?.(msg)
     return
   }
@@ -81,9 +95,13 @@ export async function postSse(
   body: unknown,
   options: SseReaderOptions,
 ): Promise<void> {
+  const token = getAuthToken()
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(body),
     signal: options.signal,
   })

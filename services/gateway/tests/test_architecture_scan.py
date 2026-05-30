@@ -50,6 +50,21 @@ def test_scan_endpoint_uses_fixture(client: TestClient) -> None:
     assert len(g.json()["nodes"]) >= 4
 
 
+def test_architecture_analyze_rejects_empty_graph(client: TestClient) -> None:
+    repos = client.get("/api/repos").json()
+    if not repos:
+        pytest.skip("no repos")
+    repo_id = repos[0]["id"]
+    empty = {"nodes": [], "edges": [], "metrics": {}, "status": "empty"}
+    with patch(
+        "app.services.architecture_analyze.architecture_repo.get_dependency_graph",
+        return_value=empty,
+    ):
+        r = client.post(f"/api/architecture/repos/{repo_id}/analyze")
+    assert r.status_code == 200
+    assert "请先" in r.text
+
+
 def test_architecture_analyze_requires_api_key(client: TestClient) -> None:
     repos = client.get("/api/repos").json()
     if not repos:

@@ -2,19 +2,47 @@
 
 const GATEWAY_ORIGIN = process.env.API_URL ?? "http://localhost:3001"
 const DEFAULT_TIMEOUT_MS = 120_000
+/** First-time git clone of large monorepos can exceed 5 minutes on slow networks. */
+const SCAN_TIMEOUT_MS = 900_000
+
+function gatewayUrl(path: string): string {
+  const normalized = path.startsWith("/") ? path : `/${path}`
+  return `${GATEWAY_ORIGIN}${normalized}`
+}
+
+function gatewayUnreachableMessage(cause: unknown): string {
+  if (cause instanceof Error && cause.name === "TimeoutError") {
+    return "架构扫描超时：首次克隆大仓库可能较慢。请稍后再次点击「重新扫描」，或刷新页面查看是否已在后台完成。"
+  }
+  const detail = cause instanceof Error ? cause.message : String(cause)
+  if (/ECONNREFUSED|fetch failed|socket hang up|ECONNRESET/i.test(detail)) {
+    return "无法连接后端 Gateway（请确认已在 localhost:3001 运行，且仅启动一个实例）。"
+  }
+  if (/aborted|timeout|ETIMEDOUT/i.test(detail)) {
+    return "架构扫描超时：首次克隆大仓库可能较慢。请稍后再次点击「重新扫描」，或刷新页面查看是否已在后台完成。"
+  }
+  return `后端请求失败：${detail}`
+}
 
 export async function proxyToGateway(
   path: string,
   init: RequestInit,
   options?: { timeoutMs?: number },
 ): Promise<Response> {
-  const normalized = path.startsWith("/") ? path : `/${path}`
-  const url = `${GATEWAY_ORIGIN}${normalized}`
+  const url = gatewayUrl(path)
 
-  const res = await fetch(url, {
-    ...init,
-    signal: init.signal ?? AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_TIMEOUT_MS),
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      ...init,
+      signal: init.signal ?? AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+    })
+  } catch (cause) {
+    return new Response(JSON.stringify({ error: gatewayUnreachableMessage(cause) }), {
+      status: 502,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
 
   const body = await res.text()
   return new Response(body, {
@@ -24,3 +52,44 @@ export async function proxyToGateway(
     },
   })
 }
+
+/** Stream SSE or other long-lived responses without buffering the full body. */
+export async function proxyToGatewayStream(
+  path: string,
+  init: RequestInit,
+  options?: { timeoutMs?: number },
+): Promise<Response> {
+  const url = gatewayUrl(path)
+
+  try {
+    const res = await fetch(url, {
+      ...init,
+      signal: init.signal ?? AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+    })
+
+    const contentType = res.headers.get("content-type") ?? "text/event-stream"
+    if (!res.ok && !contentType.includes("text/event-stream")) {
+      const body = await res.text()
+      return new Response(body, {
+        status: res.status,
+        headers: { "Content-Type": contentType },
+      })
+    }
+
+    return new Response(res.body, {
+      status: res.status,
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": res.headers.get("cache-control") ?? "no-cache",
+        "X-Accel-Buffering": res.headers.get("x-accel-buffering") ?? "no",
+      },
+    })
+  } catch (cause) {
+    return new Response(JSON.stringify({ error: gatewayUnreachableMessage(cause) }), {
+      status: 502,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+}
+
+export { SCAN_TIMEOUT_MS }

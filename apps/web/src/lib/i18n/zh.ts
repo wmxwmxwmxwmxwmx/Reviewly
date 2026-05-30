@@ -184,6 +184,13 @@ export const zh = {
     clickNodeHint: "点击节点查看详情",
     aiAnalysis: "AI 架构分析",
     aiAnalyzeHint: "完成扫描后，可请求 AI 生成架构建议",
+    notScannedYet: "尚未扫描依赖图",
+    startScan: "开始扫描",
+    scanEmpty:
+      "扫描完成，但未发现可分析的源文件（支持 Python / TypeScript / C++）。请确认仓库已克隆且包含代码。",
+    scanBeforeAi: "请先扫描依赖图，再生成 AI 架构分析。",
+    aiGenerating: "正在生成架构分析…",
+    graphSummary: (nodes: number, edges: number) => `节点 ${nodes} · 边 ${edges}`,
   },
   common: {
     all: "全部",

@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     prism_repo_cache_dir: str = "./data/repo-cache"
     architecture_scan_max_files: int = 2000
     repo_cache_ttl_hours: int = 24
+    git_clone_timeout_seconds: int = 840
 
 
 settings = Settings()
