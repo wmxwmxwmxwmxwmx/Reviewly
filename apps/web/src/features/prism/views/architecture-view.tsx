@@ -5,6 +5,7 @@ import { useEffect } from "react"
 
 import { Skeleton } from "@/components/ui/skeleton"
 import { ArchitectureGraphViewer } from "@/features/prism/components/architecture-graph-viewer"
+import { ArchitectureScanProgressBar } from "@/features/prism/components/architecture-scan-progress"
 import { SummaryMarkdown } from "@/features/prism/components/summary-markdown"
 import { useArchitecture } from "@/hooks/use-architecture"
 import { useArchitectureAnalyze } from "@/hooks/use-architecture-analyze"
@@ -31,7 +32,7 @@ export function ArchitectureView() {
     }
   }, [repoId, repos, setRepoId])
 
-  const { graph, metrics, loading, scanning, error, scan } = useArchitecture(repoId)
+  const { graph, metrics, loading, scanning, scanProgress, error, scan } = useArchitecture(repoId)
   const { selectedNode, inbound, outbound } = useArchitectureSelection(
     graph,
     selectedNodeId,
@@ -105,6 +106,10 @@ export function ArchitectureView() {
         </div>
       )}
 
+      {scanning && scanProgress && (
+        <ArchitectureScanProgressBar progress={scanProgress} />
+      )}
+
       {!loading && !scanning && needsScan && repoId && (
         <div className="rounded-lg border border-ai-blue/30 bg-ai-blue/10 px-4 py-3 text-sm text-foreground">
           {zh.architecture.scanBeforeAi}
@@ -161,7 +166,7 @@ export function ArchitectureView() {
           )}
         </div>
 
-        {(loading || scanning) && !graph && (
+        {(loading || scanning) && !graph && !scanProgress && (
           <div className="p-4 space-y-2">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-4 w-2/3" />

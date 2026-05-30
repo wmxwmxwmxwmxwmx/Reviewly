@@ -27,6 +27,7 @@ def _sse_error_message(exc: Exception) -> str:
 
 class ScanBody(BaseModel):
     repo_id: str = Field(validation_alias="repoId")
+    stream: bool = False
 
     model_config = {"populate_by_name": True}
 
@@ -36,7 +37,25 @@ class AnalyzeBody(BaseModel):
 
 
 @router.post("/scan")
-async def scan_repository(body: ScanBody, db: Session = Depends(get_db)) -> dict:
+async def scan_repository(body: ScanBody, db: Session = Depends(get_db)):
+    if body.stream:
+
+        async def event_stream():
+            try:
+                async for event in architecture_scan_service.stream_run_scan(db, body.repo_id):
+                    payload = json.dumps(event, ensure_ascii=False)
+                    yield f"data: {payload}\n\n"
+                yield "data: [DONE]\n\n"
+            except Exception as exc:  # noqa: BLE001
+                yield f"data: {json.dumps({'error': _sse_error_message(exc)}, ensure_ascii=False)}\n\n"
+                yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     return await architecture_scan_service.run_scan(db, body.repo_id)
 
 

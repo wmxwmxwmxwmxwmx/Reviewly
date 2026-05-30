@@ -1,6 +1,7 @@
 """Build dependency graph from cloned repository."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from app.architecture.layers import classify_layer
@@ -11,6 +12,8 @@ from app.architecture.parsers import (
 )
 from app.architecture.walker import iter_source_files, language_for
 from app.core.config import settings
+
+ProgressFn = Callable[[str, int, int | None, str], None]
 
 
 def _read_text(path: Path) -> str:
@@ -64,14 +67,23 @@ def _resolve_cpp(target: str, rel_path: str, index: dict[str, str]) -> str | Non
     return None
 
 
-def build_graph(repo_root: Path) -> dict:
+def build_graph(repo_root: Path, on_progress: ProgressFn | None = None) -> dict:
+    def emit(phase: str, current: int, total: int | None, message: str) -> None:
+        if on_progress:
+            on_progress(phase, current, total, message)
+
     root = repo_root.resolve()
+    emit("discover", 0, None, "正在扫描源文件…")
     files = iter_source_files(root, settings.architecture_scan_max_files)
+    total = len(files)
+    emit("discover", total, total, f"发现 {total} 个源文件")
+
     path_to_id: dict[str, str] = {}
     nodes: list[dict] = []
     import_counts: dict[str, int] = {}
 
-    for fpath in files:
+    emit("nodes", 0, total or None, "正在解析模块…")
+    for idx, fpath in enumerate(files):
         rel = _node_id(str(fpath.relative_to(root)))
         path_to_id[rel] = rel
         content = _read_text(fpath)
@@ -87,9 +99,12 @@ def build_graph(repo_root: Path) -> dict:
                 "importCount": 0,
             }
         )
+        if total and (idx % 10 == 0 or idx == total - 1):
+            emit("nodes", idx + 1, total, f"正在解析模块 ({idx + 1}/{total})")
 
     edges: list[dict] = []
-    for fpath in files:
+    emit("edges", 0, total or None, "正在分析依赖…")
+    for idx, fpath in enumerate(files):
         rel = _node_id(str(fpath.relative_to(root)))
         content = _read_text(fpath)
         lang = language_for(fpath)
@@ -114,13 +129,17 @@ def build_graph(repo_root: Path) -> dict:
                 edges.append({"from": rel, "to": dest, "kind": "import"})
                 resolved += 1
         import_counts[rel] = resolved
+        if total and (idx % 10 == 0 or idx == total - 1):
+            emit("edges", idx + 1, total, f"正在分析依赖 ({idx + 1}/{total})")
 
     for node in nodes:
         node["importCount"] = import_counts.get(node["id"], 0)
 
     from app.architecture.analysis import analyze_graph
 
+    emit("metrics", 0, None, "正在计算架构指标…")
     metrics = analyze_graph(nodes, edges)
+    emit("metrics", 1, 1, "指标计算完成")
 
     return {
         "nodes": nodes,

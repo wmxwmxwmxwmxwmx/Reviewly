@@ -182,6 +182,16 @@ export const zh = {
     scanBeforeAi: "请先扫描依赖图，再生成 AI 架构分析。",
     aiGenerating: "正在生成架构分析…",
     graphSummary: (nodes: number, edges: number) => `节点 ${nodes} · 边 ${edges}`,
+    scanPhases: {
+      prepare: "准备",
+      clone: "克隆仓库",
+      discover: "发现源文件",
+      nodes: "解析模块",
+      edges: "分析依赖",
+      metrics: "计算指标",
+      save: "保存结果",
+      done: "完成",
+    } as Record<string, string>,
   },
   common: {
     all: "全部",
