@@ -33,6 +33,8 @@ import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 
+const PENDING_AUTO_ANALYZE_KEY = "prism:pending-auto-analyze"
+
 interface AIReviewViewProps {
   prId: string
   onMenuClick?: () => void
@@ -95,6 +97,7 @@ export function AIReviewView({
   const [governanceRefreshKey, setGovernanceRefreshKey] = useState(0)
 
   const analyzeAbortRef = useRef<AbortController | null>(null)
+  const handleRescanRef = useRef<(() => Promise<void>) | null>(null)
 
   useEffect(() => {
     setLastReviewedPrId(prId)
@@ -159,6 +162,8 @@ export function AIReviewView({
     async (url: string) => {
       setImporting(true)
       setImportError(null)
+      setAnalysisError(null)
+      setSyncLabel(zh.common.importingPrHint)
       try {
         const result = await importPullRequestByUrl(url)
         if (result.source === "cache") {
@@ -169,7 +174,10 @@ export function AIReviewView({
           setSyncLabel(zh.common.importedFromGithub)
         }
         if (result.prId !== prId) {
+          sessionStorage.setItem(PENDING_AUTO_ANALYZE_KEY, result.prId)
           navigate("ai-review", { prId: result.prId })
+        } else {
+          void handleRescanRef.current?.()
         }
       } catch (error) {
         const message =
@@ -402,6 +410,16 @@ ${diffContext || "（无 diff 内容）"}`,
     hasApiKey,
     generateSummary,
   ])
+
+  handleRescanRef.current = handleRescan
+
+  useEffect(() => {
+    if (prLoading || diffLoading || !pr || importing) return
+    const pendingPrId = sessionStorage.getItem(PENDING_AUTO_ANALYZE_KEY)
+    if (!pendingPrId || pendingPrId !== prId) return
+    sessionStorage.removeItem(PENDING_AUTO_ANALYZE_KEY)
+    void handleRescanRef.current?.()
+  }, [prId, prLoading, diffLoading, pr, importing])
 
   const handleRegenerateSummary = useCallback(async () => {
     if (analyzing || prLoading || diffLoading || !pr) return

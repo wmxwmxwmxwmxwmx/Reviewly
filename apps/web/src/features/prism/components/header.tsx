@@ -17,6 +17,8 @@ import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import type { PullRequest } from "@reviewly/shared"
 
+const URL_AUTO_SUBMIT_MS = 600
+
 interface HeaderProps {
   prData: PullRequest
   analyzing: boolean
@@ -73,6 +75,20 @@ export function Header({
     setLocalUrlError(null)
     await onImportUrl(trimmed)
   }, [inputUrl, importing, onImportUrl])
+
+  useEffect(() => {
+    const trimmed = inputUrl.trim()
+    if (!trimmed || importing || analyzing) return
+    if (validateGitHubPrUrl(trimmed)) return
+    const currentUrl = (prData.url ?? "").trim()
+    if (trimmed === currentUrl) return
+
+    const timer = window.setTimeout(() => {
+      void submitUrl()
+    }, URL_AUTO_SUBMIT_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [inputUrl, importing, analyzing, prData.url, submitUrl])
 
   const syncLooksSuccessful =
     Boolean(syncLabel) &&
@@ -172,7 +188,9 @@ export function Header({
             {importing ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-ai-blue" />
-                <span className="text-muted-foreground truncate">{syncLabel ?? zh.common.analyzeReady}</span>
+                <span className="text-muted-foreground truncate">
+                  {syncLabel ?? zh.common.importingPrHint}
+                </span>
               </>
             ) : importError ? (
               <>

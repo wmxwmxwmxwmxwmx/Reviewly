@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -189,8 +190,16 @@ async def sync_single_pull_request_public(
     repo: str,
     number: int,
 ) -> str:
-    gh_repo = await public_client.get_repo(owner, repo)
     gh_pr = await public_client.get_pull_request(owner, repo, number)
+    try:
+        gh_repo = await public_client.get_repo_public(owner, repo)
+    except HTTPException:
+        base_repo = gh_pr.get("base", {}).get("repo", {}) or {}
+        gh_repo = {
+            "id": base_repo.get("id") or 0,
+            "full_name": base_repo.get("full_name") or f"{owner}/{repo}",
+            "default_branch": base_repo.get("default_branch", "main"),
+        }
     patch = await public_client.get_pull_diff_patch(owner, repo, number)
     gh_files, commit_count = await _fetch_pr_files_and_commits(
         owner, repo, number, installation_id=None

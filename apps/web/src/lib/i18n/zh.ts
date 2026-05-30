@@ -209,6 +209,7 @@ export const zh = {
     importPrUrl: "导入 PR URL",
     importPrPlaceholder: "https://github.com/owner/repo/pull/123",
     importingPr: "正在导入…",
+    importingPrHint: "正在导入 PR…",
     importFailed: "无法导入 PR",
     syncComplete: "同步完成",
     loaded: "已加载",

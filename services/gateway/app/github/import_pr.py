@@ -1,6 +1,7 @@
 """Import a single pull request by GitHub URL into the database."""
 from __future__ import annotations
 
+import httpx
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -22,7 +23,11 @@ async def import_pull_request_by_url(session: Session, url: str) -> dict[str, st
     last_error: HTTPException | None = None
 
     if settings.github_app_id and settings.github_app_private_key:
-        installation_id = await get_installation_id_for_repo(parsed.owner, parsed.repo)
+        try:
+            installation_id = await get_installation_id_for_repo(parsed.owner, parsed.repo)
+        except httpx.HTTPError as exc:
+            last_error = api_error(f"GitHub App 安装查询失败：{exc}", 502)
+            installation_id = None
         if installation_id:
             try:
                 pr_id = await sync.sync_single_pull_request(

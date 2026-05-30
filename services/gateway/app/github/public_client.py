@@ -37,6 +37,15 @@ async def get_repo(owner: str, repo: str) -> dict[str, Any]:
     return await fetch_repo(owner, repo)
 
 
+async def get_repo_public(owner: str, repo: str) -> dict[str, Any]:
+    """Fetch repo metadata with optional PAT (works for public repos without auth)."""
+    url = f"https://api.github.com/repos/{owner}/{repo}"
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.get(url, headers=_auth_headers())
+        _check_response(resp, resource="该仓库")
+        return resp.json()
+
+
 async def get_pull_request(owner: str, repo: str, number: int) -> dict[str, Any]:
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
     async with httpx.AsyncClient(timeout=60.0) as client:
