@@ -95,6 +95,9 @@ export function Header({
           </button>
         )}
         <div className="flex flex-col flex-1 max-w-[400px] min-w-0 gap-1">
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium px-0.5">
+            {zh.common.importPrUrl}
+          </span>
           <div
             className={cn(
               "relative flex items-center gap-2 h-9 px-3 rounded-md border bg-surface-2 transition-all duration-200",
@@ -121,7 +124,8 @@ export function Header({
                 }
               }}
               disabled={importing}
-              placeholder="https://github.com/user/repo/pull/123"
+              placeholder={zh.common.importPrPlaceholder}
+              aria-label={zh.common.importPrUrl}
               className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none min-w-0 font-mono text-xs disabled:opacity-60"
             />
             <button
@@ -129,7 +133,7 @@ export function Header({
               onClick={() => void submitUrl()}
               disabled={importing || !inputUrl.trim()}
               className="shrink-0 p-0.5 rounded hover:bg-accent disabled:opacity-40 disabled:pointer-events-none"
-              aria-label="加载 PR"
+              aria-label={importing ? zh.common.importingPr : zh.common.loadPr}
             >
               {importing ? (
                 <Loader2 className="w-3.5 h-3.5 text-ai-blue animate-spin" />

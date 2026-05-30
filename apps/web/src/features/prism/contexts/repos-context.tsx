@@ -12,7 +12,8 @@ import {
 import type { Repository, SyncRepositoriesResponse } from "@reviewly/shared"
 
 import { useAISettings, estimateCostCny } from "@/features/prism/contexts/ai-settings-context"
-import { PrismApiError } from "@/lib/api/client"
+import { extractApiErrorMessage, parseFetchJson, PrismApiError } from "@/lib/api/client"
+import { getAuthToken } from "@/lib/auth/storage"
 import { useReposSync } from "@/hooks/use-repos-sync"
 import { useAuth } from "@/features/prism/contexts/auth-context"
 import {
@@ -43,7 +44,12 @@ const ReposContext = createContext<ReposContextValue | null>(null)
 function buildAnalyzePrompt(
   repo: Repository,
   findings: { title: string; severity: string; file: string; line: number; description?: string }[],
-  readme: string,
+  ctx: {
+    readme: string
+    fileTree?: string
+    configSnippets?: Record<string, string>
+    contextWarnings?: string[]
+  },
 ) {
   const findingsBlock =
     findings.length > 0
@@ -55,6 +61,18 @@ function buildAnalyzePrompt(
           .join("\n")
       : "（暂无 PR 分析 findings）"
 
+  const warningsBlock =
+    ctx.contextWarnings && ctx.contextWarnings.length > 0
+      ? ctx.contextWarnings.map((w) => `- ${w}`).join("\n")
+      : "（无）"
+
+  const configBlock =
+    ctx.configSnippets && Object.keys(ctx.configSnippets).length > 0
+      ? Object.entries(ctx.configSnippets)
+          .map(([path, body]) => `### ${path}\n\`\`\`\n${body}\n\`\`\``)
+          .join("\n\n")
+      : "（未获取到 package.json / pyproject.toml 等配置文件）"
+
   return `请分析以下 GitHub 仓库，用中文 Markdown 输出，必须包含四个二级标题：
 
 ## 项目复杂度分析
@@ -62,16 +80,32 @@ function buildAnalyzePrompt(
 ## 风险模块推测
 ## 可维护性分析
 
+要求：
+- 必须基于下方 README、目录树、配置文件与 findings 作答；禁止仅根据仓库名猜测。
+- 若某类数据缺失，在对应章节明确说明「数据不足」并给出有限结论。
+
 仓库：${repo.fullName}
+描述：${repo.description ?? "（无）"}
+语言（GitHub）：${repo.language ?? "（未知）"}
 默认分支：${repo.defaultBranch}
 开放 PR 数：${repo.openPrCount}
 健康度：${repo.healthScore}
+是否私有：${repo.isPrivate ? "是" : "否"}
+
+上下文告警：
+${warningsBlock}
 
 最近 PR Findings：
 ${findingsBlock}
 
+仓库文件路径（节选）：
+${ctx.fileTree?.trim() || "（无法获取目录树）"}
+
+关键配置文件：
+${configBlock}
+
 README（节选）：
-${readme || "（无法获取 README）"}`
+${ctx.readme?.trim() || "（无法获取 README）"}`
 }
 
 export function ReposProvider({ children }: { children: ReactNode }) {
@@ -165,15 +199,29 @@ export function ReposProvider({ children }: { children: ReactNode }) {
 
       try {
         const ctx = await fetchRepoAnalyzeContext(repoId)
-        const prompt = buildAnalyzePrompt(
-          ctx.repository,
-          ctx.recentFindings,
-          ctx.readme,
-        )
 
+        const hasTree = Boolean(ctx.fileTree?.trim())
+        const hasReadme = Boolean(ctx.readme?.trim())
+        const hasConfigs =
+          ctx.configSnippets != null && Object.keys(ctx.configSnippets).length > 0
+        if (!hasTree && !hasReadme && !hasConfigs && ctx.contextWarnings?.length) {
+          throw new Error(ctx.contextWarnings.join("；"))
+        }
+
+        const prompt = buildAnalyzePrompt(ctx.repository, ctx.recentFindings, {
+          readme: ctx.readme,
+          fileTree: ctx.fileTree,
+          configSnippets: ctx.configSnippets,
+          contextWarnings: ctx.contextWarnings,
+        })
+
+        const authToken = getAuthToken()
         const response = await fetch("/api/ai/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          },
           body: JSON.stringify({
             provider: settings.provider,
             model: settings.model,
@@ -182,20 +230,19 @@ export function ReposProvider({ children }: { children: ReactNode }) {
               {
                 role: "system",
                 content:
-                  "你是资深架构师与代码评审专家。仅基于用户提供的仓库元数据、findings 与 README 分析，禁止编造未出现的文件或技术栈。",
+                  "你是资深架构师与代码评审专家。仅基于用户提供的仓库元数据、目录树、配置文件、findings 与 README 分析；禁止编造未在上下文中出现的文件路径或依赖。",
               },
               { role: "user", content: prompt },
             ],
           }),
         })
 
-        const data = await response.json()
+        const data = await parseFetchJson<{
+          content?: string
+          usage?: { totalTokens?: number }
+        }>(response)
         if (!response.ok) {
-          const errMsg =
-            typeof data?.error === "string"
-              ? data.error
-              : data?.detail?.error ?? "AI 分析失败"
-          throw new Error(errMsg)
+          throw new Error(extractApiErrorMessage(data, "AI 分析失败"))
         }
 
         const content = data?.content || "模型未返回内容。"

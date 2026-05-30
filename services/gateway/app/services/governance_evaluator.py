@@ -28,6 +28,9 @@ def _rule_config(rule: dict[str, Any]) -> dict[str, Any]:
 
 
 def _infer_match_type(rule: dict[str, Any]) -> str:
+    explicit = rule.get("matchType")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip().lower()
     if rule.get("findingTypes") or rule.get("findingSeverities"):
         return "finding"
     if rule.get("filePatterns"):
@@ -35,6 +38,98 @@ def _infer_match_type(rule: dict[str, Any]) -> str:
     if rule.get("keywords"):
         return "keyword"
     return "keyword"
+
+
+_TEST_PATH_MARKERS = (
+    "/test/",
+    "/tests/",
+    "/__tests__/",
+    "_test.",
+    ".test.",
+    "_spec.",
+    ".spec.",
+)
+
+
+def _is_test_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").lower()
+    if normalized.startswith("test/") or normalized.endswith("_test.go"):
+        return True
+    return any(marker in normalized for marker in _TEST_PATH_MARKERS)
+
+
+def _evaluate_missing_tests(
+    rule: dict[str, Any],
+    *,
+    file_paths: list[str],
+) -> RuleEvaluation:
+    code_paths = [p for p in file_paths if p and not _is_test_path(p)]
+    test_paths = [p for p in file_paths if _is_test_path(p)]
+    if not code_paths:
+        return RuleEvaluation(
+            rule["id"],
+            False,
+            None,
+            "无业务代码文件变更，跳过测试覆盖检查。",
+            [],
+        )
+    if test_paths:
+        return RuleEvaluation(
+            rule["id"],
+            False,
+            None,
+            f"已包含测试相关变更（{len(test_paths)} 个文件），规则通过。",
+            [f"test:{p}" for p in test_paths[:3]],
+        )
+    sample = code_paths[0]
+    return RuleEvaluation(
+        rule["id"],
+        True,
+        sample,
+        f"变更了 {len(code_paths)} 个非测试文件但未发现测试文件，违反「{rule['rule']}」。",
+        [f"code:{p}" for p in code_paths[:5]],
+    )
+
+
+def _evaluate_large_pr(
+    rule: dict[str, Any],
+    *,
+    file_paths: list[str],
+    patch: str,
+    pr_meta: dict[str, Any] | None,
+) -> RuleEvaluation:
+    max_lines = int(rule.get("maxLines") or 800)
+    max_files = int(rule.get("maxFiles") or 40)
+    additions = int((pr_meta or {}).get("additions") or 0)
+    deletions = int((pr_meta or {}).get("deletions") or 0)
+    total_lines = additions + deletions
+    if total_lines <= 0 and patch:
+        total_lines = patch.count("\n") + 1
+    file_count = len(file_paths)
+
+    over_lines = total_lines > max_lines
+    over_files = file_count > max_files
+    if not over_lines and not over_files:
+        return RuleEvaluation(
+            rule["id"],
+            False,
+            None,
+            f"变更规模在阈值内（{file_count} 文件 / {total_lines} 行）。",
+            [],
+        )
+
+    reasons: list[str] = []
+    if over_lines:
+        reasons.append(f"{total_lines} 行 > {max_lines}")
+    if over_files:
+        reasons.append(f"{file_count} 文件 > {max_files}")
+    return RuleEvaluation(
+        rule["id"],
+        True,
+        file_paths[0] if file_paths else None,
+        f"PR 规模过大（{', '.join(reasons)}），违反「{rule['rule']}」。",
+        reasons,
+    )
 
 
 def _normalize_keywords(rule: dict[str, Any]) -> list[str]:
@@ -222,6 +317,7 @@ def evaluate_rule(
     patch: str,
     file_paths: list[str],
     findings: list[dict[str, Any]],
+    pr_meta: dict[str, Any] | None = None,
 ) -> RuleEvaluation:
     cfg = _rule_config(rule)
     match_type = str(cfg.get("matchType", "keyword")).lower()
@@ -230,6 +326,12 @@ def evaluate_rule(
         return _evaluate_file_pattern(cfg, file_paths=file_paths)
     if match_type == "finding":
         return _evaluate_finding(cfg, findings=findings)
+    if match_type == "missing_tests":
+        return _evaluate_missing_tests(cfg, file_paths=file_paths)
+    if match_type == "large_pr":
+        return _evaluate_large_pr(
+            cfg, file_paths=file_paths, patch=patch, pr_meta=pr_meta
+        )
     if match_type == "any":
         return _evaluate_any(cfg, patch=patch, file_paths=file_paths, findings=findings)
     return _evaluate_keyword(cfg, patch=patch, file_paths=file_paths, findings=findings)
@@ -242,6 +344,7 @@ def evaluate_pr(
     patch: str,
     file_paths: list[str],
     findings: list[dict[str, Any]],
+    pr_meta: dict[str, Any] | None = None,
 ) -> list[RuleEvaluation]:
     rules = governance_repo.list_enabled_rule_definitions(session)
     return [
@@ -250,6 +353,7 @@ def evaluate_pr(
             patch=patch,
             file_paths=file_paths,
             findings=findings,
+            pr_meta=pr_meta,
         )
         for rule in rules
     ]
@@ -289,13 +393,18 @@ def run_governance_check(
     patch: str,
     file_paths: list[str],
     findings: list[dict[str, Any]],
+    pr_meta: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    from app.repositories import pull_requests as pr_repo
+
+    meta = pr_meta or pr_repo.get_pull_request(session, pull_request_id)
     evaluations = evaluate_pr(
         session,
         pull_request_id,
         patch=patch,
         file_paths=file_paths,
         findings=findings,
+        pr_meta=meta,
     )
     persist_evaluations(session, pull_request_id, evaluations)
     return governance_repo.list_rules_for_pr(session, pull_request_id)

@@ -1,6 +1,7 @@
-"""GitHub REST client (B3)."""
-from __future__ import annotations
+"""Backward-compatible re-export (prefer app.integrations.github.github_client)."""
+from app.integrations.github.github_client import GitHubClient
 
+<<<<<<< HEAD
 from typing import Any
 
 import httpx
@@ -68,3 +69,6 @@ class GitHubClient:
                 resp, resource=f"{owner}/{repo}#{number} diff", has_pat=True
             )
             return resp.text
+=======
+__all__ = ["GitHubClient"]
+>>>>>>> e32d50c314a83d369b83816934fdd68a4b9bfb72

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.errors import api_error
 from app.github import sync
-from app.github.app_auth import get_installation_id_for_repo
+from app.integrations.github.app_auth import get_installation_id_for_repo
 from app.github.url_parser import parse_github_pr_url
 from app.repositories import pull_requests as pr_repo
 

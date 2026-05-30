@@ -1,8 +1,16 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_GATEWAY_ROOT = Path(__file__).resolve().parents[2]
+_ENV_FILE = _GATEWAY_ROOT / ".env"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=str(_ENV_FILE) if _ENV_FILE.is_file() else None,
+        extra="ignore",
+    )
 
     app_name: str = "PRism Gateway"
     debug: bool = False

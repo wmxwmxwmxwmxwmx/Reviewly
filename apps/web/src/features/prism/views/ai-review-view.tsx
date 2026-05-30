@@ -27,9 +27,11 @@ import {
   buildFindingsContext,
   PROMPT_BUDGET,
 } from "@/lib/ai/prompt-budget"
+import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import { PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface AIReviewViewProps {
   prId: string
@@ -160,11 +162,11 @@ export function AIReviewView({
       try {
         const result = await importPullRequestByUrl(url)
         if (result.source === "cache") {
-          setSyncLabel("已加载")
+          setSyncLabel(zh.common.loaded)
         } else if (result.source === "github_app") {
-          setSyncLabel("已从 GitHub 同步")
+          setSyncLabel(zh.common.syncedFromGithub)
         } else {
-          setSyncLabel("已从 GitHub 导入")
+          setSyncLabel(zh.common.importedFromGithub)
         }
         if (result.prId !== prId) {
           navigate("ai-review", { prId: result.prId })
@@ -175,7 +177,7 @@ export function AIReviewView({
             ? error.message
             : error instanceof Error
               ? error.message
-              : "无法加载 PR"
+              : zh.common.importFailed
         setImportError(message)
       } finally {
         setImporting(false)
@@ -295,7 +297,7 @@ ${diffContext || "（无 diff 内容）"}`,
           latencyMs: 0,
         })
       } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
+        if (isAbortError(error)) {
           return
         }
         const message = error instanceof Error ? error.message : "AI 摘要生成失败"
@@ -305,7 +307,7 @@ ${diffContext || "（无 diff 内容）"}`,
         }
         throw error
       } finally {
-        if (!signal.aborted) {
+        if (shouldApplyResult(signal)) {
           setSummaryStreaming(false)
         }
       }
@@ -359,7 +361,7 @@ ${diffContext || "（无 diff 内容）"}`,
       setGovernanceRefreshKey((k) => k + 1)
 
       if (!hasApiKey) {
-        if (result.latest.summary) {
+        if (result.latest?.summary) {
           setGeneratedSummary(result.latest.summary)
         }
         setAnalysisError("规则扫描与治理检查已完成。填写 API 密钥后可生成 AI 摘要。")
@@ -367,24 +369,26 @@ ${diffContext || "（无 diff 内容）"}`,
       }
 
       try {
-        await generateSummary(result.findings, result.latest.summary, ac.signal)
+        await generateSummary(result.findings, result.latest?.summary, ac.signal)
       } catch (error) {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
+        if (!isAbortError(error)) {
           errors.push(error instanceof Error ? error.message : "AI 摘要生成失败")
         }
       }
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
+      if (isAbortError(error)) {
         return
       }
       errors.push(error instanceof Error ? error.message : "规则扫描任务失败")
     } finally {
-      setScanning(false)
-      setSummaryStreaming(false)
-      if (errors.length > 0) {
-        setAnalysisError(errors.join("；"))
+      if (shouldApplyResult(ac.signal)) {
+        setScanning(false)
+        setSummaryStreaming(false)
+        if (errors.length > 0) {
+          setAnalysisError(errors.join("；"))
+        }
+        setGovernanceRefreshKey((k) => k + 1)
       }
-      setGovernanceRefreshKey((k) => k + 1)
     }
   }, [
     analyzing,
@@ -417,7 +421,7 @@ ${diffContext || "（无 diff 内容）"}`,
     try {
       await generateSummary(findings, latest?.summary, ac.signal)
     } catch (error) {
-      if (!(error instanceof DOMException && error.name === "AbortError")) {
+      if (!isAbortError(error)) {
         setAnalysisError(error instanceof Error ? error.message : "AI 摘要生成失败")
       }
     }
@@ -446,18 +450,9 @@ ${diffContext || "（无 diff 内容）"}`,
     : undefined
 
   const summaryError = analysisError ?? persistError
-  const showFullPagePrLoading = prLoading && !sessionHasData
+  const showPrSkeleton = prLoading && !sessionHasData && !pr
 
-  if (showFullPagePrLoading) {
-    return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        <Loader2 className="w-5 h-5 animate-spin mr-2" />
-        加载合并请求…
-      </div>
-    )
-  }
-
-  if ((prError || !pr) && !sessionHasData) {
+  if ((prError || !pr) && !sessionHasData && !prLoading) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-risk-high px-4 text-center">
         {prError ?? "合并请求不存在"}
@@ -488,6 +483,14 @@ ${diffContext || "（无 diff 内容）"}`,
               aiPanelOpen={aiPanelOpen}
               onToggleAIPanel={onToggleAIPanel}
             />
+          ) : showPrSkeleton ? (
+            <div className="flex items-center gap-3 h-[68px] px-5 border-b border-border shrink-0">
+              <Skeleton className="h-8 w-8 rounded-md" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3 w-1/3" />
+              </div>
+            </div>
           ) : (
             <div className="flex items-center gap-2 h-[68px] px-5 border-b border-border text-sm text-muted-foreground shrink-0">
               <Loader2 className="w-4 h-4 animate-spin" />

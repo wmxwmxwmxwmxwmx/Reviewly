@@ -95,26 +95,24 @@ def repos(
 
 
 @router.get("/repos/{repo_id}/analyze-context")
-async def repo_analyze_context(repo_id: str, db: Session = Depends(get_db)) -> dict:
-    repo = repos_repo.get_repo(db, repo_id)
-    if not repo:
+async def repo_analyze_context(
+    repo_id: str,
+    db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(get_optional_user),
+) -> dict:
+    if user and not settings.prism_auth_bypass:
+        team_ids = auth_users_repo.get_team_ids_for_user(db, user.id)
+        if repos_repo.get_repo_row_for_user(db, repo_id, user.id, team_ids) is None:
+            raise api_error("仓库不存在", 404)
+    elif repos_repo.get_repo(db, repo_id) is None:
         raise api_error("仓库不存在", 404)
 
-    owner = repo.get("owner", "")
-    name = repo.get("name", "")
-    readme = ""
-    if owner and name:
-        try:
-            readme = await public_client.get_readme(owner, name)
-        except Exception:
-            readme = ""
+    from app.services.repo_analyze_context import build_repo_analyze_context
 
-    findings = repos_repo.list_recent_findings_for_repo(db, repo_id, limit=20)
-    return {
-        "repository": repo,
-        "recentFindings": findings,
-        "readme": readme[:8000] if readme else "",
-    }
+    ctx = await build_repo_analyze_context(db, repo_id, user=user)
+    if not ctx:
+        raise api_error("仓库不存在", 404)
+    return ctx
 
 
 @router.put("/repos/{repo_id}/ai-analysis")
@@ -194,6 +192,12 @@ async def pull_request_diff(pr_id: str, db: Session = Depends(get_db)) -> list:
     if pr_repo.get_pull_request(db, pr_id) is None:
         raise api_error("合并请求不存在", 404)
 
+    from app.repositories import pull_request_files as pr_files_repo
+
+    stored = pr_files_repo.list_files(db, pr_id)
+    if stored:
+        return pr_files_repo.to_diff_view_rows(stored)
+
     from app.grpc_client.engine import get_engine_client
     from sqlalchemy import select
 
@@ -205,6 +209,15 @@ async def pull_request_diff(pr_id: str, db: Session = Depends(get_db)) -> list:
         return await client.parse_diff(diff_row.patch)
 
     return pr_repo.get_diff(db, pr_id)
+
+
+@router.get("/pull-requests/{pr_id}/files")
+def pull_request_files(pr_id: str, db: Session = Depends(get_db)) -> list:
+    if pr_repo.get_pull_request(db, pr_id) is None:
+        raise api_error("合并请求不存在", 404)
+    from app.repositories import pull_request_files as pr_files_repo
+
+    return pr_files_repo.list_files(db, pr_id)
 
 
 @router.get("/pull-requests/{pr_id}/analysis/latest")

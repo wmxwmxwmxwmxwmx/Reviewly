@@ -101,6 +101,9 @@ export interface RepoAnalyzeContext {
   repository: Repository
   recentFindings: AnalysisFinding[]
   readme: string
+  fileTree?: string
+  configSnippets?: Record<string, string>
+  contextWarnings?: string[]
 }
 
 export interface PullRequestListItem {

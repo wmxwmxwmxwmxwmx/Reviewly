@@ -29,6 +29,51 @@ function buildHeaders(options: RequestOptions, token: string | null): HeadersIni
   return base
 }
 
+/** Parse fetch body as JSON; surface plain-text 5xx (e.g. "Internal Server Error") clearly. */
+export async function parseFetchJson<T = Record<string, unknown>>(
+  response: Response,
+): Promise<T> {
+  const text = await response.text()
+  if (!text.trim()) {
+    return {} as T
+  }
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    if (!response.ok) {
+      throw new PrismApiError(
+        text.length > 280 ? `${text.slice(0, 280)}…` : text,
+        response.status,
+      )
+    }
+    throw new PrismApiError("响应不是有效的 JSON", response.status)
+  }
+}
+
+export function extractApiErrorMessage(
+  data: unknown,
+  fallback = "请求失败",
+): string {
+  if (!data || typeof data !== "object") {
+    return fallback
+  }
+  const body = data as Record<string, unknown>
+  if (typeof body.error === "string") {
+    return body.error
+  }
+  const detail = body.detail
+  if (detail && typeof detail === "object") {
+    const nested = (detail as Record<string, unknown>).error
+    if (typeof nested === "string") {
+      return nested
+    }
+  }
+  if (typeof detail === "string") {
+    return detail
+  }
+  return fallback
+}
+
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const token = getAuthToken()
   const res = await fetch(path, {
@@ -37,22 +82,22 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   })
 
   if (!res.ok) {
-    let body: ApiError = { error: res.statusText }
-    try {
-      body = (await res.json()) as ApiError
-    } catch {
-      /* ignore */
-    }
-    const message =
-      typeof body.error === "string"
-        ? body.error
-        : (body as { detail?: { error?: string } }).detail?.error ?? "请求失败"
-    throw new PrismApiError(message, res.status, body.code)
+    const body = await parseFetchJson<ApiError>(res).catch((err) => {
+      if (err instanceof PrismApiError) {
+        throw err
+      }
+      return { error: res.statusText } satisfies ApiError
+    })
+    throw new PrismApiError(
+      extractApiErrorMessage(body, res.statusText || "请求失败"),
+      res.status,
+      typeof body === "object" && body && "code" in body ? String(body.code) : undefined,
+    )
   }
 
   if (res.status === 204) {
     return undefined as T
   }
 
-  return res.json() as Promise<T>
+  return parseFetchJson<T>(res)
 }
