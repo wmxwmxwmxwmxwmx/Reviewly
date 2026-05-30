@@ -46,9 +46,20 @@ interface AISummaryProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   /** Panel layout: compact header, deep section collapsed by default */
-  variant?: "default" | "panel"
+  variant?: "default" | "panel" | "teaser"
   /** Initial open state for deep section (panel defaults to false) */
   defaultDeepOpen?: boolean
+  /** Teaser: open full insight drawer */
+  onOpenInsight?: () => void
+}
+
+function stripMarkdownForTeaser(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`]+`/g, " ")
+    .replace(/[#*_>\[\]()!-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 export function AISummary({
@@ -67,7 +78,9 @@ export function AISummary({
   onOpenChange,
   variant = "default",
   defaultDeepOpen,
+  onOpenInsight,
 }: AISummaryProps) {
+  const isTeaser = variant === "teaser"
   const isPanel = variant === "panel"
   const showSettingsAction =
     Boolean(onGoToSettings) &&
@@ -84,6 +97,52 @@ export function AISummary({
   }
   const summaryText = generatedSummary ?? jobSummary
   const busy = scanning || streaming
+
+  if (isTeaser) {
+    const teaserSource = generatedSummary?.trim() || jobSummary?.trim() || ""
+    const teaserPlain = teaserSource ? stripMarkdownForTeaser(teaserSource) : ""
+    return (
+      <div className="min-w-0 flex flex-col justify-center gap-1 px-1 py-0.5">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <BrainCircuit className="w-3.5 h-3.5 text-ai-blue shrink-0" />
+          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+            摘要
+          </span>
+          {busy ? (
+            <div className="flex gap-0.5 ml-1">
+              <div className="w-1 h-1 rounded-full bg-ai-blue animate-pulse" />
+              <div className="w-1 h-1 rounded-full bg-ai-blue animate-pulse delay-75" />
+              <div className="w-1 h-1 rounded-full bg-ai-blue animate-pulse delay-150" />
+            </div>
+          ) : null}
+        </div>
+        {error ? (
+          <p className="text-[11px] text-risk-high line-clamp-2">{error}</p>
+        ) : teaserPlain ? (
+          <p className="text-[11px] text-muted-foreground leading-snug line-clamp-3">{teaserPlain}</p>
+        ) : scanning ? (
+          <p className="text-[11px] text-muted-foreground">正在执行规则扫描…</p>
+        ) : streaming ? (
+          <p className="text-[11px] text-muted-foreground">正在生成 AI 摘要…</p>
+        ) : restoring ? (
+          <p className="text-[11px] text-muted-foreground">{zh.common.restoreAnalysis}</p>
+        ) : hasAnalysis ? (
+          <p className="text-[11px] text-muted-foreground">{zh.common.loadingSummary}</p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">{zh.common.startAnalyzeHint}</p>
+        )}
+        {onOpenInsight && !busy ? (
+          <button
+            type="button"
+            onClick={onOpenInsight}
+            className="self-start text-[10px] font-medium text-ai-blue hover:underline"
+          >
+            {teaserPlain ? "展开完整报告" : "打开 AI 洞察"}
+          </button>
+        ) : null}
+      </div>
+    )
+  }
 
   const Wrapper = isPanel ? "div" : motion.div
   const wrapperProps = isPanel

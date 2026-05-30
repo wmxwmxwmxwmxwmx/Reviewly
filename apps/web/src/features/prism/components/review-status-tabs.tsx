@@ -15,7 +15,7 @@ export function ReviewStatusTabs({ active, counts, onChange }: ReviewStatusTabsP
     <div className="flex flex-wrap gap-1.5">
       {REVIEW_STATUS_TABS.map((tab) => {
         const count = counts?.[tab.key as keyof ReviewStatusCounts]
-        const showCount = tab.key !== "ALL" && tab.key !== "CLOSED" && typeof count === "number"
+        const showCount = tab.key !== "ALL" && typeof count === "number"
         return (
           <button
             key={tab.key}
