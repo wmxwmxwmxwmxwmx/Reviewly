@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AuditLog, GovernanceRule, GovernanceViolation, PullRequest, Repository
 from app.repositories.seed_filter import (
-    only_connected_repositories,
+    only_stats_eligible_repositories,
     seed_governance_rule_predicate,
     seed_pull_request_predicate,
 )
@@ -218,7 +218,7 @@ def list_rules_for_pr(session: Session, pr_id: str) -> list[dict]:
 
 def list_violations(session: Session) -> list[dict]:
     rows = session.scalars(
-        only_connected_repositories(
+        only_stats_eligible_repositories(
             select(GovernanceViolation)
             .join(PullRequest, GovernanceViolation.pull_request_id == PullRequest.id)
             .join(Repository, PullRequest.repository_id == Repository.id)

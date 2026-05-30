@@ -36,6 +36,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { repoCategory } from "@/lib/repos-utils"
+import { useRepositoryJobs } from "@/hooks/use-repository-jobs"
+import { startRepoAnalyze } from "@/lib/api/repos"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { toast } from "@/hooks/use-toast"
 import { zh } from "@/lib/i18n/zh"
@@ -74,12 +77,16 @@ export function ReposView() {
     removeRepo,
   } = useReposStore()
 
-  const connectedRepos = useMemo(
-    () => repos.filter((repo) => (repo.sourceType ?? "github") === "github"),
+  const ownedRepos = useMemo(
+    () => repos.filter((repo) => repoCategory(repo) === "owned"),
+    [repos],
+  )
+  const managedRepos = useMemo(
+    () => repos.filter((repo) => repoCategory(repo) === "managed"),
     [repos],
   )
   const externalRepos = useMemo(
-    () => repos.filter((repo) => repo.sourceType === "external"),
+    () => repos.filter((repo) => repoCategory(repo) === "external"),
     [repos],
   )
 
@@ -165,13 +172,13 @@ export function ReposView() {
         </p>
       )}
 
-      {!loading && connectedRepos.length > 0 && (
+      {!loading && ownedRepos.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {zh.repos.connectedReposSection}
           </h2>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-            {connectedRepos.map((repo, idx) => (
+            {ownedRepos.map((repo, idx) => (
               <RepoCard
                 key={repo.id}
                 repo={repo}
@@ -181,6 +188,29 @@ export function ReposView() {
                 analysisErrorsByRepoId={analysisErrorsByRepoId}
                 analyzeRepository={analyzeRepository}
                 removeRepo={removeRepo}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {!loading && managedRepos.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {zh.repos.managedReposSection}
+          </h2>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {managedRepos.map((repo, idx) => (
+              <RepoCard
+                key={repo.id}
+                repo={repo}
+                idx={idx}
+                analyzingRepoId={analyzingRepoId}
+                removingRepoId={removingRepoId}
+                analysisErrorsByRepoId={analysisErrorsByRepoId}
+                analyzeRepository={analyzeRepository}
+                removeRepo={removeRepo}
+                isManaged
               />
             ))}
           </div>
@@ -213,6 +243,65 @@ export function ReposView() {
   )
 }
 
+function RepositoryJobBar({
+  repoId,
+  seedJob,
+}: {
+  repoId: string
+  seedJob?: Repository["activeJob"]
+}) {
+  const { latest, active } = useRepositoryJobs(repoId, true)
+  const job = latest ?? seedJob
+  const [starting, setStarting] = useState(false)
+
+  if (!job && !active) return null
+
+  const handleReanalyze = async () => {
+    setStarting(true)
+    try {
+      await startRepoAnalyze(repoId, {
+        types: ["architecture", "security", "performance", "repo_ai"],
+      })
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  if (!job) return null
+
+  return (
+    <div className="mt-3 pt-3 border-t border-border space-y-2">
+      <div className="flex items-center justify-between text-[11px] text-muted-foreground gap-2">
+        <span className="truncate">{job.message || zh.repoJobStatus[job.status]}</span>
+        <span className="shrink-0">{job.progress ?? 0}%</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-surface-3 overflow-hidden">
+        <div
+          className={cn(
+            "h-full rounded-full transition-all duration-300",
+            job.status === "failed"
+              ? "bg-risk-high"
+              : job.status === "success"
+                ? "bg-risk-low"
+                : "bg-ai-blue",
+          )}
+          style={{ width: `${Math.min(100, job.progress ?? 0)}%` }}
+        />
+      </div>
+      {!active && job.status !== "running" && job.status !== "pending" ? (
+        <button
+          type="button"
+          disabled={starting}
+          onClick={() => void handleReanalyze()}
+          className="text-[11px] font-medium text-ai-blue hover:underline disabled:opacity-50"
+        >
+          {starting ? zh.repos.analyzingRepo : zh.repoJobStatus.reanalyze}
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 function RepoCard({
   repo,
   idx,
@@ -222,6 +311,7 @@ function RepoCard({
   analyzeRepository,
   removeRepo,
   isExternal = false,
+  isManaged = false,
 }: {
   repo: Repository
   idx: number
@@ -231,6 +321,7 @@ function RepoCard({
   analyzeRepository: (repoId: string) => Promise<void>
   removeRepo: (repoId: string) => Promise<void>
   isExternal?: boolean
+  isManaged?: boolean
 }) {
   const health = repo.healthScore
   const isAnalyzing = analyzingRepoId === repo.id
@@ -282,6 +373,11 @@ function RepoCard({
                 title={zh.repos.externalRepoHint}
               >
                 {zh.repos.externalRepoBadge}
+              </span>
+            ) : null}
+            {isManaged ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-ai-purple/15 text-ai-purple border border-ai-purple/30">
+                Managed
               </span>
             ) : null}
             {repo.htmlUrl ? (
@@ -464,6 +560,10 @@ function RepoCard({
               : zh.actions.analyzeRepo}
         </button>
       </div>
+
+      {!isExternal ? (
+        <RepositoryJobBar repoId={repo.id} seedJob={repo.activeJob} />
+      ) : null}
 
       {showAnalysisPanel && (
         <div className="mt-3 pt-3 border-t border-border">

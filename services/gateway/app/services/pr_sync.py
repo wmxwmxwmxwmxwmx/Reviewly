@@ -113,7 +113,7 @@ async def sync_repository_pull_requests(
         created,
         updated,
     )
-    return {"synced": synced, "created": created, "updated": updated}
+    return {"synced": synced, "created": created, "updated": updated, "prIds": new_pr_ids}
 
 
 async def sync_repository_pull_requests_for_user(

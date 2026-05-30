@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.architecture.walker import has_scannable_files, worktree_has_files
 from app.core.config import settings
 from app.core.errors import api_error
-from app.repositories.repos import get_repo
+from app.repositories.repos import get_repo, get_repo_row
 
 
 def _cache_root() -> Path:
@@ -177,6 +177,53 @@ def _clone_repository(url: str, dest: Path, branch: str) -> None:
     raise api_error(f"克隆失败: {last_error}", 502)
 
 
+async def fetch_remote_head_sha(full_name: str, branch: str, token: str | None) -> str | None:
+    """Return default-branch HEAD commit SHA from GitHub API."""
+    if "/" not in full_name:
+        return None
+    owner, name = full_name.split("/", 1)
+    import httpx
+
+    headers: dict[str, str] = {"Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    url = f"https://api.github.com/repos/{owner}/{name}/commits/{branch}"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            sha = data.get("sha")
+            return str(sha) if sha else None
+    except httpx.HTTPError:
+        return None
+
+
+def _incremental_update(url: str, dest: Path, branch: str) -> None:
+    """Fetch latest commit into existing clone."""
+    _run_git(["fetch", "--depth", "1", "origin", branch], cwd=dest, timeout=settings.git_clone_timeout_seconds)
+    _run_git(["reset", "--hard", f"origin/{branch}"], cwd=dest)
+
+
+def _persist_clone_metadata(
+    session: Session,
+    repo_id: str,
+    *,
+    path: Path,
+    branch: str,
+    commit_sha: str | None,
+) -> None:
+    row = get_repo_row(session, repo_id)
+    if row is None:
+        return
+    row.local_path = str(path.resolve())
+    row.last_cloned_at = datetime.now(timezone.utc)
+    if commit_sha:
+        row.last_commit_sha = commit_sha
+    session.flush()
+
+
 async def ensure_repo_clone(
     session: Session,
     repo_id: str,
@@ -187,8 +234,6 @@ async def ensure_repo_clone(
     if row_api is None:
         raise api_error("仓库不存在", 404)
 
-    from app.repositories.repos import get_repo_row
-
     row = get_repo_row(session, repo_id)
     full_name = row_api.get("fullName") or (row.full_name if row else repo_id)
     branch = row_api.get("defaultBranch", "main")
@@ -198,19 +243,56 @@ async def ensure_repo_clone(
     dest = _repo_cache_path(repo_id, branch)
     dest.parent.mkdir(parents=True, exist_ok=True)
 
+    remote_sha = await fetch_remote_head_sha(full_name, branch, token)
+
     if force_refresh:
         invalidate_repo_cache(repo_id, branch)
 
-    if not force_refresh and _is_cache_usable(dest):
+    db_path = Path(row.local_path) if row and row.local_path else None
+    use_path = db_path if db_path and db_path.exists() and worktree_has_files(db_path) else dest
+
+    if (
+        not force_refresh
+        and remote_sha
+        and row
+        and row.last_commit_sha == remote_sha
+        and use_path.exists()
+        and worktree_has_files(use_path)
+    ):
         return {
             "ok": True,
-            "path": str(dest.resolve()),
+            "path": str(use_path.resolve()),
             "ref": branch,
             "cached": True,
-            "clonedAt": datetime.fromtimestamp(
-                (dest / ".git").stat().st_mtime, tz=timezone.utc
-            ).isoformat().replace("+00:00", "Z"),
+            "clonedAt": _dt_iso_from_path(use_path),
+            "commitSha": remote_sha,
         }
+
+    if not force_refresh and use_path.exists() and _is_cache_usable(use_path):
+        if remote_sha and row and row.last_commit_sha != remote_sha:
+            url = _clone_url(full_name, token)
+            await asyncio.to_thread(_incremental_update, url, use_path, branch)
+            _persist_clone_metadata(session, repo_id, path=use_path, branch=branch, commit_sha=remote_sha)
+            session.commit()
+            return {
+                "ok": True,
+                "path": str(use_path.resolve()),
+                "ref": branch,
+                "cached": True,
+                "clonedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "commitSha": remote_sha,
+            }
+        if not remote_sha or (row and row.last_commit_sha == remote_sha):
+            _persist_clone_metadata(session, repo_id, path=use_path, branch=branch, commit_sha=remote_sha)
+            session.commit()
+            return {
+                "ok": True,
+                "path": str(use_path.resolve()),
+                "ref": branch,
+                "cached": True,
+                "clonedAt": _dt_iso_from_path(use_path),
+                "commitSha": row.last_commit_sha if row else remote_sha,
+            }
 
     if dest.exists():
         invalidate_repo_cache(repo_id, branch)
@@ -224,13 +306,26 @@ async def ensure_repo_clone(
             502,
         )
 
+    if not remote_sha:
+        remote_sha = await fetch_remote_head_sha(full_name, branch, token)
+    _persist_clone_metadata(session, repo_id, path=dest, branch=branch, commit_sha=remote_sha)
+    session.commit()
+
     return {
         "ok": True,
         "path": str(dest.resolve()),
         "ref": branch,
         "cached": False,
         "clonedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "commitSha": remote_sha,
     }
+
+
+def _dt_iso_from_path(path: Path) -> str:
+    git_dir = path / ".git"
+    if git_dir.is_dir():
+        return datetime.fromtimestamp(git_dir.stat().st_mtime, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def clone_has_scannable_sources(path: Path) -> bool:

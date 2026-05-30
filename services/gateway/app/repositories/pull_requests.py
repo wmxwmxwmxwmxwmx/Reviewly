@@ -278,4 +278,6 @@ def _pr_dict(row: PullRequest, repo: Repository | None = None) -> dict:
         }
     if repo is not None:
         data["sourceType"] = repo.source_type or SOURCE_TYPE_GITHUB
+        data["repositoryType"] = getattr(repo, "repository_type", None) or "owned"
+        data["managed"] = bool(getattr(repo, "managed", True))
     return data

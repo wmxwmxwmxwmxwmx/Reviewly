@@ -8,6 +8,7 @@ import { PerformanceFindingsTable, perfSeverityConfig } from "@/features/prism/c
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { usePerformanceCenter } from "@/hooks/use-performance-center"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
+import { isStatsEligibleRepo } from "@/lib/repos-utils"
 import { zh } from "@/lib/i18n/zh"
 import { formatPerfType, PERF_TYPE_FILTER_OPTIONS } from "@/lib/perf-type-labels"
 import { cn } from "@/lib/utils"
@@ -152,7 +153,7 @@ export function PerformanceView() {
             >
               <option value="">{zh.common.allRepos}</option>
               {repos
-                .filter((r) => (r.sourceType ?? "github") === "github")
+                .filter(isStatsEligibleRepo)
                 .map((r) => (
                 <option key={r.id} value={r.fullName}>
                   {r.fullName}

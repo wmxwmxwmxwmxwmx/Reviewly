@@ -10,7 +10,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import AnalysisFinding, AnalysisJob, AuthUser, PullRequest, Repository
-from app.repositories.seed_filter import SOURCE_TYPE_EXTERNAL, SOURCE_TYPE_GITHUB
+from app.repositories.seed_filter import (
+    REPOSITORY_TYPE_EXTERNAL,
+    REPOSITORY_TYPE_OWNED,
+    SOURCE_TYPE_EXTERNAL,
+    SOURCE_TYPE_GITHUB,
+)
 from app.services import repo_sync
 
 
@@ -22,6 +27,7 @@ def _insert_repo(
     source_type: str = SOURCE_TYPE_GITHUB,
 ) -> Repository:
     owner, name = full_name.split("/", 1)
+    is_external = source_type == SOURCE_TYPE_EXTERNAL
     row = Repository(
         id=repo_id,
         full_name=full_name,
@@ -29,6 +35,8 @@ def _insert_repo(
         name=name,
         github_id=repo_id.removeprefix("repo-"),
         source_type=source_type,
+        repository_type=REPOSITORY_TYPE_EXTERNAL if is_external else REPOSITORY_TYPE_OWNED,
+        managed=not is_external,
         source="test",
         ai_review_enabled=True,
         payload={"fullName": full_name, "openPrCount": 0, "healthScore": 80},
@@ -162,6 +170,8 @@ def test_oauth_sync_sets_source_type_github(db: Session) -> None:
     row = db.scalar(select(Repository).where(Repository.full_name == "my-org/backend"))
     assert row is not None
     assert row.source_type == SOURCE_TYPE_GITHUB
+    assert row.repository_type == REPOSITORY_TYPE_OWNED
+    assert row.managed is True
 
 
 def test_pr_import_creates_external_repository(client: TestClient, db: Session) -> None:
@@ -199,6 +209,8 @@ def test_pr_import_creates_external_repository(client: TestClient, db: Session) 
     row = db.scalar(select(Repository).where(Repository.full_name == "obra/superpowers"))
     assert row is not None
     assert row.source_type == SOURCE_TYPE_EXTERNAL
+    assert row.repository_type == REPOSITORY_TYPE_EXTERNAL
+    assert row.managed is False
 
 
 def test_dashboard_excludes_external_findings(client: TestClient, db: Session) -> None:

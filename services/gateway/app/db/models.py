@@ -89,6 +89,31 @@ class Repository(Base):
     payload: Mapped[dict | None] = mapped_column(JSON)
     architecture_graph: Mapped[dict | None] = mapped_column(JSON)
     architecture_scanned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    managed: Mapped[bool] = mapped_column(Boolean, default=True)
+    repository_type: Mapped[str] = mapped_column(String(32), default="owned")
+    local_path: Mapped[str | None] = mapped_column(String(512))
+    last_cloned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_commit_sha: Mapped[str | None] = mapped_column(String(64))
+
+
+class RepositoryJob(Base):
+    __tablename__ = "repository_jobs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    repository_id: Mapped[str] = mapped_column(ForeignKey("repositories.id"), index=True)
+    job_type: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    message: Mapped[str | None] = mapped_column(String(1024))
+    parent_job_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("repository_jobs.id"), nullable=True
+    )
+    payload: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PullRequest(Base):
@@ -137,7 +162,11 @@ class AnalysisJob(Base):
     __tablename__ = "analysis_jobs"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    pull_request_id: Mapped[str] = mapped_column(ForeignKey("pull_requests.id"))
+    pull_request_id: Mapped[str | None] = mapped_column(ForeignKey("pull_requests.id"), nullable=True)
+    repository_id: Mapped[str | None] = mapped_column(ForeignKey("repositories.id"), nullable=True)
+    repository_job_id: Mapped[str | None] = mapped_column(
+        ForeignKey("repository_jobs.id"), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(32))
     progress: Mapped[int] = mapped_column(Integer, default=0)
     chunk_index: Mapped[int] = mapped_column(Integer, default=0)
@@ -148,7 +177,7 @@ class AnalysisJob(Base):
     error_message: Mapped[str | None] = mapped_column(String(1024))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    pull_request: Mapped[PullRequest] = relationship(back_populates="analysis_jobs")
+    pull_request: Mapped[PullRequest | None] = relationship(back_populates="analysis_jobs")
     findings: Mapped[list[AnalysisFinding]] = relationship(back_populates="job")
 
 
@@ -157,6 +186,7 @@ class AnalysisFinding(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     job_id: Mapped[str] = mapped_column(ForeignKey("analysis_jobs.id"))
+    repository_id: Mapped[str | None] = mapped_column(ForeignKey("repositories.id"), nullable=True)
     type: Mapped[str] = mapped_column(String(32))
     severity: Mapped[str] = mapped_column(String(16))
     title: Mapped[str] = mapped_column(String(512))

@@ -23,6 +23,39 @@ export type RepositoryAiAnalysis = AiPersistedContent
 
 export type RepositorySourceType = "github" | "external"
 
+export type RepositoryType = "owned" | "managed" | "external"
+
+export type RepositoryJobType =
+  | "clone"
+  | "architecture"
+  | "security"
+  | "performance"
+  | "onboarding"
+  | "sync"
+  | "repo_ai"
+  | "sync_prs"
+
+export type RepositoryJobStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled"
+
+export interface RepositoryJob {
+  id: string
+  repositoryId: string
+  jobType: RepositoryJobType
+  status: RepositoryJobStatus
+  progress: number
+  message?: string | null
+  parentJobId?: string | null
+  payload?: Record<string, unknown> | null
+  createdAt: string
+  updatedAt: string
+  finishedAt?: string | null
+}
+
 export interface Repository {
   id: string
   githubId?: string | null
@@ -30,6 +63,12 @@ export interface Repository {
   name: string
   owner: string
   sourceType?: RepositorySourceType
+  repositoryType?: RepositoryType
+  managed?: boolean
+  localPath?: string | null
+  lastClonedAt?: string | null
+  lastCommitSha?: string | null
+  activeJob?: RepositoryJob | null
   description?: string | null
   language?: string | null
   stars?: number
@@ -56,6 +95,22 @@ export interface ImportRepositoryBody {
 
 export interface ImportRepositoryResponse {
   repository: Repository
+}
+
+export interface AdoptRepositoryResponse {
+  ok: boolean
+  repository: Repository
+  jobId: string
+}
+
+export interface StartRepoAnalyzeResponse {
+  jobId?: string
+  jobs?: RepositoryJob[]
+}
+
+export interface RepoAnalysisStatusResponse {
+  latest?: RepositoryJob | null
+  jobs: RepositoryJob[]
 }
 
 export interface SyncRepositoriesResponse {
@@ -135,6 +190,8 @@ export interface PullRequestListItem {
   riskScore: number
   updatedAt: string
   sourceType?: RepositorySourceType
+  repositoryType?: RepositoryType
+  managed?: boolean
 }
 
 export interface PullRequest extends PullRequestListItem {
@@ -157,7 +214,8 @@ export interface PullRequest extends PullRequestListItem {
 
 export interface AnalysisJob {
   id: string
-  pullRequestId: string
+  pullRequestId?: string | null
+  repositoryId?: string | null
   status: AnalysisJobStatus
   progress: number
   chunkIndex: number

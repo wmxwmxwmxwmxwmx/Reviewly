@@ -31,6 +31,7 @@ import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import { PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
+import { AdoptRepoBanner } from "@/features/prism/components/adopt-repo-banner"
 import { Skeleton } from "@/components/ui/skeleton"
 
 const PENDING_AUTO_ANALYZE_KEY = "prism:pending-auto-analyze"
@@ -469,7 +470,10 @@ ${diffContext || "（无 diff 内容）"}`,
 
   const summaryError = analysisError ?? persistError
   const showPrSkeleton = prLoading && !sessionHasData && !pr
-  const isExternalRepo = pr?.sourceType === "external"
+  const isExternalRepo =
+    pr?.repositoryType === "external" ||
+    pr?.managed === false ||
+    pr?.sourceType === "external"
 
   if ((prError || !pr) && !sessionHasData && !prLoading) {
     return (
@@ -517,11 +521,7 @@ ${diffContext || "（无 diff 内容）"}`,
             </div>
           )}
 
-          {isExternalRepo ? (
-            <div className="mx-5 mt-3 px-3 py-2 rounded-md border border-risk-medium/30 bg-risk-medium/10 text-xs text-risk-medium leading-relaxed">
-              {zh.common.externalRepoReviewHint}
-            </div>
-          ) : null}
+          {isExternalRepo && pr ? <AdoptRepoBanner pr={pr} /> : null}
 
           <div className="p-5 space-y-4">
             {pr ? (

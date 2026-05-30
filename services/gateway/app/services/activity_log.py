@@ -70,13 +70,19 @@ def list_recent(session: Session, limit: int = 20, *, connected_only: bool = Fal
     ).all()
     if connected_only:
         from app.db.models import Repository
-        from app.repositories.seed_filter import external_repository_predicate, is_connected_repository
+        from app.repositories.seed_filter import external_repository_predicate
 
         external_rows = session.scalars(
             select(Repository.full_name).where(external_repository_predicate())
         ).all()
         external_names = {name for name in external_rows if name}
-        rows = [r for r in rows if not r.repo or r.repo not in external_names]
+        rows = [
+            r
+            for r in rows
+            if r.repo
+            and r.repo not in external_names
+            or not r.repo
+        ]
         rows = rows[:limit]
     else:
         rows = rows[:limit]

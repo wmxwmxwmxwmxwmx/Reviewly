@@ -16,15 +16,23 @@ from app.repositories.performance_center import (
 
 
 def list_performance_findings(session: Session) -> list[dict[str, Any]]:
-    from app.db.models import PullRequest, Repository
-    from app.repositories.seed_filter import exclude_seed_findings, only_connected_findings
+    from sqlalchemy import or_
 
-    stmt = only_connected_findings(
+    from app.db.models import PullRequest, Repository
+    from app.repositories.seed_filter import exclude_seed_findings, only_stats_eligible_findings
+
+    stmt = only_stats_eligible_findings(
         exclude_seed_findings(
             select(AnalysisFinding)
             .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
-            .join(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
-            .join(Repository, PullRequest.repository_id == Repository.id)
+            .outerjoin(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
+            .join(
+                Repository,
+                or_(
+                    PullRequest.repository_id == Repository.id,
+                    AnalysisJob.repository_id == Repository.id,
+                ),
+            )
             .where(AnalysisFinding.type == "performance")
         )
     )

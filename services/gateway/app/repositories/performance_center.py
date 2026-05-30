@@ -15,7 +15,7 @@ from app.repositories.seed_filter import (
     exclude_seed_findings,
     is_seed_pull_request,
     is_seed_repository,
-    only_connected_findings,
+    only_stats_eligible_findings,
 )
 
 
@@ -40,11 +40,11 @@ def resolve_perf_type(payload: dict[str, Any], title: str = "") -> str:
 
 def _to_performance_center_finding(
     row: AnalysisFinding,
-    pr: PullRequest,
+    pr: PullRequest | None,
     repo: Repository,
 ) -> dict[str, Any]:
     payload = deepcopy(row.payload) if row.payload else {}
-    pr_payload = pr.payload or {}
+    pr_payload = pr.payload or {} if pr else {}
     repo_name = repo.full_name
     if not repo_name and pr_payload.get("repo"):
         repo_name = str(pr_payload["repo"])
@@ -65,8 +65,8 @@ def _to_performance_center_finding(
         "description": description,
         "suggestion": suggestion,
         "repo": repo_name,
-        "prNumber": pr.number,
-        "pullRequestId": pr.id,
+        "prNumber": pr.number if pr else None,
+        "pullRequestId": pr.id if pr else None,
         "title": row.title,
         "ruleId": payload.get("ruleId", ""),
         "aiOptimization": extract_from_payload(payload, "aiOptimization"),
@@ -117,8 +117,14 @@ def list_performance_findings_filtered(
     base = (
         select(AnalysisFinding, PullRequest, Repository)
         .join(AnalysisJob, AnalysisFinding.job_id == AnalysisJob.id)
-        .join(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
-        .join(Repository, PullRequest.repository_id == Repository.id)
+        .outerjoin(PullRequest, AnalysisJob.pull_request_id == PullRequest.id)
+        .join(
+            Repository,
+            or_(
+                PullRequest.repository_id == Repository.id,
+                AnalysisJob.repository_id == Repository.id,
+            ),
+        )
         .where(AnalysisFinding.type == "performance")
     )
 
@@ -138,7 +144,7 @@ def list_performance_findings_filtered(
     if perf_type:
         base = base.where(cast(AnalysisFinding.payload, String).ilike(f"%{perf_type}%"))
 
-    base = only_connected_findings(exclude_seed_findings(base))
+    base = only_stats_eligible_findings(exclude_seed_findings(base))
 
     count_stmt = select(func.count()).select_from(base.subquery())
     total = session.scalar(count_stmt) or 0

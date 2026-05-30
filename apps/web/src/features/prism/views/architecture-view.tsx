@@ -1,7 +1,7 @@
 "use client"
 
 import { Loader2, Network, BrainCircuit } from "lucide-react"
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 
 import { Skeleton } from "@/components/ui/skeleton"
 import { ArchitectureGraphViewer } from "@/features/prism/components/architecture-graph-viewer"
@@ -12,11 +12,13 @@ import { useArchitectureAnalyze } from "@/hooks/use-architecture-analyze"
 import { useArchitectureSelection } from "@/hooks/use-architecture-selection"
 import { usePersistedViewState } from "@/hooks/use-persisted-view-state"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
+import { isStatsEligibleRepo } from "@/lib/repos-utils"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
 export function ArchitectureView() {
-  const { repos, loading: reposLoading, error: reposError } = useReposStore()
+  const { repos: allRepos, loading: reposLoading, error: reposError } = useReposStore()
+  const repos = useMemo(() => allRepos.filter(isStatsEligibleRepo), [allRepos])
   const [archState, setArchState] = usePersistedViewState("architecture", {
     repoId: null as string | null,
     selectedNodeId: null as string | null,

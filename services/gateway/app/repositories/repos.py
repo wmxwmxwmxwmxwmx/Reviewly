@@ -21,17 +21,21 @@ from app.db.models import (
     PullRequestDiff,
     PullRequestFile,
     Repository,
+    RepositoryJob,
 )
 
 logger = logging.getLogger(__name__)
 from app.repositories.ai_persisted import extract_from_settings
 from app.repositories.seed_filter import (
+    REPOSITORY_TYPE_EXTERNAL,
+    REPOSITORY_TYPE_MANAGED,
+    REPOSITORY_TYPE_OWNED,
     SOURCE_TYPE_EXTERNAL,
     SOURCE_TYPE_GITHUB,
     exclude_seed_repositories,
     is_seed_repository,
-    only_connected_repositories,
     only_external_repositories,
+    only_stats_eligible_repositories,
 )
 from app.services.repo_health import compute_repo_health
 
@@ -73,6 +77,25 @@ def _apply_source_type(row: Repository, metadata: dict[str, Any], *, created: bo
     elif source_type == SOURCE_TYPE_GITHUB:
         row.source_type = SOURCE_TYPE_GITHUB
     # Never downgrade connected -> external on update.
+
+
+def _apply_repository_type(row: Repository, metadata: dict[str, Any], *, created: bool) -> None:
+    repository_type = metadata.get("repository_type")
+    managed = metadata.get("managed")
+    if repository_type is not None:
+        if created or repository_type == REPOSITORY_TYPE_MANAGED:
+            row.repository_type = repository_type
+        elif repository_type == REPOSITORY_TYPE_OWNED:
+            row.repository_type = REPOSITORY_TYPE_OWNED
+    elif created:
+        if metadata.get("source_type") == SOURCE_TYPE_EXTERNAL:
+            row.repository_type = REPOSITORY_TYPE_EXTERNAL
+        else:
+            row.repository_type = REPOSITORY_TYPE_OWNED
+    if managed is not None:
+        row.managed = bool(managed)
+    elif created:
+        row.managed = row.repository_type != REPOSITORY_TYPE_EXTERNAL
 
 
 def _apply_metadata_to_row(session: Session, row: Repository, metadata: dict[str, Any]) -> None:
@@ -147,6 +170,7 @@ def upsert_repository(
         session.add(row)
 
     _apply_source_type(row, metadata, created=created)
+    _apply_repository_type(row, metadata, created=created)
     _apply_metadata_to_row(session, row, metadata)
     session.flush()
     return row, created
@@ -211,6 +235,20 @@ def _repo_to_api(session: Session, row: Repository) -> dict:
     data["aiAnalysis"] = extract_from_settings(row.settings, "aiAnalysis")
     data["aiArchitectureAnalysis"] = extract_from_settings(row.settings, "aiArchitectureAnalysis")
     data["sourceType"] = row.source_type or SOURCE_TYPE_GITHUB
+    data["repositoryType"] = row.repository_type or REPOSITORY_TYPE_OWNED
+    data["managed"] = bool(row.managed)
+    if row.local_path:
+        data["localPath"] = row.local_path
+    if row.last_cloned_at is not None:
+        data["lastClonedAt"] = _dt_to_iso(row.last_cloned_at)
+    if row.last_commit_sha:
+        data["lastCommitSha"] = row.last_commit_sha
+
+    from app.repositories import repository_jobs as rjob_repo
+
+    active = rjob_repo.get_active_job_for_repo(session, row.id)
+    if active:
+        data["activeJob"] = active
     return data
 
 
@@ -245,7 +283,11 @@ def list_repos(
 
     query = exclude_seed_repositories(select(Repository))
     if repo_type == SOURCE_TYPE_GITHUB:
-        query = only_connected_repositories(query)
+        query = only_stats_eligible_repositories(query)
+    elif repo_type == REPOSITORY_TYPE_OWNED:
+        query = query.where(Repository.repository_type == REPOSITORY_TYPE_OWNED)
+    elif repo_type == REPOSITORY_TYPE_MANAGED:
+        query = query.where(Repository.repository_type == REPOSITORY_TYPE_MANAGED)
     elif repo_type == SOURCE_TYPE_EXTERNAL:
         query = only_external_repositories(query)
     # repo_type == "all": no source_type filter
@@ -288,7 +330,31 @@ def _purge_repo_clone_cache(repo_id: str) -> None:
         logger.warning("Failed to purge clone cache for %s: %s", repo_id, exc)
 
 
+def adopt_repository_for_user(
+    session: Session,
+    repo_id: str,
+    user_id: str,
+    team_ids: list[str],
+) -> Repository | None:
+    row = get_repo_row_for_user(session, repo_id, user_id, team_ids)
+    if row is None:
+        return None
+    if row.owner_user_id not in (None, user_id):
+        raise api_error("您没有权限纳管此仓库", 403)
+    if row.repository_type == REPOSITORY_TYPE_MANAGED and row.managed:
+        return row
+    row.managed = True
+    row.repository_type = REPOSITORY_TYPE_MANAGED
+    if row.owner_user_id is None:
+        row.owner_user_id = user_id
+    session.flush()
+    return row
+
+
 def _delete_repository_cascade(session: Session, repo_id: str) -> None:
+    session.execute(delete(RepositoryJob).where(RepositoryJob.repository_id == repo_id))
+    session.execute(delete(AnalysisFinding).where(AnalysisFinding.repository_id == repo_id))
+    session.execute(delete(AnalysisJob).where(AnalysisJob.repository_id == repo_id))
     pr_ids = list(
         session.scalars(select(PullRequest.id).where(PullRequest.repository_id == repo_id)).all()
     )
@@ -433,6 +499,12 @@ def upsert_repo(
         metadata["source_type"] = source_type
     if owner_user_id is not None:
         metadata["owner_user_id"] = owner_user_id
+    if source_type == SOURCE_TYPE_EXTERNAL:
+        metadata["repository_type"] = REPOSITORY_TYPE_EXTERNAL
+        metadata["managed"] = False
+    else:
+        metadata.setdefault("repository_type", REPOSITORY_TYPE_OWNED)
+        metadata.setdefault("managed", True)
     row, _ = upsert_repository(session, metadata, installation_id=installation_id)
     return row
 

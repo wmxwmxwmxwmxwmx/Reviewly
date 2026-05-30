@@ -20,6 +20,7 @@ import {
 } from "@/features/prism/components/security-findings-table"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
+import { isStatsEligibleRepo } from "@/lib/repos-utils"
 import { useSecurityCenter } from "@/hooks/use-security-center"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
@@ -145,7 +146,7 @@ export function SecurityView() {
           >
             <option value="">{zh.common.allRepos}</option>
             {repos
-              .filter((r) => (r.sourceType ?? "github") === "github")
+              .filter(isStatsEligibleRepo)
               .map((r) => (
               <option key={r.id} value={r.fullName}>
                 {r.fullName}

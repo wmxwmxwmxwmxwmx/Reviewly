@@ -16,35 +16,68 @@ LEGACY_SEED_GOVERNANCE_RULE_IDS: frozenset[str] = frozenset({"g1"})
 SOURCE_TYPE_GITHUB = "github"
 SOURCE_TYPE_EXTERNAL = "external"
 
+REPOSITORY_TYPE_OWNED = "owned"
+REPOSITORY_TYPE_MANAGED = "managed"
+REPOSITORY_TYPE_EXTERNAL = "external"
+
+
+def is_stats_eligible_repository(row: Repository) -> bool:
+    if row.repository_type in (REPOSITORY_TYPE_OWNED, REPOSITORY_TYPE_MANAGED):
+        return True
+    if getattr(row, "managed", False):
+        return True
+    return is_connected_repository(row) and row.repository_type != REPOSITORY_TYPE_EXTERNAL
+
 
 def is_connected_repository(row: Repository) -> bool:
     return row.source_type in (None, SOURCE_TYPE_GITHUB)
 
 
 def is_external_repository(row: Repository) -> bool:
-    return row.source_type == SOURCE_TYPE_EXTERNAL
+    if row.repository_type == REPOSITORY_TYPE_EXTERNAL and not row.managed:
+        return True
+    return row.source_type == SOURCE_TYPE_EXTERNAL and row.repository_type != REPOSITORY_TYPE_MANAGED
 
 
-def connected_repository_predicate():
-    """SQLAlchemy expression: connected (OAuth-owned) repository asset."""
-    return or_(Repository.source_type == SOURCE_TYPE_GITHUB, Repository.source_type.is_(None))
+def stats_eligible_repository_predicate():
+    """SQLAlchemy: owned + managed repositories (included in Dashboard / Centers)."""
+    return or_(
+        Repository.repository_type.in_((REPOSITORY_TYPE_OWNED, REPOSITORY_TYPE_MANAGED)),
+        Repository.managed.is_(True),
+    )
 
 
 def external_repository_predicate():
-    return Repository.source_type == SOURCE_TYPE_EXTERNAL
+    return and_(
+        Repository.repository_type == REPOSITORY_TYPE_EXTERNAL,
+        Repository.managed.is_(False),
+    )
+
+
+def connected_repository_predicate():
+    """Legacy alias: OAuth-connected source; prefer stats_eligible for metrics."""
+    return or_(Repository.source_type == SOURCE_TYPE_GITHUB, Repository.source_type.is_(None))
+
+
+def only_stats_eligible_repositories(statement: Select) -> Select:
+    return statement.where(stats_eligible_repository_predicate())
 
 
 def only_connected_repositories(statement: Select) -> Select:
-    return statement.where(connected_repository_predicate())
+    return only_stats_eligible_repositories(statement)
 
 
 def only_external_repositories(statement: Select) -> Select:
     return statement.where(external_repository_predicate())
 
 
+def only_stats_eligible_findings(statement: Select) -> Select:
+    """Apply to selects that already join Repository."""
+    return statement.where(stats_eligible_repository_predicate())
+
+
 def only_connected_findings(statement: Select) -> Select:
-    """Apply to selects that already join PullRequest and Repository."""
-    return statement.where(connected_repository_predicate())
+    return only_stats_eligible_findings(statement)
 
 
 def is_seed_repository(row: Repository) -> bool:
