@@ -12,23 +12,34 @@ from app.github.github_errors import raise_for_github_response
 _API_VERSION = "2022-11-28"
 
 
-def _has_pat() -> bool:
+def _has_auth(access_token: str | None) -> bool:
+    if access_token and access_token.strip():
+        return True
     return bool(settings.github_pat.strip())
 
 
-def _auth_headers(*, accept: str = "application/vnd.github+json") -> dict[str, str]:
+def _auth_headers(
+    *,
+    accept: str = "application/vnd.github+json",
+    access_token: str | None = None,
+) -> dict[str, str]:
     headers = {
         "Accept": accept,
         "X-GitHub-Api-Version": _API_VERSION,
     }
-    pat = settings.github_pat.strip()
-    if pat:
-        headers["Authorization"] = f"Bearer {pat}"
+    token = (access_token or "").strip() or settings.github_pat.strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     return headers
 
 
-def _check_response(resp: httpx.Response, *, resource: str) -> None:
-    raise_for_github_response(resp, resource=resource, has_pat=_has_pat())
+def _check_response(
+    resp: httpx.Response,
+    *,
+    resource: str,
+    access_token: str | None = None,
+) -> None:
+    raise_for_github_response(resp, resource=resource, has_pat=_has_auth(access_token))
 
 
 async def get_repo(owner: str, repo: str) -> dict[str, Any]:
@@ -37,20 +48,31 @@ async def get_repo(owner: str, repo: str) -> dict[str, Any]:
     return await fetch_repo(owner, repo)
 
 
-async def get_repo_public(owner: str, repo: str) -> dict[str, Any]:
-    """Fetch repo metadata with optional PAT (works for public repos without auth)."""
+async def get_repo_public(
+    owner: str,
+    repo: str,
+    *,
+    access_token: str | None = None,
+) -> dict[str, Any]:
+    """Fetch repo metadata with optional token (works for public repos without auth)."""
     url = f"https://api.github.com/repos/{owner}/{repo}"
     async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.get(url, headers=_auth_headers())
-        _check_response(resp, resource="该仓库")
+        resp = await client.get(url, headers=_auth_headers(access_token=access_token))
+        _check_response(resp, resource="该仓库", access_token=access_token)
         return resp.json()
 
 
-async def get_pull_request(owner: str, repo: str, number: int) -> dict[str, Any]:
+async def get_pull_request(
+    owner: str,
+    repo: str,
+    number: int,
+    *,
+    access_token: str | None = None,
+) -> dict[str, Any]:
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
     async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.get(url, headers=_auth_headers())
-        _check_response(resp, resource="该 PR")
+        resp = await client.get(url, headers=_auth_headers(access_token=access_token))
+        _check_response(resp, resource="该 PR", access_token=access_token)
         return resp.json()
 
 
@@ -83,38 +105,56 @@ async def get_readme(owner: str, repo: str) -> str:
         return resp.text
 
 
-async def list_pull_files(owner: str, repo: str, number: int) -> list[dict[str, Any]]:
+async def list_pull_files(
+    owner: str,
+    repo: str,
+    number: int,
+    *,
+    access_token: str | None = None,
+) -> list[dict[str, Any]]:
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}/files"
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.get(
             url,
-            headers=_auth_headers(),
+            headers=_auth_headers(access_token=access_token),
             params={"per_page": 100},
         )
-        _check_response(resp, resource="该 PR 的文件列表")
+        _check_response(resp, resource="该 PR 的文件列表", access_token=access_token)
         data = resp.json()
         return data if isinstance(data, list) else []
 
 
-async def list_pull_commits(owner: str, repo: str, number: int) -> list[dict[str, Any]]:
+async def list_pull_commits(
+    owner: str,
+    repo: str,
+    number: int,
+    *,
+    access_token: str | None = None,
+) -> list[dict[str, Any]]:
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}/commits"
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.get(
             url,
-            headers=_auth_headers(),
+            headers=_auth_headers(access_token=access_token),
             params={"per_page": 100},
         )
-        _check_response(resp, resource="该 PR 的 commits")
+        _check_response(resp, resource="该 PR 的 commits", access_token=access_token)
         data = resp.json()
         return data if isinstance(data, list) else []
 
 
-async def get_pull_diff_patch(owner: str, repo: str, number: int) -> str:
+async def get_pull_diff_patch(
+    owner: str,
+    repo: str,
+    number: int,
+    *,
+    access_token: str | None = None,
+) -> str:
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
     async with httpx.AsyncClient(timeout=120.0) as client:
         resp = await client.get(
             url,
-            headers=_auth_headers(accept="application/vnd.github.v3.diff"),
+            headers=_auth_headers(accept="application/vnd.github.v3.diff", access_token=access_token),
         )
-        _check_response(resp, resource="该 PR 的 diff")
+        _check_response(resp, resource="该 PR 的 diff", access_token=access_token)
         return resp.text

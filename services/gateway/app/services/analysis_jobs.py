@@ -1,6 +1,7 @@
 """Analysis job orchestration (B1 → B2 DB → B4 pipeline)."""
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlalchemy import select
@@ -12,6 +13,8 @@ from app.repositories import analysis as analysis_repo
 from app.repositories import pull_request_files as pr_files_repo
 from app.repositories import pull_requests as pr_repo
 from app.services import analysis_cache as cache
+
+logger = logging.getLogger(__name__)
 
 
 async def run_job(session: Session, job_id: str) -> None:
@@ -191,6 +194,13 @@ def create_job(session: Session, pull_request_id: str, *, force: bool = False) -
         analysis_version=version,
         head_sha=head_sha,
         base_sha=base_sha,
+    )
+    logger.info(
+        "Created analysis job pull_request_id=%s job_id=%s analysis_version=%s head_sha=%s",
+        pull_request_id,
+        job.id,
+        version,
+        head_sha,
     )
     return {
         "jobId": job.id,

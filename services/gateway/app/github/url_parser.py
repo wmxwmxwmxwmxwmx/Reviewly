@@ -70,11 +70,15 @@ def parse_github_repo_url(url: str) -> ParsedRepoUrl:
 def parse_github_pr_url(url: str) -> ParsedPrUrl:
     raw = url.strip()
     if not raw:
-        raise api_error("请输入 GitHub PR 链接", 400)
+        raise api_error("请输入 GitHub PR 链接", 400, code="INVALID_PR_URL")
 
     match = _PR_URL_RE.search(raw)
     if not match:
-        raise api_error("请输入有效的 GitHub PR 链接（例如 https://github.com/owner/repo/pull/123）", 400)
+        raise api_error(
+            "请输入有效的 GitHub PR 链接（例如 https://github.com/owner/repo/pull/123）",
+            400,
+            code="INVALID_PR_URL",
+        )
 
     return ParsedPrUrl(
         owner=match.group("owner"),

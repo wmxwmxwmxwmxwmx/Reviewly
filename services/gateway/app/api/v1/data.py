@@ -193,6 +193,7 @@ def pull_requests(
     db: Session = Depends(get_db),
     user: AuthUser | None = Depends(get_optional_user),
     repo: str | None = None,
+    repo_id: str | None = Query(None, alias="repoId"),
     risk: str | None = None,
     author: str | None = None,
     state: str | None = None,
@@ -204,6 +205,7 @@ def pull_requests(
     items = pr_repo.list_pull_requests(
         db,
         repo=repo,
+        repo_id=repo_id,
         risk=risk,
         author=author,
         state=state,

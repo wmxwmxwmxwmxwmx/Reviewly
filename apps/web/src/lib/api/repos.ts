@@ -136,6 +136,7 @@ export function startRepoAnalyze(
 export function fetchRepoAnalysisStatus(repoId: string, signal?: AbortSignal) {
   return apiFetch<RepoAnalysisStatusResponse>(`/api/repos/${repoId}/analysis-status`, {
     signal,
+    silentStatuses: [404],
   })
 }
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { motion } from "framer-motion"
 import {
   BookOpen,
@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 
 import { AddRepoDialog } from "@/features/prism/components/add-repo-dialog"
+import { RepoPrList } from "@/features/prism/components/repo-pr-list"
 import { RepositoryBadges } from "@/features/prism/components/repository-badges"
 import { RepositoryOnboardingProgress } from "@/features/prism/components/repository-onboarding-progress"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
@@ -268,7 +269,13 @@ function RepositoryJobBar({
   repoId: string
   seedJob?: Repository["activeJob"]
 }) {
-  const { latest, active } = useRepositoryJobs(repoId, true)
+  const pollJobs = Boolean(
+    seedJob &&
+      (seedJob.status === "running" ||
+        seedJob.status === "pending" ||
+        seedJob.jobType === "onboarding"),
+  )
+  const { latest, active } = useRepositoryJobs(repoId, pollJobs)
   const job = latest ?? seedJob
   const [starting, setStarting] = useState(false)
 
@@ -327,36 +334,51 @@ function ExternalRepoOnboardSection({
   repo: Repository
   onReposRefresh: () => Promise<void>
 }) {
-  const [started, setStarted] = useState(
-    () => repo.activeJob?.jobType === "onboarding",
+  const { startOnboard, onboarding, onboardError, latest, phase } = useRepositoryOnboarding(
+    repo.id,
+    { resumeJob: repo.activeJob?.jobType === "onboarding" },
   )
-  const { startOnboard, onboarding, onboardError, latest, phase } =
-    useRepositoryOnboarding(started ? repo.id : null)
+  const completedRefreshRef = useRef(false)
+
+  useEffect(() => {
+    if (phase !== "completed") {
+      completedRefreshRef.current = false
+      return
+    }
+    if (completedRefreshRef.current) return
+    completedRefreshRef.current = true
+    void onReposRefresh()
+  }, [phase, onReposRefresh])
 
   if (repo.managed) {
     return <RepositoryJobBar repoId={repo.id} seedJob={repo.activeJob} />
   }
 
-  const showProgress = started && (onboarding || latest)
+  const showProgress =
+    onboarding || Boolean(latest) || repo.activeJob?.jobType === "onboarding"
+  const showOnboardButton = !onboarding && phase !== "completed" && !repo.managed
 
   return (
     <div className="mt-3 pt-3 border-t border-border space-y-2">
-      {showProgress ? <RepositoryOnboardingProgress job={latest} compact /> : null}
+      {showProgress ? <RepositoryOnboardingProgress job={latest ?? repo.activeJob} compact /> : null}
       {onboardError ? <p className="text-xs text-risk-high">{onboardError}</p> : null}
       {phase === "completed" ? (
         <p className="text-xs text-risk-low">{zh.adoptRepo.onboardingComplete}</p>
       ) : null}
-      {!started && phase !== "completed" ? (
+      {showOnboardButton ? (
         <button
           type="button"
+          disabled={onboarding}
           onClick={() => {
-            setStarted(true)
-            void startOnboard().then(async () => {
-              await onReposRefresh()
+            void startOnboard().then(async (result) => {
+              if (result) await onReposRefresh()
             })
           }}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-ai-blue text-white hover:bg-[oklch(0.55_0.19_240)]"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-ai-blue text-white hover:bg-[oklch(0.55_0.19_240)] disabled:opacity-50"
         >
+          {onboarding ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : null}
           {zh.repos.onboardCta}
         </button>
       ) : null}
@@ -624,6 +646,8 @@ function RepoCard({
       ) : (
         <RepositoryJobBar repoId={repo.id} seedJob={repo.activeJob} />
       )}
+
+      <RepoPrList repoId={repo.id} repoFullName={`${repo.owner}/${repo.name}`} />
 
       {showAnalysisPanel && (
         <div className="mt-3 pt-3 border-t border-border">

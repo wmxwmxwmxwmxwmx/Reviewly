@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.errors import api_error
 from app.db.models import PullRequest
 from app.github import sync
+from app.github.github_auth import effective_github_token
 from app.integrations.github.app_auth import get_installation_id_for_repo
 from app.github.url_parser import parse_github_pr_url
 from app.repositories import pull_requests as pr_repo
@@ -40,8 +41,14 @@ def _import_result(
                 out["analysisJobId"] = str(analysis["jobId"])
             out["analysisQueued"] = bool(analysis.get("queued"))
             out["analysisCacheHit"] = bool(analysis.get("cacheHit"))
+        else:
+            out["analysisQueued"] = False
+            out["analysisEnqueueError"] = "无法排队分析任务（请确认 PR 已同步提交 SHA）"
+            logger.warning("import_pull_request_by_url analysis not enqueued prId=%s", pr_id)
     except Exception:
         logger.exception("import_pull_request_by_url analysis enqueue failed prId=%s", pr_id)
+        out["analysisQueued"] = False
+        out["analysisEnqueueError"] = "分析任务排队失败"
     return out
 
 
@@ -58,6 +65,15 @@ async def import_pull_request_by_url(
 ) -> dict[str, str | bool]:
     try:
         parsed = parse_github_pr_url(url)
+        access_token = effective_github_token(session, user_id)
+        logger.info(
+            "import_pull_request_by_url start owner=%s repo=%s number=%s user_id=%s has_token=%s",
+            parsed.owner,
+            parsed.repo,
+            parsed.number,
+            user_id or "(none)",
+            bool(access_token),
+        )
 
         cached = pr_repo.find_by_repo_number(session, parsed.owner, parsed.repo, parsed.number)
         if cached:
@@ -75,6 +91,13 @@ async def import_pull_request_by_url(
 
                     auth_user = auth_users_repo.get_user_row(session, user_id)
                 await refresh_pr_shas_from_github(session, cached, user=auth_user)
+            logger.info(
+                "import_pull_request_by_url cache hit prId=%s %s/%s#%s",
+                cached,
+                parsed.owner,
+                parsed.repo,
+                parsed.number,
+            )
             return _import_result(
                 cached,
                 _repo_id_for_pr(session, cached),
@@ -136,6 +159,7 @@ async def import_pull_request_by_url(
                 parsed.repo,
                 parsed.number,
                 owner_user_id=user_id,
+                access_token=access_token,
             )
             logger.info(
                 "import_pull_request_by_url github_public ok prId=%s %s/%s#%s",

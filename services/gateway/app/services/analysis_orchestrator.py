@@ -51,7 +51,11 @@ def enqueue_analysis(
         logger.warning("Cannot enqueue analysis: PR %s not found", pull_request_id)
         return None
     except ValueError as exc:
-        logger.warning("Cannot enqueue analysis for PR %s: %s", pull_request_id, exc)
+        logger.warning(
+            "Cannot enqueue analysis for PR %s: %s (missing head_sha or version)",
+            pull_request_id,
+            exc,
+        )
         return None
     finally:
         session.close()

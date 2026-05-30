@@ -7,13 +7,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.errors import api_error
 from app.db.models import (
     ActivityEvent,
+    AnalysisCacheEvent,
     AnalysisFinding,
     AnalysisJob,
     GovernanceViolation,
@@ -352,16 +353,53 @@ def adopt_repository_for_user(
 
 
 def _delete_repository_cascade(session: Session, repo_id: str) -> None:
-    session.execute(delete(RepositoryJob).where(RepositoryJob.repository_id == repo_id))
-    session.execute(delete(AnalysisFinding).where(AnalysisFinding.repository_id == repo_id))
-    session.execute(delete(AnalysisJob).where(AnalysisJob.repository_id == repo_id))
+    """Delete a repository and dependents in FK-safe order."""
     pr_ids = list(
         session.scalars(select(PullRequest.id).where(PullRequest.repository_id == repo_id)).all()
     )
+    repo_job_ids = list(
+        session.scalars(
+            select(RepositoryJob.id).where(RepositoryJob.repository_id == repo_id)
+        ).all()
+    )
+
+    job_conditions = [AnalysisJob.repository_id == repo_id]
     if pr_ids:
-        job_ids = select(AnalysisJob.id).where(AnalysisJob.pull_request_id.in_(pr_ids))
-        session.execute(delete(AnalysisFinding).where(AnalysisFinding.job_id.in_(job_ids)))
-        session.execute(delete(AnalysisJob).where(AnalysisJob.pull_request_id.in_(pr_ids)))
+        job_conditions.append(AnalysisJob.pull_request_id.in_(pr_ids))
+    if repo_job_ids:
+        job_conditions.append(AnalysisJob.repository_job_id.in_(repo_job_ids))
+    job_ids_select = select(AnalysisJob.id).where(or_(*job_conditions))
+
+    cache_conditions = [AnalysisCacheEvent.job_id.in_(job_ids_select)]
+    if pr_ids:
+        cache_conditions.append(AnalysisCacheEvent.pull_request_id.in_(pr_ids))
+    session.execute(delete(AnalysisCacheEvent).where(or_(*cache_conditions)))
+
+    finding_conditions = [AnalysisFinding.repository_id == repo_id]
+    finding_conditions.append(AnalysisFinding.job_id.in_(job_ids_select))
+    session.execute(delete(AnalysisFinding).where(or_(*finding_conditions)))
+
+    session.execute(
+        update(AnalysisJob)
+        .where(AnalysisJob.source_job_id.in_(job_ids_select))
+        .values(source_job_id=None)
+    )
+    session.execute(
+        update(AnalysisJob)
+        .where(AnalysisJob.id.in_(job_ids_select))
+        .values(source_job_id=None)
+    )
+    session.execute(delete(AnalysisJob).where(AnalysisJob.id.in_(job_ids_select)))
+
+    if repo_job_ids:
+        session.execute(
+            update(RepositoryJob)
+            .where(RepositoryJob.parent_job_id.in_(repo_job_ids))
+            .values(parent_job_id=None)
+        )
+    session.execute(delete(RepositoryJob).where(RepositoryJob.repository_id == repo_id))
+
+    if pr_ids:
         session.execute(
             delete(GovernanceViolation).where(GovernanceViolation.pull_request_id.in_(pr_ids))
         )
@@ -369,6 +407,7 @@ def _delete_repository_cascade(session: Session, repo_id: str) -> None:
         session.execute(delete(PullRequestDiff).where(PullRequestDiff.pull_request_id.in_(pr_ids)))
         session.execute(delete(PullRequestFile).where(PullRequestFile.pull_request_id.in_(pr_ids)))
         session.execute(delete(PullRequest).where(PullRequest.id.in_(pr_ids)))
+
     session.execute(delete(Repository).where(Repository.id == repo_id))
     session.flush()
 

@@ -116,6 +116,24 @@ export function AIReviewView({
   }, [prId, loadPersisted, abortLoad])
 
   useEffect(() => {
+    if (loadingPersisted || analyzing) return
+    const hasPersistedAnalysis =
+      findings.length > 0 ||
+      Boolean(latest?.summary) ||
+      job?.status === "completed"
+    if (hasPersistedAnalysis && syncLabel === zh.common.analyzeReady) {
+      setSyncLabel(zh.repos.aiAnalysisReady)
+    }
+  }, [
+    loadingPersisted,
+    analyzing,
+    findings.length,
+    latest?.summary,
+    job?.status,
+    syncLabel,
+  ])
+
+  useEffect(() => {
     return () => {
       analyzeAbortRef.current?.abort()
     }

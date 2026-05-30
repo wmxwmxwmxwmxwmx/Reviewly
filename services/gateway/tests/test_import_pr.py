@@ -165,6 +165,44 @@ def test_import_pull_request_cache_hit(client: TestClient) -> None:
         assert second_body["repositoryCreated"] is False
 
 
+def test_import_pull_request_passes_user_oauth_token(client: TestClient) -> None:
+    mock_pr = {
+        "id": 999003,
+        "number": 7,
+        "title": "oauth",
+        "state": "open",
+        "user": {"login": "dev"},
+        "updated_at": "2025-01-01T00:00:00Z",
+        "created_at": "2025-01-01T00:00:00Z",
+        "head": {"ref": "feat", "sha": "abc"},
+        "base": {"ref": "main", "repo": {"id": 887, "full_name": "acme/oauth", "default_branch": "main"}},
+        "additions": 1,
+        "deletions": 0,
+        "changed_files": 1,
+        "html_url": "https://github.com/acme/oauth/pull/7",
+    }
+    mock_repo = {"id": 887, "full_name": "acme/oauth", "default_branch": "main"}
+    get_pr = AsyncMock(return_value=mock_pr)
+
+    with (
+        patch("app.github.import_pr.get_installation_id_for_repo", new_callable=AsyncMock, return_value=None),
+        patch("app.github.import_pr.effective_github_token", return_value="oauth-user-token"),
+        patch("app.github.public_client.get_pull_request", get_pr),
+        patch("app.github.public_client.get_repo_public", new_callable=AsyncMock, return_value=mock_repo),
+        patch("app.github.public_client.get_pull_diff_patch", new_callable=AsyncMock, return_value=""),
+        patch("app.github.public_client.list_pull_files", new_callable=AsyncMock, return_value=[]),
+        patch("app.github.public_client.list_pull_commits", new_callable=AsyncMock, return_value=[]),
+    ):
+        r = client.post(
+            "/api/pull-requests/import",
+            json={"url": "https://github.com/acme/oauth/pull/7"},
+        )
+
+    assert r.status_code == 200
+    get_pr.assert_awaited()
+    assert get_pr.await_args.kwargs.get("access_token") == "oauth-user-token"
+
+
 def test_import_pull_request_public_api(client: TestClient) -> None:
     mock_pr = {
         "id": 999001,

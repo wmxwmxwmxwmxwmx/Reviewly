@@ -76,28 +76,66 @@ export function formatPrismApiError(error: unknown, fallback = "请求失败"): 
   return fallback
 }
 
+function _errorPayload(data: unknown): Record<string, unknown> | null {
+  if (!data || typeof data !== "object") {
+    return null
+  }
+  const body = data as Record<string, unknown>
+  if (typeof body.error === "string" || typeof body.code === "string") {
+    return body
+  }
+  const detail = body.detail
+  if (detail && typeof detail === "object") {
+    return detail as Record<string, unknown>
+  }
+  return null
+}
+
+export function extractApiErrorCode(data: unknown): string | undefined {
+  const payload = _errorPayload(data)
+  if (!payload) {
+    return undefined
+  }
+  const code = payload.code
+  return typeof code === "string" ? code : undefined
+}
+
 export function extractApiErrorMessage(
   data: unknown,
   fallback = "请求失败",
 ): string {
+  const payload = _errorPayload(data)
+  if (payload && typeof payload.error === "string") {
+    return payload.error
+  }
   if (!data || typeof data !== "object") {
     return fallback
   }
   const body = data as Record<string, unknown>
-  if (typeof body.error === "string") {
-    return body.error
-  }
-  const detail = body.detail
-  if (detail && typeof detail === "object") {
-    const nested = (detail as Record<string, unknown>).error
-    if (typeof nested === "string") {
-      return nested
-    }
-  }
-  if (typeof detail === "string") {
-    return detail
+  if (typeof body.detail === "string") {
+    return body.detail
   }
   return fallback
+}
+
+const API_ERROR_TITLES: Record<string, string> = {
+  GITHUB_RATE_LIMIT: "GitHub 调用频率受限",
+  GITHUB_AUTH_FAILED: "GitHub 认证失败",
+  GITHUB_FORBIDDEN: "无法访问仓库",
+  PR_NOT_FOUND: "未找到 PR",
+  INVALID_PR_URL: "PR 链接无效",
+  SCHEMA_OUTDATED: "数据库需要迁移",
+}
+
+export function formatImportErrorMessage(error: unknown, fallback = "导入失败"): string {
+  if (error instanceof PrismApiError) {
+    const title = error.code ? API_ERROR_TITLES[error.code] : undefined
+    if (title && error.message) {
+      return `${title}：${error.message}`
+    }
+    return formatPrismApiError(error, fallback)
+  }
+  return formatPrismApiError(error, fallback)
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -150,7 +188,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       const apiErr = new PrismApiError(
         extractApiErrorMessage(body, res.statusText || "请求失败"),
         res.status,
-        typeof body === "object" && body && "code" in body ? String(body.code) : undefined,
+        extractApiErrorCode(body),
       )
       if (debug && !silentStatuses?.includes(apiErr.status)) {
         debugApiError("apiFetch", apiErr)

@@ -8,7 +8,7 @@ import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { debugApiError, debugApiLog } from "@/lib/debug-api-log"
 import { importPullRequestByUrl } from "@/lib/api/pull-requests"
-import { PrismApiError } from "@/lib/api/client"
+import { formatImportErrorMessage } from "@/lib/api/client"
 import {
   adoptDismissKey,
   shouldPromptExternalOnboard,
@@ -88,12 +88,7 @@ export function useImportPrByUrl(options: UseImportPrByUrlOptions = {}) {
         }
       } catch (error) {
         debugApiError("useImportPrByUrl", error)
-        const message =
-          error instanceof PrismApiError
-            ? error.message
-            : error instanceof Error
-              ? error.message
-              : zh.common.importFailed
+        const message = formatImportErrorMessage(error, zh.common.importFailed)
         setImportError(message)
         onImportError?.(message)
       } finally {

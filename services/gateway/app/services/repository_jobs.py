@@ -171,7 +171,20 @@ async def _execute_job(session: Session, job_id: str) -> None:
             result = await sync_repository_pull_requests_for_user(session, repo_row, user)
             pr_ids = result.get("prIds") or []
             if pr_ids:
-                enqueue_analysis_for_pr_ids(pr_ids, max_concurrent=3)
+                enqueued = enqueue_analysis_for_pr_ids(pr_ids, max_concurrent=3)
+                logger.info(
+                    "Repository job %s enqueued %s analysis jobs for repo %s (pr_count=%s)",
+                    job_id,
+                    len(enqueued),
+                    repo_id,
+                    len(pr_ids),
+                )
+            else:
+                logger.info(
+                    "Repository job %s synced repo %s with no PRs to enqueue",
+                    job_id,
+                    repo_id,
+                )
             cb(100, f"已同步 {result.get('synced', 0)} 个 PR")
             rjob_repo.update_job(
                 session,

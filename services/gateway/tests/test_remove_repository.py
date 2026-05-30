@@ -9,11 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
+    AnalysisCacheEvent,
     AnalysisFinding,
     AnalysisJob,
     AuthUser,
     PullRequest,
     Repository,
+    RepositoryJob,
     Team,
     TeamMembership,
 )
@@ -147,6 +149,7 @@ def test_remove_repository_forbidden_for_team_non_owner(client: TestClient, db: 
     bypass = _bypass_user(db)
     team = Team(id="team-rm", name="Team RM")
     db.add_all([owner, team])
+    db.flush()
     db.add(TeamMembership(user_id=owner.id, team_id=team.id, role="member"))
     db.add(TeamMembership(user_id=bypass.id, team_id=team.id, role="member"))
     repo = _insert_repo(
@@ -246,3 +249,141 @@ def test_remove_external_repo_restored_by_import(
     )
     assert imported.status_code == 200
     mock_import.assert_called_once()
+
+
+def test_remove_repository_cascades_repository_job_id(client: TestClient, db: Session) -> None:
+    user = _bypass_user(db)
+    repo = _insert_repo(
+        db,
+        repo_id="repo-rm-rj",
+        full_name="acme/repo-job",
+        owner_user_id=user.id,
+    )
+    db.add(
+        RepositoryJob(
+            id="rjob-rm-1",
+            repository_id=repo.id,
+            job_type="onboard",
+            status="completed",
+        )
+    )
+    db.flush()
+    db.add(
+        AnalysisJob(
+            id="job-rm-rj",
+            repository_id=repo.id,
+            repository_job_id="rjob-rm-1",
+            status="completed",
+            progress=100,
+        )
+    )
+    db.commit()
+    repo_id = repo.id
+
+    r = client.delete(f"/api/repos/{repo_id}")
+    assert r.status_code == 200
+
+    db.expire_all()
+    assert db.get(Repository, repo_id) is None
+    assert db.get(RepositoryJob, "rjob-rm-1") is None
+    assert db.get(AnalysisJob, "job-rm-rj") is None
+
+
+def test_remove_repository_cascades_analysis_cache_events(client: TestClient, db: Session) -> None:
+    user = _bypass_user(db)
+    repo = _insert_repo(
+        db,
+        repo_id="repo-rm-ace",
+        full_name="acme/cache-ev",
+        owner_user_id=user.id,
+    )
+    _insert_pr_with_finding(db, repo_id=repo.id, pr_id="pr-rm-ace")
+    db.add(
+        AnalysisCacheEvent(
+            id="ace-rm-1",
+            pull_request_id="pr-rm-ace",
+            job_id="job-pr-rm-ace",
+            cache_hit=True,
+        )
+    )
+    db.commit()
+    repo_id = repo.id
+
+    r = client.delete(f"/api/repos/{repo_id}")
+    assert r.status_code == 200
+
+    db.expire_all()
+    assert db.get(AnalysisCacheEvent, "ace-rm-1") is None
+    assert db.get(PullRequest, "pr-rm-ace") is None
+
+
+def test_remove_repository_cascades_source_job_id(client: TestClient, db: Session) -> None:
+    user = _bypass_user(db)
+    repo = _insert_repo(
+        db,
+        repo_id="repo-rm-src",
+        full_name="acme/source-job",
+        owner_user_id=user.id,
+    )
+    db.add(
+        AnalysisJob(
+            id="job-rm-src-a",
+            repository_id=repo.id,
+            status="completed",
+            progress=100,
+        )
+    )
+    db.add(
+        AnalysisJob(
+            id="job-rm-src-b",
+            repository_id=repo.id,
+            source_job_id="job-rm-src-a",
+            status="completed",
+            progress=100,
+        )
+    )
+    db.commit()
+    repo_id = repo.id
+
+    r = client.delete(f"/api/repos/{repo_id}")
+    assert r.status_code == 200
+
+    db.expire_all()
+    assert db.get(AnalysisJob, "job-rm-src-a") is None
+    assert db.get(AnalysisJob, "job-rm-src-b") is None
+
+
+def test_remove_repository_cascades_parent_job_id(client: TestClient, db: Session) -> None:
+    user = _bypass_user(db)
+    repo = _insert_repo(
+        db,
+        repo_id="repo-rm-par",
+        full_name="acme/parent-job",
+        owner_user_id=user.id,
+    )
+    db.add(
+        RepositoryJob(
+            id="rjob-rm-parent",
+            repository_id=repo.id,
+            job_type="onboard",
+            status="completed",
+        )
+    )
+    db.add(
+        RepositoryJob(
+            id="rjob-rm-child",
+            repository_id=repo.id,
+            job_type="sync_prs",
+            status="completed",
+            parent_job_id="rjob-rm-parent",
+        )
+    )
+    db.commit()
+    repo_id = repo.id
+
+    r = client.delete(f"/api/repos/{repo_id}")
+    assert r.status_code == 200
+
+    db.expire_all()
+    assert db.get(RepositoryJob, "rjob-rm-parent") is None
+    assert db.get(RepositoryJob, "rjob-rm-child") is None
