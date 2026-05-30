@@ -29,7 +29,7 @@ import {
   PROMPT_BUDGET,
 } from "@/lib/ai/prompt-budget"
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
-import { PrismApiError } from "@/lib/api/client"
+import { formatPrismApiError, PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { AdoptRepoBanner } from "@/features/prism/components/adopt-repo-banner"
@@ -406,7 +406,7 @@ ${diffContext || "（无 diff 内容）"}`,
       if (isAbortError(error)) {
         return
       }
-      errors.push(error instanceof Error ? error.message : "规则扫描任务失败")
+      errors.push(formatPrismApiError(error, "规则扫描任务失败"))
     } finally {
       if (shouldApplyResult(ac.signal)) {
         setScanning(false)

@@ -59,6 +59,23 @@ export async function parseFetchJson<T = Record<string, unknown>>(
   }
 }
 
+const SCHEMA_OUTDATED_HINT =
+  "数据库 schema 未更新。请在 services/gateway 目录执行 alembic upgrade head 后重启 Gateway。"
+
+/** Map API errors to user-facing analysis messages. */
+export function formatPrismApiError(error: unknown, fallback = "请求失败"): string {
+  if (error instanceof PrismApiError) {
+    if (error.code === "SCHEMA_OUTDATED") {
+      return SCHEMA_OUTDATED_HINT
+    }
+    return error.message || fallback
+  }
+  if (error instanceof Error) {
+    return error.message || fallback
+  }
+  return fallback
+}
+
 export function extractApiErrorMessage(
   data: unknown,
   fallback = "请求失败",

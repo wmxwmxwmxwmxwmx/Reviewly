@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react"
 import type { AnalysisFinding, AnalysisJob, AnalysisSummary } from "@reviewly/shared"
 import type { AiPersistedContent } from "@reviewly/shared"
 
-import { PrismApiError } from "@/lib/api/client"
+import { formatPrismApiError } from "@/lib/api/client"
 import { isAbortError } from "@/lib/abort-utils"
 import {
   loadPersistedAnalysis,
@@ -67,13 +67,7 @@ export function usePrAnalysis(
         if (isAbortError(error) || signal?.aborted) {
           return null
         }
-        const message =
-          error instanceof PrismApiError
-            ? error.message
-            : error instanceof Error
-              ? error.message
-              : "加载历史分析失败"
-        setPersistError(message)
+        setPersistError(formatPrismApiError(error, "加载历史分析失败"))
         throw error
       } finally {
         if (!signal?.aborted && generation === persistGenerationRef.current) {

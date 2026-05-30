@@ -15,6 +15,7 @@ from app.integrations.github.app_auth import get_installation_id_for_repo
 from app.github.url_parser import parse_github_pr_url
 from app.repositories import pull_requests as pr_repo
 from app.services import analysis_orchestrator
+from app.services.pr_metadata import pr_has_head_sha, refresh_pr_shas_from_github
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,13 @@ async def import_pull_request_by_url(
                 parsed.repo,
                 parsed.number,
             )
+            if not pr_has_head_sha(session, cached):
+                auth_user = None
+                if user_id:
+                    from app.repositories import auth_users as auth_users_repo
+
+                    auth_user = auth_users_repo.get_user_row(session, user_id)
+                await refresh_pr_shas_from_github(session, cached, user=auth_user)
             return _import_result(
                 cached,
                 _repo_id_for_pr(session, cached),

@@ -23,6 +23,7 @@ from app.repositories import repos as repos_repo
 from app.repositories import governance as governance_repo
 from app.repositories import settings as settings_repo
 from app.services import analysis_jobs
+from app.services.pr_metadata import pr_has_head_sha, refresh_pr_shas_from_github
 from app.services import dashboard_summary
 
 router = APIRouter(prefix="/api", tags=["data"])
@@ -367,9 +368,23 @@ async def start_analysis(
     db: Session = Depends(get_db),
     user: AuthUser | None = Depends(get_optional_user),
 ) -> dict:
+    from app.main import migration_status
+
+    if migration_status == "failed":
+        raise api_error(SCHEMA_OUTDATED_MESSAGE, 503, code="SCHEMA_OUTDATED")
+
     user_id, team_ids = _resolve_user_scope(db, user)
     if pr_repo.get_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids) is None:
         raise api_error("合并请求不存在", 404)
+
+    if not pr_has_head_sha(db, pr_id):
+        refreshed = await refresh_pr_shas_from_github(db, pr_id, user=user)
+        if not refreshed:
+            raise api_error(
+                "缺少 PR 提交版本信息，请先在代码仓库中重新同步该合并请求",
+                400,
+            )
+
     try:
         result = analysis_jobs.create_job(db, pr_id, force=force)
         job_id = result.pop("_schedule", None)
@@ -390,6 +405,14 @@ async def start_analysis(
         return result
     except KeyError as exc:
         raise api_error("合并请求不存在", 404) from exc
+    except ValueError as exc:
+        raise api_error(str(exc) or "无法创建分析任务，请先同步合并请求", 400) from exc
+    except (OperationalError, ProgrammingError) as exc:
+        logger.exception("Database schema error during PR analysis start")
+        raise api_error(SCHEMA_OUTDATED_MESSAGE, 503, code="SCHEMA_OUTDATED") from exc
+    except IntegrityError as exc:
+        logger.exception("Database integrity error during PR analysis start")
+        raise api_error("分析任务创建失败，请重试", 409, code="ANALYSIS_INTEGRITY_ERROR") from exc
 
 
 @router.get("/pull-requests/{pr_id}/findings")
