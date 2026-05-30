@@ -48,6 +48,10 @@ export function ArchitectureView() {
   const hasGraphData = (graph?.nodes.length ?? 0) > 0
   const scanReturnedEmpty =
     Boolean(graph?.scannedAt) && !needsScan && !hasGraphData && !loading && !scanning
+  const scanSummary = metrics?.summary as
+    | (typeof metrics.summary & { truncated?: boolean; filesDiscovered?: number })
+    | undefined
+  const scanWasTruncated = Boolean(scanSummary?.truncated)
 
   const handleAnalyze = async () => {
     if (!repoId || aiLoading) return
@@ -121,6 +125,17 @@ export function ArchitectureView() {
       {scanReturnedEmpty && (
         <div className="rounded-lg border border-border bg-surface-2 px-4 py-3 text-sm text-muted-foreground">
           {zh.architecture.scanEmpty}
+        </div>
+      )}
+
+      {scanWasTruncated && hasGraphData && (
+        <div className="rounded-lg border border-ai-blue/30 bg-ai-blue/5 px-4 py-3 text-xs text-muted-foreground">
+          {zh.architecture.scanTruncated}
+          {scanSummary?.filesDiscovered != null && (
+            <span className="ml-1 text-foreground">
+              （仓库共 {scanSummary.filesDiscovered} 个源文件，已分析 {scanSummary.fileCount} 个）
+            </span>
+          )}
         </div>
       )}
 

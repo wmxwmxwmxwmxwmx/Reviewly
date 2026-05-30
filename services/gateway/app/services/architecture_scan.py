@@ -113,7 +113,11 @@ async def stream_run_scan(session: Session, repo_id: str) -> AsyncIterator[dict[
     worker = asyncio.create_task(build_worker())
     try:
         while True:
-            item = await queue.get()
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=25.0)
+            except asyncio.TimeoutError:
+                yield {"ping": True}
+                continue
             if item is None:
                 break
             if "error" in item:

@@ -2,8 +2,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
+from app.architecture.analysis import analyze_graph
+from app.architecture.import_indexes import (
+    build_basename_lookup,
+    build_python_module_lookup,
+    resolve_cpp_import,
+    resolve_python_import,
+    resolve_typescript_import,
+)
 from app.architecture.layers import classify_layer
 from app.architecture.parsers import (
     extract_cpp_includes,
@@ -15,6 +24,16 @@ from app.core.config import settings
 
 ProgressFn = Callable[[str, int, int | None, str], None]
 
+_PROGRESS_INTERVAL = 25
+
+
+@dataclass(slots=True)
+class _FileRecord:
+    rel: str
+    lang: str
+    content: str
+    lines: int
+
 
 def _read_text(path: Path) -> str:
     try:
@@ -23,48 +42,99 @@ def _read_text(path: Path) -> str:
         return ""
 
 
-def _node_id(rel: str) -> str:
-    return rel.replace("\\", "/")
+def _line_count(content: str) -> int:
+    if not content:
+        return 0
+    return content.count("\n") + (0 if content.endswith("\n") else 1)
 
 
-def _resolve_python(target: str, rel_path: str, index: dict[str, str]) -> str | None:
-    base_dir = Path(rel_path).parent
-    parts = target.split(".")
-    candidate = (base_dir / "/".join(parts)).with_suffix(".py")
-    rel = candidate.as_posix()
-    if rel in index:
-        return index[rel]
-    alt = f"{parts[0]}.py"
-    for key in index:
-        if key.endswith(f"/{alt}") or key == alt:
-            return index[key]
-    return None
+def _emit_progress(
+    emit: Callable[[str, int, int | None, str], None],
+    phase: str,
+    idx: int,
+    total: int,
+    message: str,
+) -> None:
+    if idx % _PROGRESS_INTERVAL == 0 or idx == total - 1:
+        emit(phase, idx + 1, total, message)
 
 
-def _resolve_ts(target: str, rel_path: str, index: dict[str, str]) -> str | None:
-    if not target.startswith("."):
-        return None
-    base = Path(rel_path).parent / target
-    for ext in ("", ".ts", ".tsx", ".js", "/index.ts", "/index.tsx"):
-        cand = _node_id((base.as_posix() + ext).lstrip("./"))
-        if cand in index:
-            return index[cand]
-        for key in index:
-            if key.endswith(cand.split("/")[-1] + ext.split("/")[-1]):
-                return index[key]
-    return None
+def _load_file_records(
+    root: Path,
+    files: list[Path],
+    emit: Callable[[str, int, int | None, str], None],
+) -> tuple[list[_FileRecord], dict[str, str]]:
+    total = len(files)
+    records: list[_FileRecord] = []
+    path_to_id: dict[str, str] = {}
+
+    emit("nodes", 0, total or None, "正在解析模块…")
+    for idx, fpath in enumerate(files):
+        rel = fpath.relative_to(root).as_posix().replace("\\", "/")
+        path_to_id[rel] = rel
+        content = _read_text(fpath)
+        records.append(
+            _FileRecord(
+                rel=rel,
+                lang=language_for(fpath),
+                content=content,
+                lines=_line_count(content),
+            )
+        )
+        _emit_progress(emit, "nodes", idx, total, f"正在解析模块 ({idx + 1}/{total})")
+
+    return records, path_to_id
 
 
-def _resolve_cpp(target: str, rel_path: str, index: dict[str, str]) -> str | None:
-    base = Path(rel_path).parent
-    cand = (base / target).as_posix()
-    if cand in index:
-        return index[cand]
-    name = Path(target).name
-    for key in index:
-        if key.endswith(name):
-            return index[key]
-    return None
+def _build_edges(
+    records: list[_FileRecord],
+    path_to_id: dict[str, str],
+    emit: Callable[[str, int, int | None, str], None],
+) -> tuple[list[dict], dict[str, int]]:
+    total = len(records)
+    max_edges = settings.architecture_scan_max_edges
+    python_lookup = build_python_module_lookup(path_to_id)
+    basename_lookup = build_basename_lookup(path_to_id)
+
+    edges: list[dict] = []
+    edge_keys: set[tuple[str, str]] = set()
+    import_counts: dict[str, int] = {}
+
+    emit("edges", 0, total or None, "正在分析依赖…")
+    for idx, rec in enumerate(records):
+        targets: list[str]
+        if rec.lang == "python":
+            targets = extract_python_imports(rec.content)
+        elif rec.lang == "typescript":
+            targets = extract_typescript_imports(rec.content)
+        elif rec.lang == "cpp":
+            targets = extract_cpp_includes(rec.content)
+        else:
+            targets = []
+
+        resolved = 0
+        for target in targets:
+            if len(edges) >= max_edges:
+                break
+            dest: str | None = None
+            if rec.lang == "python":
+                dest = resolve_python_import(target, rec.rel, path_to_id, python_lookup)
+            elif rec.lang == "typescript":
+                dest = resolve_typescript_import(target, rec.rel, path_to_id)
+            elif rec.lang == "cpp":
+                dest = resolve_cpp_import(target, rec.rel, path_to_id, basename_lookup)
+
+            if dest and dest != rec.rel:
+                key = (rec.rel, dest)
+                if key not in edge_keys:
+                    edge_keys.add(key)
+                    edges.append({"from": rec.rel, "to": dest, "kind": "import"})
+                    resolved += 1
+
+        import_counts[rec.rel] = resolved
+        _emit_progress(emit, "edges", idx, total, f"正在分析依赖 ({idx + 1}/{total})")
+
+    return edges, import_counts
 
 
 def build_graph(repo_root: Path, on_progress: ProgressFn | None = None) -> dict:
@@ -74,71 +144,37 @@ def build_graph(repo_root: Path, on_progress: ProgressFn | None = None) -> dict:
 
     root = repo_root.resolve()
     emit("discover", 0, None, "正在扫描源文件…")
-    files = iter_source_files(root, settings.architecture_scan_max_files)
+    files, total_discovered, truncated = iter_source_files(
+        root, settings.architecture_scan_max_files
+    )
     total = len(files)
-    emit("discover", total, total, f"发现 {total} 个源文件")
+    discover_msg = f"发现 {total_discovered} 个源文件"
+    if truncated:
+        discover_msg += f"，分析前 {total} 个（大仓库采样）"
+    emit("discover", total, total, discover_msg)
 
-    path_to_id: dict[str, str] = {}
-    nodes: list[dict] = []
-    import_counts: dict[str, int] = {}
+    records, path_to_id = _load_file_records(root, files, emit)
+    edges, import_counts = _build_edges(records, path_to_id, emit)
 
-    emit("nodes", 0, total or None, "正在解析模块…")
-    for idx, fpath in enumerate(files):
-        rel = _node_id(str(fpath.relative_to(root)))
-        path_to_id[rel] = rel
-        content = _read_text(fpath)
-        lang = language_for(fpath)
-        nodes.append(
-            {
-                "id": rel,
-                "label": Path(rel).name,
-                "path": rel,
-                "language": lang,
-                "layer": classify_layer(rel),
-                "lines": content.count("\n") + 1 if content else 0,
-                "importCount": 0,
-            }
-        )
-        if total and (idx % 10 == 0 or idx == total - 1):
-            emit("nodes", idx + 1, total, f"正在解析模块 ({idx + 1}/{total})")
-
-    edges: list[dict] = []
-    emit("edges", 0, total or None, "正在分析依赖…")
-    for idx, fpath in enumerate(files):
-        rel = _node_id(str(fpath.relative_to(root)))
-        content = _read_text(fpath)
-        lang = language_for(fpath)
-        targets: list[str] = []
-        if lang == "python":
-            targets = extract_python_imports(content)
-        elif lang == "typescript":
-            targets = extract_typescript_imports(content)
-        elif lang == "cpp":
-            targets = extract_cpp_includes(content)
-
-        resolved = 0
-        for t in targets:
-            dest: str | None = None
-            if lang == "python":
-                dest = _resolve_python(t, rel, path_to_id)
-            elif lang == "typescript":
-                dest = _resolve_ts(t, rel, path_to_id)
-            elif lang == "cpp":
-                dest = _resolve_cpp(t, rel, path_to_id)
-            if dest and dest != rel:
-                edges.append({"from": rel, "to": dest, "kind": "import"})
-                resolved += 1
-        import_counts[rel] = resolved
-        if total and (idx % 10 == 0 or idx == total - 1):
-            emit("edges", idx + 1, total, f"正在分析依赖 ({idx + 1}/{total})")
-
-    for node in nodes:
-        node["importCount"] = import_counts.get(node["id"], 0)
-
-    from app.architecture.analysis import analyze_graph
+    nodes = [
+        {
+            "id": rec.rel,
+            "label": Path(rec.rel).name,
+            "path": rec.rel,
+            "language": rec.lang,
+            "layer": classify_layer(rec.rel),
+            "lines": rec.lines,
+            "importCount": import_counts.get(rec.rel, 0),
+        }
+        for rec in records
+    ]
 
     emit("metrics", 0, None, "正在计算架构指标…")
     metrics = analyze_graph(nodes, edges)
+    summary = metrics.setdefault("summary", {})
+    summary["filesDiscovered"] = total_discovered
+    summary["truncated"] = truncated
+    summary["edgesTruncated"] = len(edges) >= settings.architecture_scan_max_edges
     emit("metrics", 1, 1, "指标计算完成")
 
     return {

@@ -2,7 +2,9 @@
 
 const GATEWAY_ORIGIN = process.env.API_URL ?? "http://localhost:3001"
 const DEFAULT_TIMEOUT_MS = 120_000
-/** First-time git clone of large monorepos can exceed 5 minutes on slow networks. */
+/** SSE scan streams emit progress for a long time; do not abort while bytes still flow. */
+export const SCAN_STREAM_TIMEOUT_MS = null as number | null
+/** Legacy cap for non-stream requests (unused by scan SSE). */
 const SCAN_TIMEOUT_MS = 900_000
 
 function gatewayUrl(path: string): string {
@@ -57,14 +59,20 @@ export async function proxyToGateway(
 export async function proxyToGatewayStream(
   path: string,
   init: RequestInit,
-  options?: { timeoutMs?: number },
+  options?: { timeoutMs?: number | null },
 ): Promise<Response> {
   const url = gatewayUrl(path)
+  const timeoutMs = options?.timeoutMs
+  const signal =
+    init.signal ??
+    (timeoutMs === null
+      ? undefined
+      : AbortSignal.timeout(timeoutMs ?? DEFAULT_TIMEOUT_MS))
 
   try {
     const res = await fetch(url, {
       ...init,
-      signal: init.signal ?? AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+      signal,
     })
 
     const contentType = res.headers.get("content-type") ?? "text/event-stream"
