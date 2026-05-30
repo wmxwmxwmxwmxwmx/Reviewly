@@ -1,5 +1,6 @@
 import type { ArchitectureGraph } from "@reviewly/shared"
 
+import { zh } from "@/lib/i18n/zh"
 import { apiFetch } from "./client"
 import { postSse } from "./sse-reader"
 
@@ -36,28 +37,51 @@ export async function streamArchitectureScan(
     onError?: (message: string) => void
   },
 ): Promise<ArchitectureGraph> {
-  let graph: ArchitectureGraph | null = null
+  let completed = false
+  let streamError: string | null = null
 
-  await postSse(
-    "/api/architecture/scan",
-    { repoId, stream: true },
-    {
-      signal: options.signal,
-      onEvent: (payload) => {
-        const progress = payload.progress as ArchitectureScanProgress | undefined
-        if (progress) {
-          options.onProgress(progress)
-        }
-        if (payload.graph && typeof payload.graph === "object") {
-          graph = payload.graph as ArchitectureGraph
-        }
+  try {
+    await postSse(
+      "/api/architecture/scan",
+      { repoId, stream: true },
+      {
+        signal: options.signal,
+        onEvent: (payload) => {
+          const progress = payload.progress as ArchitectureScanProgress | undefined
+          if (progress) {
+            options.onProgress(progress)
+          }
+          if (payload.complete === true) {
+            completed = true
+          }
+        },
+        onError: (msg) => {
+          streamError = msg
+          options.onError?.(msg)
+        },
       },
-      onError: options.onError,
-    },
-  )
+    )
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message) {
+      throw e
+    }
+    throw new Error(streamError ?? "扫描流中断")
+  }
 
-  if (!graph) {
-    throw new Error("扫描未返回依赖图")
+  if (streamError) {
+    throw new Error(streamError)
+  }
+  if (!completed) {
+    throw new Error("扫描未完成（连接可能中断），请重试")
+  }
+
+  const graph = await fetchArchitectureGraph(repoId, options.signal)
+  if (graph.nodes.length === 0) {
+    throw new Error(
+      graph.scannedAt
+        ? zh.architecture.scanEmpty
+        : "扫描未返回依赖图（连接可能中断，请重试）",
+    )
   }
   return graph
 }

@@ -30,6 +30,28 @@ EXT_LANG = {
 }
 
 
+def has_scannable_files(root: Path) -> bool:
+    """True if the tree contains at least one architecture-scannable source file."""
+    root = root.resolve()
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if any(part in SKIP_DIRS for part in path.parts):
+            continue
+        if path.suffix.lower() in EXT_LANG:
+            return True
+    return False
+
+
+def worktree_has_files(root: Path) -> bool:
+    """True if the clone worktree contains any non-.git file."""
+    root = root.resolve()
+    for path in root.rglob("*"):
+        if path.is_file() and ".git" not in path.parts:
+            return True
+    return False
+
+
 def iter_source_files(root: Path, max_files: int) -> list[Path]:
     files: list[Path] = []
     root = root.resolve()
