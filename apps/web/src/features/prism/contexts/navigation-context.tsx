@@ -40,6 +40,7 @@ function isLegacyDemoPrId(prId: string | null | undefined): boolean {
 
 export type NavParams = {
   prId?: string
+  repoId?: string
   file?: string
   line?: string
 }
@@ -47,6 +48,7 @@ export type NavParams = {
 interface NavigationContextValue {
   activeView: NavView
   prId: string | null
+  repoId: string | null
   navigate: (view: NavView, params?: NavParams) => void
 }
 
@@ -80,6 +82,7 @@ function buildQuery(
     qs.set("prId", prId)
   }
 
+  if (params?.repoId) qs.set("repoId", params.repoId)
   if (params?.file) qs.set("file", params.file)
   if (params?.line) qs.set("line", params.line)
 
@@ -94,6 +97,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const viewParam = searchParams.get("view")
   const activeView = isNavView(viewParam) ? viewParam : DEFAULT_VIEW
   const urlPrId = searchParams.get("prId")
+  const repoId = searchParams.get("repoId")
 
   const prId =
     activeView === "ai-review"
@@ -132,8 +136,8 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   )
 
   const contextValue = useMemo(
-    () => ({ activeView, prId, navigate }),
-    [activeView, prId, navigate],
+    () => ({ activeView, prId, repoId, navigate }),
+    [activeView, prId, repoId, navigate],
   )
 
   return (

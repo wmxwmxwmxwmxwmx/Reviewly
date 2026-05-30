@@ -474,39 +474,57 @@ def upsert_repo(
     payload: dict | None = None,
     source_type: str | None = None,
     owner_user_id: str | None = None,
-) -> Repository:
-    """Legacy upsert used by GitHub sync/webhook paths."""
+    gh_repo: dict[str, Any] | None = None,
+) -> tuple[Repository, bool]:
+    """Legacy upsert used by GitHub sync/webhook paths. Returns (row, created)."""
     github_id = None
     if payload and payload.get("id", "").startswith("repo-"):
         github_id = payload["id"].removeprefix("repo-")
     elif repo_id.startswith("repo-"):
         github_id = repo_id.removeprefix("repo-")
 
-    owner, name = _split_full_name(full_name)
-    metadata: dict[str, Any] = {
-        "id": repo_id,
-        "github_id": github_id,
-        "full_name": full_name,
-        "owner": payload.get("owner", owner) if payload else owner,
-        "name": payload.get("name", name) if payload else name,
-        "open_prs": int((payload or {}).get("openPrCount", 0)),
-        "default_branch": (payload or {}).get("defaultBranch", "main"),
-        "last_synced_at": datetime.now(timezone.utc),
-        "payload": payload,
-        "installation_id": installation_id,
-    }
-    if source_type is not None:
-        metadata["source_type"] = source_type
-    if owner_user_id is not None:
-        metadata["owner_user_id"] = owner_user_id
-    if source_type == SOURCE_TYPE_EXTERNAL:
+    if gh_repo is not None and source_type == SOURCE_TYPE_EXTERNAL:
+        from app.github.repo_mapper import github_repo_to_metadata
+
+        metadata = github_repo_to_metadata(
+            gh_repo,
+            open_prs=int((payload or {}).get("openPrCount", 0)),
+            last_synced_at=datetime.now(timezone.utc),
+            installation_id=installation_id,
+        )
+        metadata["source_type"] = SOURCE_TYPE_EXTERNAL
         metadata["repository_type"] = REPOSITORY_TYPE_EXTERNAL
         metadata["managed"] = False
+        if owner_user_id is not None:
+            metadata["owner_user_id"] = owner_user_id
+        if payload:
+            metadata["payload"] = {**(metadata.get("payload") or {}), **payload}
     else:
-        metadata.setdefault("repository_type", REPOSITORY_TYPE_OWNED)
-        metadata.setdefault("managed", True)
-    row, _ = upsert_repository(session, metadata, installation_id=installation_id)
-    return row
+        owner, name = _split_full_name(full_name)
+        metadata = {
+            "id": repo_id,
+            "github_id": github_id,
+            "full_name": full_name,
+            "owner": payload.get("owner", owner) if payload else owner,
+            "name": payload.get("name", name) if payload else name,
+            "open_prs": int((payload or {}).get("openPrCount", 0)),
+            "default_branch": (payload or {}).get("defaultBranch", "main"),
+            "last_synced_at": datetime.now(timezone.utc),
+            "payload": payload,
+            "installation_id": installation_id,
+        }
+        if source_type is not None:
+            metadata["source_type"] = source_type
+        if owner_user_id is not None:
+            metadata["owner_user_id"] = owner_user_id
+        if source_type == SOURCE_TYPE_EXTERNAL:
+            metadata["repository_type"] = REPOSITORY_TYPE_EXTERNAL
+            metadata["managed"] = False
+        else:
+            metadata.setdefault("repository_type", REPOSITORY_TYPE_OWNED)
+            metadata.setdefault("managed", True)
+    row, created = upsert_repository(session, metadata, installation_id=installation_id)
+    return row, created
 
 
 def list_recent_findings_for_repo(session: Session, repo_id: str, limit: int = 20) -> list[dict]:

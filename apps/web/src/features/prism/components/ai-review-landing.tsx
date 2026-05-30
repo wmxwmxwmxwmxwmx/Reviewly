@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react"
 import { ArrowRight, Github, Loader2 } from "lucide-react"
 
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import { ExternalRepoOnboardDialog } from "@/features/prism/components/external-repo-onboard-dialog"
+import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { useImportPrByUrl } from "@/hooks/use-import-pr-by-url"
 import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
 import { validateGitHubPrUrl } from "@/lib/github-pr-url"
@@ -17,7 +19,14 @@ export function AiReviewLanding() {
   const [inputUrl, setInputUrl] = useState("")
   const [focused, setFocused] = useState(false)
   const [localUrlError, setLocalUrlError] = useState<string | null>(null)
-  const { importing, importError, handleImportUrl } = useImportPrByUrl()
+  const { refresh: refreshRepos } = useReposStore()
+  const {
+    importing,
+    importError,
+    handleImportUrl,
+    pendingOnboardRepoId,
+    clearPendingOnboard,
+  } = useImportPrByUrl()
 
   useRunningTask("aiReview", importing)
 
@@ -47,6 +56,14 @@ export function AiReviewLanding() {
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-6 p-5">
+      <ExternalRepoOnboardDialog
+        repoId={pendingOnboardRepoId}
+        open={Boolean(pendingOnboardRepoId)}
+        onOpenChange={(open) => {
+          if (!open) clearPendingOnboard()
+        }}
+        onOnboarded={() => void refreshRepos()}
+      />
       <div className="text-center max-w-md">
         <h1 className="text-lg font-semibold text-foreground">{zh.nav.aiReview}</h1>
         <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.aiReview}</p>

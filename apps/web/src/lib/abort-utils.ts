@@ -1,5 +1,11 @@
 export function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError"
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return true
+  }
+  if (error instanceof Error && error.name === "AbortError") {
+    return true
+  }
+  return false
 }
 
 /** Only apply async result updates when the request was not superseded or aborted. */

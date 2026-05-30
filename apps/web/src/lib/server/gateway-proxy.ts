@@ -1,5 +1,13 @@
 /** Server-side proxy to Python gateway (longer timeout than Next dev rewrite). */
 
+import {
+  isServerApiDebugEnabled,
+  sanitizeServerHeaders,
+  serverApiError,
+  serverApiLog,
+  truncateServerLog,
+} from "@/lib/server/debug-api-log"
+
 const GATEWAY_ORIGIN = process.env.API_URL ?? "http://localhost:3001"
 const DEFAULT_TIMEOUT_MS = 120_000
 /** SSE scan streams emit progress for a long time; do not abort while bytes still flow. */
@@ -29,9 +37,18 @@ function gatewayUnreachableMessage(cause: unknown): string {
 export async function proxyToGateway(
   path: string,
   init: RequestInit,
-  options?: { timeoutMs?: number },
+  options?: { timeoutMs?: number; debug?: boolean },
 ): Promise<Response> {
   const url = gatewayUrl(path)
+  const debug = options?.debug ?? isServerApiDebugEnabled()
+
+  if (debug) {
+    serverApiLog("Next Route Handler outgoing request", {
+      gatewayUrl: url,
+      method: init.method ?? "GET",
+      headers: sanitizeServerHeaders(init.headers as Record<string, string> | undefined),
+    })
+  }
 
   let res: Response
   try {
@@ -40,13 +57,31 @@ export async function proxyToGateway(
       signal: init.signal ?? AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_TIMEOUT_MS),
     })
   } catch (cause) {
-    return new Response(JSON.stringify({ error: gatewayUnreachableMessage(cause) }), {
-      status: 502,
-      headers: { "Content-Type": "application/json" },
-    })
+    serverApiError("Next Route Handler gateway fetch", cause)
+    const detail =
+      cause instanceof Error ? cause.message : String(cause)
+    return new Response(
+      JSON.stringify({
+        error: gatewayUnreachableMessage(cause),
+        ...(process.env.NODE_ENV === "development" ? { exception: detail } : {}),
+      }),
+      {
+        status: 502,
+        headers: { "Content-Type": "application/json" },
+      },
+    )
   }
 
   const body = await res.text()
+
+  if (debug) {
+    serverApiLog("Next Route Handler gateway response", {
+      status: res.status,
+      statusText: res.statusText,
+      responseText: truncateServerLog(body),
+    })
+  }
+
   return new Response(body, {
     status: res.status,
     headers: {

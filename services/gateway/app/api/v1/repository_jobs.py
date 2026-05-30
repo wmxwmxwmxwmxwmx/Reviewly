@@ -26,11 +26,14 @@ class CancelJobBody(BaseModel):
     jobId: str = Field(min_length=1)
 
 
-@router.post("/repos/{repo_id}/adopt")
-async def adopt_repository(
+class OnboardRepoBody(BaseModel):
+    repoId: str = Field(min_length=1)
+
+
+def _start_onboarding_for_repo(
+    db: Session,
     repo_id: str,
-    user: AuthUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: AuthUser,
 ) -> dict:
     team_ids = auth_users_repo.get_team_ids_for_user(db, user.id)
     row = repos_repo.adopt_repository_for_user(db, repo_id, user.id, team_ids)
@@ -54,6 +57,24 @@ async def adopt_repository(
     repository_jobs_service.schedule_repository_job(job.id)
     dto = repos_repo.get_repo(db, repo_id)
     return {"ok": True, "repository": dto, "jobId": job.id}
+
+
+@router.post("/repos/onboard")
+async def onboard_repository(
+    body: OnboardRepoBody,
+    user: AuthUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    return _start_onboarding_for_repo(db, body.repoId, user)
+
+
+@router.post("/repos/{repo_id}/adopt")
+async def adopt_repository(
+    repo_id: str,
+    user: AuthUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    return _start_onboarding_for_repo(db, repo_id, user)
 
 
 @router.post("/repos/{repo_id}/analyze")

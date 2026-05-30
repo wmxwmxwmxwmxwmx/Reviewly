@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.core.dev_errors import dev_error_payload
 from app.db.models import Base
 from app.db.seed_loader import load_seed_if_empty
 from app.db.session import SessionLocal, engine
@@ -17,6 +18,20 @@ logger = logging.getLogger(__name__)
 
 migration_status: str = "unknown"
 migration_error: str | None = None
+
+
+def _configure_logging() -> None:
+    """Ensure unhandled exceptions print full stack traces to the Gateway console."""
+    level = logging.DEBUG if settings.debug else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        force=True,
+    )
+    logging.getLogger("uvicorn.error").setLevel(logging.INFO)
+
+
+_configure_logging()
 
 
 def _run_alembic_upgrade() -> bool:
@@ -52,10 +67,9 @@ def _run_alembic_upgrade() -> bool:
     except Exception as exc:
         migration_status = "failed"
         migration_error = str(exc)
-        logger.error(
-            "Alembic upgrade failed: %s. Run `cd services/gateway && alembic upgrade head` "
+        logger.exception(
+            "Alembic upgrade failed. Run `cd services/gateway && alembic upgrade head` "
             "or `python scripts/repair_migration_drift.py` then retry.",
-            exc,
         )
         if settings.prism_fail_on_migration_error or settings.debug:
             raise
@@ -79,6 +93,24 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 app.include_router(api_router)
+
+
+@app.middleware("http")
+async def import_request_diagnostics(request: Request, call_next):
+    """Log PR import requests when DEBUG is enabled."""
+    path = request.url.path
+    is_import = request.method == "POST" and path == "/api/pull-requests/import"
+    if settings.debug and is_import:
+        logger.info("=== FastAPI === received request: %s %s", request.method, path)
+    response = await call_next(request)
+    if settings.debug and is_import:
+        logger.info(
+            "=== FastAPI === response status: %s for %s %s",
+            response.status_code,
+            request.method,
+            path,
+        )
+    return response
 
 
 @app.get("/")
@@ -113,4 +145,7 @@ async def generic_handler(_: Request, exc: Exception) -> JSONResponse:
             return JSONResponse(status_code=exc.status_code, content=detail)
         return JSONResponse(status_code=exc.status_code, content={"error": str(detail)})
     logger.exception("Unhandled server error")
-    return JSONResponse(status_code=500, content={"error": "服务器内部错误"})
+    return JSONResponse(
+        status_code=500,
+        content=dev_error_payload(exc),
+    )

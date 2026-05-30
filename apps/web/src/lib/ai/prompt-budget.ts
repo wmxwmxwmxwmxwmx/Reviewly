@@ -33,7 +33,7 @@ export function buildBoundedDiffContext(
     const lines: string[] = []
     let fileLineCount = 0
 
-    for (const chunk of file.chunks) {
+    for (const chunk of file.chunks ?? []) {
       if (fileLineCount >= budget.maxLinesPerFile) {
         truncated = true
         break

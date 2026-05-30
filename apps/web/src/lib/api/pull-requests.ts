@@ -1,5 +1,11 @@
-import type { DiffFile, PaginatedResponse, PullRequest } from "@reviewly/shared"
+import type {
+  DiffFile,
+  ImportPullRequestResult,
+  PaginatedResponse,
+  PullRequest,
+} from "@reviewly/shared"
 
+import { debugApiError, debugApiLog } from "@/lib/debug-api-log"
 import { apiFetch } from "./client"
 
 export function fetchPullRequests(
@@ -27,16 +33,22 @@ export function fetchPullRequestDiff(id: string, signal?: AbortSignal) {
   return apiFetch<DiffFile[]>(`/api/pull-requests/${id}/diff`, { signal })
 }
 
-export type ImportPullRequestResult = {
-  prId: string
-  source: "cache" | "github_app" | "github_public" | string
-}
+export type { ImportPullRequestResult }
 
 export function importPullRequestByUrl(url: string, signal?: AbortSignal) {
+  const requestBody = JSON.stringify({ url })
+  debugApiLog("importPullRequestByUrl", {
+    url,
+    "request body": requestBody,
+  })
+
   return apiFetch<ImportPullRequestResult>("/api/pull-requests/import", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url }),
+    body: requestBody,
     signal,
+  }).catch((err) => {
+    debugApiError("importPullRequestByUrl", err)
+    throw err
   })
 }

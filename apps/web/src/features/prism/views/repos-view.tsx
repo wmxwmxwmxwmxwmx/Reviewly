@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import {
   BookOpen,
@@ -19,6 +19,10 @@ import {
 } from "lucide-react"
 
 import { AddRepoDialog } from "@/features/prism/components/add-repo-dialog"
+import { RepositoryBadges } from "@/features/prism/components/repository-badges"
+import { RepositoryOnboardingProgress } from "@/features/prism/components/repository-onboarding-progress"
+import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import { useRepositoryOnboarding } from "@/hooks/use-repository-onboarding"
 import { SummaryMarkdown } from "@/features/prism/components/summary-markdown"
 import {
   AlertDialog,
@@ -60,6 +64,7 @@ function formatSyncTime(iso: string) {
 }
 
 export function ReposView() {
+  const { repoId: highlightedRepoId } = useNavigation()
   const {
     repos,
     loading,
@@ -76,6 +81,12 @@ export function ReposView() {
     analyzeRepository,
     removeRepo,
   } = useReposStore()
+
+  useEffect(() => {
+    if (!highlightedRepoId || loading) return
+    const el = document.getElementById(`repo-card-${highlightedRepoId}`)
+    el?.scrollIntoView({ behavior: "smooth", block: "center" })
+  }, [highlightedRepoId, loading, repos.length])
 
   const ownedRepos = useMemo(
     () => repos.filter((repo) => repoCategory(repo) === "owned"),
@@ -183,11 +194,13 @@ export function ReposView() {
                 key={repo.id}
                 repo={repo}
                 idx={idx}
+                highlighted={repo.id === highlightedRepoId}
                 analyzingRepoId={analyzingRepoId}
                 removingRepoId={removingRepoId}
                 analysisErrorsByRepoId={analysisErrorsByRepoId}
                 analyzeRepository={analyzeRepository}
                 removeRepo={removeRepo}
+                onReposRefresh={refresh}
               />
             ))}
           </div>
@@ -205,12 +218,13 @@ export function ReposView() {
                 key={repo.id}
                 repo={repo}
                 idx={idx}
+                highlighted={repo.id === highlightedRepoId}
                 analyzingRepoId={analyzingRepoId}
                 removingRepoId={removingRepoId}
                 analysisErrorsByRepoId={analysisErrorsByRepoId}
                 analyzeRepository={analyzeRepository}
                 removeRepo={removeRepo}
-                isManaged
+                onReposRefresh={refresh}
               />
             ))}
           </div>
@@ -228,12 +242,14 @@ export function ReposView() {
                 key={repo.id}
                 repo={repo}
                 idx={idx}
+                highlighted={repo.id === highlightedRepoId}
                 analyzingRepoId={analyzingRepoId}
                 removingRepoId={removingRepoId}
                 analysisErrorsByRepoId={analysisErrorsByRepoId}
                 analyzeRepository={analyzeRepository}
                 removeRepo={removeRepo}
                 isExternal
+                onReposRefresh={refresh}
               />
             ))}
           </div>
@@ -302,26 +318,72 @@ function RepositoryJobBar({
   )
 }
 
+function ExternalRepoOnboardSection({
+  repo,
+  onReposRefresh,
+}: {
+  repo: Repository
+  onReposRefresh: () => Promise<void>
+}) {
+  const [started, setStarted] = useState(
+    () => repo.activeJob?.jobType === "onboarding",
+  )
+  const { startOnboard, onboarding, onboardError, latest, phase } =
+    useRepositoryOnboarding(started ? repo.id : null)
+
+  if (repo.managed) {
+    return <RepositoryJobBar repoId={repo.id} seedJob={repo.activeJob} />
+  }
+
+  const showProgress = started && (onboarding || latest)
+
+  return (
+    <div className="mt-3 pt-3 border-t border-border space-y-2">
+      {showProgress ? <RepositoryOnboardingProgress job={latest} compact /> : null}
+      {onboardError ? <p className="text-xs text-risk-high">{onboardError}</p> : null}
+      {phase === "completed" ? (
+        <p className="text-xs text-risk-low">{zh.adoptRepo.onboardingComplete}</p>
+      ) : null}
+      {!started && phase !== "completed" ? (
+        <button
+          type="button"
+          onClick={() => {
+            setStarted(true)
+            void startOnboard().then(async () => {
+              await onReposRefresh()
+            })
+          }}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-ai-blue text-white hover:bg-[oklch(0.55_0.19_240)]"
+        >
+          {zh.repos.onboardCta}
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 function RepoCard({
   repo,
   idx,
+  highlighted = false,
   analyzingRepoId,
   removingRepoId,
   analysisErrorsByRepoId,
   analyzeRepository,
   removeRepo,
   isExternal = false,
-  isManaged = false,
+  onReposRefresh,
 }: {
   repo: Repository
   idx: number
+  highlighted?: boolean
   analyzingRepoId: string | null
   removingRepoId: string | null
   analysisErrorsByRepoId: Record<string, string>
   analyzeRepository: (repoId: string) => Promise<void>
   removeRepo: (repoId: string) => Promise<void>
   isExternal?: boolean
-  isManaged?: boolean
+  onReposRefresh: () => Promise<void>
 }) {
   const health = repo.healthScore
   const isAnalyzing = analyzingRepoId === repo.id
@@ -348,10 +410,16 @@ function RepoCard({
 
   return (
     <motion.div
+      id={`repo-card-${repo.id}`}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: idx * 0.05 }}
-      className="p-4 rounded-lg bg-surface-2 border border-border hover:border-ai-blue/50 transition-colors"
+      className={cn(
+        "p-4 rounded-lg bg-surface-2 border transition-colors",
+        highlighted
+          ? "border-ai-blue/60 ring-2 ring-ai-blue/30 shadow-[0_0_0_1px_rgba(56,189,248,0.15)]"
+          : "border-border hover:border-ai-blue/50",
+      )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -367,19 +435,7 @@ function RepoCard({
             <span className="text-sm font-medium text-foreground font-mono truncate">
               {repo.owner}/{repo.name}
             </span>
-            {isExternal ? (
-              <span
-                className="text-[10px] px-1.5 py-0.5 rounded bg-risk-medium/15 text-risk-medium border border-risk-medium/30"
-                title={zh.repos.externalRepoHint}
-              >
-                {zh.repos.externalRepoBadge}
-              </span>
-            ) : null}
-            {isManaged ? (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-ai-purple/15 text-ai-purple border border-ai-purple/30">
-                Managed
-              </span>
-            ) : null}
+            <RepositoryBadges sourceType={repo.sourceType} managed={repo.managed} />
             {repo.htmlUrl ? (
               <a
                 href={repo.htmlUrl}
@@ -561,9 +617,11 @@ function RepoCard({
         </button>
       </div>
 
-      {!isExternal ? (
+      {isExternal ? (
+        <ExternalRepoOnboardSection repo={repo} onReposRefresh={onReposRefresh} />
+      ) : (
         <RepositoryJobBar repoId={repo.id} seedJob={repo.activeJob} />
-      ) : null}
+      )}
 
       {showAnalysisPanel && (
         <div className="mt-3 pt-3 border-t border-border">

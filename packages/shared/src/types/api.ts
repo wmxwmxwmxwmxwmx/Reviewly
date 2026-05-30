@@ -103,6 +103,27 @@ export interface AdoptRepositoryResponse {
   jobId: string
 }
 
+export interface OnboardRepositoryBody {
+  repoId: string
+}
+
+export type OnboardRepositoryResponse = AdoptRepositoryResponse
+
+export type OnboardingPhase =
+  | "queued"
+  | "cloning"
+  | "scanning"
+  | "analyzing"
+  | "completed"
+  | "failed"
+
+export interface ImportPullRequestResult {
+  prId: string
+  repoId: string
+  source: "cache" | "github_app" | "github_public" | string
+  repositoryCreated: boolean
+}
+
 export interface StartRepoAnalyzeResponse {
   jobId?: string
   jobs?: RepositoryJob[]

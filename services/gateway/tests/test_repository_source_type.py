@@ -206,6 +206,10 @@ def test_pr_import_creates_external_repository(client: TestClient, db: Session) 
         )
 
     assert r.status_code == 200
+    body = r.json()
+    assert body["repositoryCreated"] is True
+    assert body["repoId"] == "repo-999010"
+    assert body["prId"].startswith("pr-")
     row = db.scalar(select(Repository).where(Repository.full_name == "obra/superpowers"))
     assert row is not None
     assert row.source_type == SOURCE_TYPE_EXTERNAL

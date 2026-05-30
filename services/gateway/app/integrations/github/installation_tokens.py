@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 
+from app.github.github_errors import raise_for_github_response
 from app.integrations.github.app_auth import create_app_jwt
 
 _token_cache: dict[str, tuple[str, float]] = {}
@@ -26,7 +27,7 @@ async def get_installation_token(installation_id: str) -> str:
                 "Accept": "application/vnd.github+json",
             },
         )
-        resp.raise_for_status()
+        raise_for_github_response(resp, resource="installation token", has_pat=True)
         data: dict[str, Any] = resp.json()
 
     token = data["token"]

@@ -1,5 +1,12 @@
 import type { ApiError } from "@reviewly/shared"
 
+import {
+  debugApiError,
+  debugApiLog,
+  isApiDebugEnabled,
+  sanitizeHeaders,
+  truncateForLog,
+} from "@/lib/debug-api-log"
 import { getAuthToken } from "@/lib/auth/storage"
 
 export class PrismApiError extends Error {
@@ -15,6 +22,8 @@ export class PrismApiError extends Error {
 
 type RequestOptions = RequestInit & {
   signal?: AbortSignal
+  /** Caller handles these HTTP statuses; skip debug error logging. */
+  silentStatuses?: number[]
 }
 
 function buildHeaders(options: RequestOptions, token: string | null): HeadersInit {
@@ -75,29 +84,79 @@ export function extractApiErrorMessage(
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { silentStatuses, ...fetchOptions } = options
   const token = getAuthToken()
-  const res = await fetch(path, {
-    ...options,
-    headers: buildHeaders(options, token),
-  })
+  const method = fetchOptions.method ?? "GET"
+  const headers = buildHeaders(options, token)
+  const debug = isApiDebugEnabled(path)
+
+  if (debug) {
+    debugApiLog("apiFetch START", {
+      path,
+      method,
+      headers: sanitizeHeaders(headers),
+      body: typeof fetchOptions.body === "string" ? truncateForLog(fetchOptions.body) : fetchOptions.body,
+    })
+  }
+
+  let res: Response
+  try {
+    res = await fetch(path, {
+      ...fetchOptions,
+      headers,
+    })
+  } catch (err) {
+    if (debug) {
+      debugApiError("apiFetch", err)
+    }
+    throw err
+  }
+
+  const responseClone = debug ? res.clone() : null
+  if (debug && responseClone) {
+    const responseText = truncateForLog(await responseClone.text())
+    debugApiLog("apiFetch RESPONSE", {
+      status: res.status,
+      statusText: res.statusText,
+      responseText,
+    })
+  }
 
   if (!res.ok) {
-    const body = await parseFetchJson<ApiError>(res).catch((err) => {
-      if (err instanceof PrismApiError) {
-        throw err
+    try {
+      const body = await parseFetchJson<ApiError>(res).catch((err) => {
+        if (err instanceof PrismApiError) {
+          throw err
+        }
+        return { error: res.statusText } satisfies ApiError
+      })
+      const apiErr = new PrismApiError(
+        extractApiErrorMessage(body, res.statusText || "请求失败"),
+        res.status,
+        typeof body === "object" && body && "code" in body ? String(body.code) : undefined,
+      )
+      if (debug && !silentStatuses?.includes(apiErr.status)) {
+        debugApiError("apiFetch", apiErr)
       }
-      return { error: res.statusText } satisfies ApiError
-    })
-    throw new PrismApiError(
-      extractApiErrorMessage(body, res.statusText || "请求失败"),
-      res.status,
-      typeof body === "object" && body && "code" in body ? String(body.code) : undefined,
-    )
+      throw apiErr
+    } catch (err) {
+      if (debug && !(err instanceof PrismApiError)) {
+        debugApiError("apiFetch", err)
+      }
+      throw err
+    }
   }
 
   if (res.status === 204) {
     return undefined as T
   }
 
-  return parseFetchJson<T>(res)
+  try {
+    return await parseFetchJson<T>(res)
+  } catch (err) {
+    if (debug) {
+      debugApiError("apiFetch", err)
+    }
+    throw err
+  }
 }

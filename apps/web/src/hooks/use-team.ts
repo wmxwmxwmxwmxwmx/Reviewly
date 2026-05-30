@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 
 import { fetchTeamMembers } from "@/lib/api/team"
 import { PrismApiError } from "@/lib/api/client"
+import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import type { TeamMember } from "@reviewly/shared"
 
 export function useTeam() {
@@ -18,10 +19,12 @@ export function useTeam() {
       const data = await fetchTeamMembers(signal)
       setMembers(data)
     } catch (e: unknown) {
-      if (e instanceof DOMException && e.name === "AbortError") return
+      if (isAbortError(e)) return
       setError(e instanceof PrismApiError ? e.message : "加载失败")
     } finally {
-      setLoading(false)
+      if (shouldApplyResult(signal)) {
+        setLoading(false)
+      }
     }
   }, [])
 

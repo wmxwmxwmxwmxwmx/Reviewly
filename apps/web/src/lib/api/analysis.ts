@@ -16,6 +16,23 @@ export function fetchLatestAnalysis(prId: string, signal?: AbortSignal) {
   return apiFetch<AnalysisSummary>(`/api/pull-requests/${prId}/analysis/latest`, { signal })
 }
 
+async function fetchLatestAnalysisOptional(
+  prId: string,
+  signal?: AbortSignal,
+): Promise<AnalysisSummary | null> {
+  try {
+    return await apiFetch<AnalysisSummary>(`/api/pull-requests/${prId}/analysis/latest`, {
+      signal,
+      silentStatuses: [404],
+    })
+  } catch (error) {
+    if (error instanceof PrismApiError && error.status === 404) {
+      return null
+    }
+    throw error
+  }
+}
+
 export function fetchFindings(prId: string, signal?: AbortSignal) {
   return apiFetch<AnalysisFinding[]>(`/api/pull-requests/${prId}/findings`, { signal })
 }
@@ -81,17 +98,14 @@ export async function loadPersistedAnalysis(
   findings: AnalysisFinding[]
   aiSummary: AiPersistedContent | null
 } | null> {
-  try {
-    const [latest, findings, aiSummary] = await Promise.all([
-      fetchLatestAnalysis(prId, signal),
-      fetchFindings(prId, signal),
-      fetchPrAiSummary(prId, signal).catch(() => null),
-    ])
-    return { latest, findings, aiSummary }
-  } catch (error) {
-    if (error instanceof PrismApiError && error.status === 404) {
-      return null
-    }
-    throw error
+  const latest = await fetchLatestAnalysisOptional(prId, signal)
+  if (!latest) {
+    return null
   }
+
+  const [findings, aiSummary] = await Promise.all([
+    fetchFindings(prId, signal),
+    fetchPrAiSummary(prId, signal).catch(() => null),
+  ])
+  return { latest, findings, aiSummary }
 }

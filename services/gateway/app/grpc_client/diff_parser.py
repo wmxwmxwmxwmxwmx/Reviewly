@@ -54,7 +54,7 @@ def parse_unified_diff(patch: str) -> list[dict[str, Any]]:
             chunk["lines"].append({"type": "add", "newNum": len(chunk["lines"]) + 1, "content": line[1:]})
             current["additions"] += 1
         elif line.startswith("-") and not line.startswith("---"):
-            chunk["lines"].append({"type": "remove", "oldNum": len(chunk["lines"]) + 1, "content": line[1:]})
+            chunk["lines"].append({"type": "delete", "oldNum": len(chunk["lines"]) + 1, "content": line[1:]})
             current["deletions"] += 1
         elif line.startswith(" "):
             chunk["lines"].append({"type": "context", "content": line[1:]})

@@ -5,6 +5,7 @@ import type { AnalysisFinding, AnalysisJob, AnalysisSummary } from "@reviewly/sh
 import type { AiPersistedContent } from "@reviewly/shared"
 
 import { PrismApiError } from "@/lib/api/client"
+import { isAbortError } from "@/lib/abort-utils"
 import {
   loadPersistedAnalysis,
   runPullRequestAnalysis,
@@ -15,10 +16,6 @@ export type PrAnalysisInitialState = {
   latest?: AnalysisSummary | null
   job?: AnalysisJob | null
   aiSummary?: AiPersistedContent | null
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError"
 }
 
 export function usePrAnalysis(

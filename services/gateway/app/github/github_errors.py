@@ -1,9 +1,13 @@
 """Map GitHub REST API error responses to actionable user messages."""
 from __future__ import annotations
 
+import logging
+
 import httpx
 
 from app.core.errors import api_error
+
+logger = logging.getLogger(__name__)
 
 
 def _github_message(resp: httpx.Response) -> str:
@@ -14,7 +18,7 @@ def _github_message(resp: httpx.Response) -> str:
             if isinstance(msg, str):
                 return msg
     except Exception:  # noqa: BLE001
-        pass
+        logger.exception("Failed to parse GitHub error response JSON")
     return ""
 
 
@@ -63,4 +67,8 @@ def raise_for_github_response(
             404,
         )
 
-    resp.raise_for_status()
+    if resp.status_code >= 500:
+        raise api_error("GitHub API 暂时不可用，请稍后重试。", 502)
+
+    detail = message or f"HTTP {resp.status_code}"
+    raise api_error(f"无法访问{resource}（{detail}）。", resp.status_code)

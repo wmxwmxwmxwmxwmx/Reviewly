@@ -10,7 +10,10 @@ import {
   Zap,
   Menu,
   PanelRight,
+  FolderGit2,
 } from "lucide-react"
+import { RepositoryBadges } from "@/features/prism/components/repository-badges"
+import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { validateGitHubPrUrl } from "@/lib/github-pr-url"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
@@ -55,6 +58,7 @@ export function Header({
   aiPanelOpen,
   onToggleAIPanel,
 }: HeaderProps) {
+  const { navigate } = useNavigation()
   const [inputUrl, setInputUrl] = useState(prData.url ?? "")
   const [focused, setFocused] = useState(false)
   const [localUrlError, setLocalUrlError] = useState<string | null>(null)
@@ -167,17 +171,23 @@ export function Header({
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="text-sm font-medium text-foreground truncate">{prData.repo}</span>
-            {prData.sourceType === "external" ? (
-              <span
-                className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-risk-medium/15 text-risk-medium border border-risk-medium/30"
-                title={zh.repos.externalRepoHint}
-              >
-                {zh.repos.externalRepoBadge}
-              </span>
-            ) : null}
+            <RepositoryBadges
+              sourceType={prData.sourceType}
+              managed={prData.managed}
+            />
             <span className="shrink-0 text-xs font-mono text-muted-foreground px-1.5 py-0.5 rounded bg-surface-3 border border-border">
               PR #{prData.number}
             </span>
+            {prData.repoId ? (
+              <button
+                type="button"
+                onClick={() => navigate("repos", { repoId: prData.repoId })}
+                className="inline-flex items-center gap-1 shrink-0 rounded-md border border-border bg-surface-2 px-2 py-1 text-[11px] font-medium text-muted-foreground hover:border-ai-blue/40 hover:text-ai-blue transition-colors"
+              >
+                <FolderGit2 className="h-3 w-3" />
+                {zh.aiReview.openRepository}
+              </button>
+            ) : null}
           </div>
           <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-muted-foreground font-mono shrink-0">
             <span className="px-1.5 py-0.5 rounded bg-ai-blue/10 text-ai-blue border border-ai-blue/20">

@@ -33,6 +33,8 @@ import { PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 import { AdoptRepoBanner } from "@/features/prism/components/adopt-repo-banner"
+import { ExternalRepoOnboardDialog } from "@/features/prism/components/external-repo-onboard-dialog"
+import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { Skeleton } from "@/components/ui/skeleton"
 
 interface AIReviewViewProps {
@@ -97,7 +99,14 @@ export function AIReviewView({
   const analyzeAbortRef = useRef<AbortController | null>(null)
   const handleRescanRef = useRef<(() => Promise<void>) | null>(null)
 
-  const { importing, importError, handleImportUrl } = useImportPrByUrl({
+  const { refresh: refreshRepos } = useReposStore()
+  const {
+    importing,
+    importError,
+    handleImportUrl,
+    pendingOnboardRepoId,
+    clearPendingOnboard,
+  } = useImportPrByUrl({
     currentPrId: prId,
     onBeforeImport: () => {
       setAnalysisError(null)
@@ -471,6 +480,15 @@ ${diffContext || "（无 diff 内容）"}`,
 
   return (
     <div className="flex flex-1 min-w-0 overflow-hidden">
+      <ExternalRepoOnboardDialog
+        repoId={pendingOnboardRepoId}
+        open={Boolean(pendingOnboardRepoId)}
+        onOpenChange={(open) => {
+          if (!open) clearPendingOnboard()
+        }}
+        repoLabel={pr?.repo}
+        onOnboarded={() => void refreshRepos()}
+      />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <main className="flex-1 overflow-y-auto">
           {pr ? (

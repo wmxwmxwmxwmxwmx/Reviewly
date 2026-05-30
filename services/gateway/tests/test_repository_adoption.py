@@ -185,6 +185,33 @@ def test_pr_import_sets_external_and_unmanaged(client: TestClient, db: Session) 
     assert row.managed is False
 
 
+def test_onboard_marks_managed_and_starts_job(client: TestClient, db: Session) -> None:
+    user = _bypass_user(db)
+    repo = _insert_repo(
+        db,
+        repo_id="repo-onboard-me",
+        full_name="obra/onboard-test",
+        source_type=SOURCE_TYPE_EXTERNAL,
+        owner_user_id=user.id,
+    )
+    db.commit()
+
+    with patch("app.api.v1.repository_jobs.repository_jobs_service.schedule_repository_job") as sched:
+        r = client.post("/api/repos/onboard", json={"repoId": repo.id})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["jobId"].startswith("rjob-")
+    sched.assert_called_once()
+
+    db.expire_all()
+    row = db.get(Repository, repo.id)
+    assert row is not None
+    assert row.managed is True
+    assert row.repository_type == REPOSITORY_TYPE_MANAGED
+
+
 def test_adopt_marks_managed_and_starts_job(client: TestClient, db: Session) -> None:
     user = _bypass_user(db)
     repo = _insert_repo(

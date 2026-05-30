@@ -1,4 +1,6 @@
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.orm import Session
@@ -6,6 +8,7 @@ from sqlalchemy.orm import Session
 import logging
 
 from app.core.config import settings
+from app.core.dev_errors import dev_diagnostics_enabled, dev_error_payload
 from app.core.errors import SCHEMA_OUTDATED_MESSAGE, api_error
 from app.core.security import get_optional_user
 from app.db.models import AuthUser
@@ -214,14 +217,37 @@ async def import_pull_request(
         raise api_error(SCHEMA_OUTDATED_MESSAGE, 503, code="SCHEMA_OUTDATED")
 
     user_id = user.id if user and not settings.prism_auth_bypass else None
+    resolved_url = body.resolved_url()
+    logger.info(
+        "=== FastAPI import === parsed url: %s user_id: %s",
+        resolved_url,
+        user_id or "(none)",
+    )
     try:
-        return await import_pull_request_by_url(db, body.resolved_url(), user_id=user_id)
+        result = await import_pull_request_by_url(db, resolved_url, user_id=user_id)
+        logger.info(
+            "=== FastAPI import === ok prId=%s source=%s",
+            result.get("prId"),
+            result.get("source"),
+        )
+        return result
     except (OperationalError, ProgrammingError):
         logger.exception("Database schema error during PR import")
         raise api_error(SCHEMA_OUTDATED_MESSAGE, 503, code="SCHEMA_OUTDATED")
     except IntegrityError:
         logger.exception("Database integrity error during PR import")
         raise api_error("PR 数据写入失败，请重试或联系管理员", 409, code="IMPORT_INTEGRITY_ERROR")
+    except httpx.HTTPError as exc:
+        logger.exception("GitHub HTTP error during PR import")
+        raise api_error(f"GitHub 网络请求失败：{exc}", 502)
+    except Exception as exc:
+        logger.exception("Unexpected error during PR import")
+        if dev_diagnostics_enabled():
+            return JSONResponse(
+                status_code=500,
+                content=dev_error_payload(exc, error="PR 导入失败", context="import_pull_request"),
+            )
+        raise
 
 
 @router.get("/pull-requests/{pr_id}")
@@ -247,23 +273,20 @@ async def pull_request_diff(
     if pr_repo.get_pull_request(db, pr_id, user_id=user_id, team_ids=team_ids) is None:
         raise api_error("合并请求不存在", 404)
 
-    from app.repositories import pull_request_files as pr_files_repo
-
-    stored = pr_files_repo.list_files(db, pr_id)
-    if stored:
-        return pr_files_repo.to_diff_view_rows(stored)
-
-    from app.grpc_client.engine import get_engine_client
     from sqlalchemy import select
 
     from app.db.models import PullRequestDiff
+    from app.repositories import pull_request_files as pr_files_repo
 
     diff_row = db.scalar(select(PullRequestDiff).where(PullRequestDiff.pull_request_id == pr_id))
-    if diff_row and diff_row.patch:
-        client = get_engine_client()
-        return await client.parse_diff(diff_row.patch)
+    pr_patch = diff_row.patch if diff_row and diff_row.patch else None
 
-    return pr_repo.get_diff(db, pr_id, user_id=user_id, team_ids=team_ids)
+    rows = pr_files_repo.build_diff_view_rows(db, pr_id, pr_patch=pr_patch)
+    if rows:
+        return rows
+
+    fallback = pr_repo.get_diff(db, pr_id, user_id=user_id, team_ids=team_ids)
+    return pr_files_repo.ensure_diff_view_shape(fallback)
 
 
 @router.get("/pull-requests/{pr_id}/files")

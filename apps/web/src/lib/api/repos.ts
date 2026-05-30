@@ -1,6 +1,7 @@
 import type {
   AdoptRepositoryResponse,
   ImportRepositoryResponse,
+  OnboardRepositoryResponse,
   RepoAnalysisStatusResponse,
   RepoAnalyzeContext,
   Repository,
@@ -104,6 +105,14 @@ export function cloneRepo(repoId: string, signal?: AbortSignal) {
 export function adoptRepository(repoId: string, signal?: AbortSignal) {
   return apiFetch<AdoptRepositoryResponse>(`/api/repos/${repoId}/adopt`, {
     method: "POST",
+    signal,
+  })
+}
+
+export function onboardRepository(repoId: string, signal?: AbortSignal) {
+  return apiFetch<OnboardRepositoryResponse>("/api/repos/onboard", {
+    method: "POST",
+    body: JSON.stringify({ repoId }),
     signal,
   })
 }

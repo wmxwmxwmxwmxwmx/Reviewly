@@ -153,9 +153,10 @@ async def sync_from_webhook_pr(
     if installation_id:
         from app.github.sync import sync_single_pull_request
 
-        return await sync_single_pull_request(
+        pr_id, _, _ = await sync_single_pull_request(
             session, owner, name, int(number), installation_id=installation_id
         )
+        return pr_id
 
     from app.github import public_client
 
@@ -170,4 +171,5 @@ async def sync_single_pull_request_public_wrapper(
 ) -> str:
     from app.github.sync import sync_single_pull_request_public
 
-    return await sync_single_pull_request_public(session, owner, repo, number)
+    pr_id, _, _ = await sync_single_pull_request_public(session, owner, repo, number)
+    return pr_id

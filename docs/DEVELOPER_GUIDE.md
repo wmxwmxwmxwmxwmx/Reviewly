@@ -648,6 +648,7 @@ $env:PYTHONPATH='.'; .venv\Scripts\python.exe scripts\purge_seed_data.py
 | 仍看到 acme 演示仓库 | 库内残留 seed 行 | 运行 `scripts/purge_seed_data.py` |
 | 分析无 diff | DB 无 patch / stub 未返回 | 检查 `pull_request_diffs`、Engine 是否 stub |
 | 前端 API 404 | 网关未启动或 `API_URL` 错误 | 确认 `npm run dev:gateway` 与 rewrite |
+| PR URL 导入 500，Gateway 无 POST 日志 | 旧版仅 rewrite 透明代理、无请求日志 | 见 [import-pr-call-chain.md](./diagnostics/import-pr-call-chain.md)；设置 `DEBUG=true` 与 `NEXT_PUBLIC_DEBUG_API=1` 后重启 |
 | Postgres 连接失败 | Docker 未启动 | `docker compose up -d` 或改 SQLite |
 
 ---
@@ -657,6 +658,7 @@ $env:PYTHONPATH='.'; .venv\Scripts\python.exe scripts\purge_seed_data.py
 | 文档 | 说明 |
 |------|------|
 | [plan.md](./plan.md) | 产品阶段、B0–B10 后端里程碑、数据模型附录 |
+| [diagnostics/import-pr-call-chain.md](./diagnostics/import-pr-call-chain.md) | PR URL 导入全链路诊断与 500 定位 |
 | [README.md](../README.md) | 简短快速开始 |
 | `.cursor/rules/project-code-standards.mdc` | PRism 前端代码规范（必读本仓库 UI 约定） |
 | `packages/contracts/openapi/prism-v1.yaml` | OpenAPI 契约 |
