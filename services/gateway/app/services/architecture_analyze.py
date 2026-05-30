@@ -29,10 +29,18 @@ def _compact_graph(graph: dict) -> dict[str, Any]:
     return {"nodes": nodes, "edges": edges, "metrics": metrics}
 
 
+_GRAPH_EMPTY_MSG = (
+    "请先点击「重新扫描」生成依赖图；当前无节点与边，无法生成有意义的架构分析。"
+)
+
+
 async def stream_architecture_analysis(
     session: Session, repo_id: str
 ) -> AsyncIterator[str]:
     graph = architecture_repo.get_dependency_graph(session, repo_id)
+    if not graph.get("nodes"):
+        raise ValueError(_GRAPH_EMPTY_MSG)
+
     provider, model, api_key, custom_endpoint = resolve_ai_config(session)
     payload = _compact_graph(graph)
     user_msg = (

@@ -1,6 +1,7 @@
 """Clone GitHub repositories into a local cache for architecture scans."""
 from __future__ import annotations
 
+import asyncio
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -70,6 +71,25 @@ def _is_cache_fresh(path: Path) -> bool:
     return age_hours < settings.repo_cache_ttl_hours
 
 
+def _clone_repository(url: str, dest: Path, branch: str) -> None:
+    """Blocking git clone; run via asyncio.to_thread from async handlers."""
+    if dest.exists():
+        import shutil
+
+        shutil.rmtree(dest, ignore_errors=True)
+
+    try:
+        _run_git(["clone", "--depth", "1", "--branch", branch, url, str(dest)])
+    except RuntimeError as exc:
+        if branch != "main":
+            try:
+                _run_git(["clone", "--depth", "1", url, str(dest)])
+            except RuntimeError as exc2:
+                raise api_error(f"克隆失败: {exc2}", 502) from exc2
+        else:
+            raise api_error(f"克隆失败: {exc}", 502) from exc
+
+
 async def ensure_repo_clone(session: Session, repo_id: str) -> dict:
     row_api = get_repo(session, repo_id)
     if row_api is None:
@@ -98,21 +118,7 @@ async def ensure_repo_clone(session: Session, repo_id: str) -> dict:
         }
 
     url = _clone_url(full_name, token)
-    if dest.exists():
-        import shutil
-
-        shutil.rmtree(dest, ignore_errors=True)
-
-    try:
-        _run_git(["clone", "--depth", "1", "--branch", branch, url, str(dest)])
-    except RuntimeError as exc:
-        if branch != "main":
-            try:
-                _run_git(["clone", "--depth", "1", url, str(dest)])
-            except RuntimeError as exc2:
-                raise api_error(f"克隆失败: {exc2}", 502) from exc2
-        else:
-            raise api_error(f"克隆失败: {exc}", 502) from exc
+    await asyncio.to_thread(_clone_repository, url, dest, branch)
 
     return {
         "ok": True,

@@ -42,15 +42,17 @@ export function useArchitecture(repoId: string | null) {
     return () => ac.abort()
   }, [load])
 
-  const scan = useCallback(async () => {
-    if (!repoId) return
+  const scan = useCallback(async (): Promise<ArchitectureGraph | null> => {
+    if (!repoId) return null
     setScanning(true)
     setError(null)
     try {
       const data = await postArchitectureScan(repoId)
       setGraph(data)
+      return data
     } catch (e: unknown) {
       setError(e instanceof PrismApiError ? e.message : "扫描失败")
+      return null
     } finally {
       setScanning(false)
     }

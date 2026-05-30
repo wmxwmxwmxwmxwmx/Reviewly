@@ -44,7 +44,9 @@ coverage/
 # Deploy
 .vercel/
 
-# Legacy v0 sandbox
+# Gateway runtime data (cloned repos for architecture scan)
+services/gateway/data/
+
 __v0_*
 __v0_runtime_loader.js
 __v0_devtools.tsx
