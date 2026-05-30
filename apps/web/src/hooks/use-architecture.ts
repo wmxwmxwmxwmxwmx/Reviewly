@@ -51,7 +51,21 @@ export function useArchitecture(repoId: string | null) {
       setGraph(data)
       return data
     } catch (e: unknown) {
-      setError(e instanceof PrismApiError ? e.message : "扫描失败")
+      const msg = e instanceof PrismApiError ? e.message : "扫描失败"
+      setError(msg)
+      // BFF 超时后 Gateway 可能仍在后台完成扫描，尝试拉取已持久化的依赖图
+      if (/超时|timeout|502|Gateway/i.test(msg)) {
+        try {
+          const cached = await fetchArchitectureGraph(repoId)
+          if (cached.nodes.length > 0) {
+            setGraph(cached)
+            setError(null)
+            return cached
+          }
+        } catch {
+          /* ignore secondary fetch failure */
+        }
+      }
       return null
     } finally {
       setScanning(false)

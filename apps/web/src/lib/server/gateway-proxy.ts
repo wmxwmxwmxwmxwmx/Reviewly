@@ -2,7 +2,8 @@
 
 const GATEWAY_ORIGIN = process.env.API_URL ?? "http://localhost:3001"
 const DEFAULT_TIMEOUT_MS = 120_000
-const SCAN_TIMEOUT_MS = 300_000
+/** First-time git clone of large monorepos can exceed 5 minutes on slow networks. */
+const SCAN_TIMEOUT_MS = 900_000
 
 function gatewayUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`
@@ -10,9 +11,15 @@ function gatewayUrl(path: string): string {
 }
 
 function gatewayUnreachableMessage(cause: unknown): string {
+  if (cause instanceof Error && cause.name === "TimeoutError") {
+    return "架构扫描超时：首次克隆大仓库可能较慢。请稍后再次点击「重新扫描」，或刷新页面查看是否已在后台完成。"
+  }
   const detail = cause instanceof Error ? cause.message : String(cause)
   if (/ECONNREFUSED|fetch failed|socket hang up|ECONNRESET/i.test(detail)) {
     return "无法连接后端 Gateway（请确认已在 localhost:3001 运行，且仅启动一个实例）。"
+  }
+  if (/aborted|timeout|ETIMEDOUT/i.test(detail)) {
+    return "架构扫描超时：首次克隆大仓库可能较慢。请稍后再次点击「重新扫描」，或刷新页面查看是否已在后台完成。"
   }
   return `后端请求失败：${detail}`
 }
