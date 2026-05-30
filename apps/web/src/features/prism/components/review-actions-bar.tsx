@@ -1,13 +1,15 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import type {
+  AnalysisFinding,
+  AnalysisSummary,
   ApprovalCheckResult,
   ReviewComment,
   ReviewCommentType,
   ReviewStatus,
 } from "@reviewly/shared"
-import { CheckCircle2, MessageSquare, PlayCircle, XCircle } from "lucide-react"
+import { Bot, CheckCircle2, MessageSquare, PlayCircle, XCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -35,6 +37,7 @@ import {
   REVIEW_STATUS_LABELS,
   reviewStatusBadgeClass,
 } from "@/features/prism/lib/review-status-utils"
+import { buildAiReviewerOpinion } from "@/lib/ai/ai-reviewer-opinion"
 import { PrismApiError } from "@/lib/api/client"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
@@ -49,6 +52,20 @@ const MANUAL_STATUSES: ReviewStatus[] = [
 interface ReviewActionsBarProps {
   prId: string
   reviewStatus?: ReviewStatus
+  findings?: AnalysisFinding[]
+  latest?: AnalysisSummary | null
+  prTitle?: string
+  repoLabel?: string
+  prNumber?: number
+  aiSummary?: string
+  hasCompletedAnalysis?: boolean
+  fallbackScores?: {
+    riskScore?: number
+    securityScore?: number
+    performanceScore?: number
+    maintainabilityScore?: number
+  }
+  onScrollToAiSummary?: () => void
   onUpdated?: () => void
   onStatusChange?: (status: ReviewStatus) => void
 }
@@ -56,6 +73,15 @@ interface ReviewActionsBarProps {
 export function ReviewActionsBar({
   prId,
   reviewStatus = "OPEN",
+  findings = [],
+  latest,
+  prTitle,
+  repoLabel,
+  prNumber,
+  aiSummary,
+  hasCompletedAnalysis,
+  fallbackScores,
+  onScrollToAiSummary,
   onUpdated,
   onStatusChange,
 }: ReviewActionsBarProps) {
@@ -157,10 +183,36 @@ export function ReviewActionsBar({
   const lastApproval = [...comments].reverse().find((c) => c.type === "APPROVE")
   const lastReject = [...comments].reverse().find((c) => c.type === "REQUEST_CHANGES")
 
+  const aiOpinion = useMemo(
+    () =>
+      buildAiReviewerOpinion({
+        findings,
+        latest,
+        prTitle,
+        repoLabel,
+        prNumber,
+        fallbackScores,
+        aiSummary,
+        hasCompletedAnalysis,
+      }),
+    [
+      findings,
+      latest,
+      prTitle,
+      repoLabel,
+      prNumber,
+      fallbackScores,
+      aiSummary,
+      hasCompletedAnalysis,
+    ],
+  )
+
+  const canJumpToSummary = Boolean(onScrollToAiSummary && (aiSummary?.trim() || latest?.summary))
+
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <h3 className="text-sm font-semibold text-foreground">人工审批</h3>
           <span
             className={cn(
@@ -170,6 +222,25 @@ export function ReviewActionsBar({
           >
             {REVIEW_STATUS_LABELS[status]}
           </span>
+          <button
+            type="button"
+            disabled={!canJumpToSummary}
+            onClick={() => onScrollToAiSummary?.()}
+            className={cn(
+              "inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors",
+              aiOpinion.suggestChanges
+                ? "bg-risk-high/15 text-risk-high border-risk-high/30"
+                : aiOpinion.verdict === "pending"
+                  ? "bg-surface-3 text-muted-foreground border-border"
+                  : "bg-risk-low/15 text-risk-low border-risk-low/30",
+              canJumpToSummary && "hover:brightness-110 cursor-pointer",
+              !canJumpToSummary && "opacity-70 cursor-default",
+            )}
+            title={canJumpToSummary ? "查看下方 AI 摘要报告" : "完成分析后将与 AI 摘要报告同步"}
+          >
+            <Bot className="w-3 h-3" />
+            AI 建议：{aiOpinion.verdictLabel}
+          </button>
         </div>
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
           {lastApproval ? <span className="text-risk-low">{lastApproval.userName} 已批准</span> : null}

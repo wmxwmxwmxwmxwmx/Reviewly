@@ -409,7 +409,6 @@ function RepoCard({
   isExternal?: boolean
   onReposRefresh: () => Promise<void>
 }) {
-  const health = repo.healthScore
   const isAnalyzing = analyzingRepoId === repo.id
   const isRemoving = removingRepoId === repo.id
   const analysisError = analysisErrorsByRepoId[repo.id]
@@ -594,31 +593,6 @@ function RepoCard({
           <Clock className="w-3 h-3" />
           {formatSyncTime(repo.lastSyncTime || repo.pushedAt || "")}
         </span>
-      </div>
-
-      <div className="mt-3">
-        <div className="flex items-center justify-between text-xs mb-1">
-          <span className="text-muted-foreground">{zh.repos.health}</span>
-          <span
-            className={cn(
-              "font-medium",
-              health >= 85 ? "text-risk-low" : health >= 70 ? "text-risk-medium" : "text-risk-high",
-            )}
-          >
-            {health}%
-          </span>
-        </div>
-        <div className="h-1.5 rounded-full bg-surface-3 overflow-hidden">
-          <motion.div
-            className={cn(
-              "h-full rounded-full",
-              health >= 85 ? "bg-risk-low" : health >= 70 ? "bg-risk-medium" : "bg-risk-high",
-            )}
-            initial={{ width: 0 }}
-            animate={{ width: `${health}%` }}
-            transition={{ duration: 0.6, delay: idx * 0.1 }}
-          />
-        </div>
       </div>
 
       <div className="mt-3 flex items-center gap-2">

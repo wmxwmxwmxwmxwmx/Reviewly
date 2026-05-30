@@ -21,7 +21,7 @@ export const zh = {
     performance: "发现本次改动可能的性能隐患，并获取优化建议",
     architecture: "查看模块依赖与结构问题，辅助重构与分层决策",
     governance: "为团队设定代码规范，自动检查 PR 是否达标",
-    repos: "管理已接入仓库，同步合并请求并查看仓库健康度",
+    repos: "管理已接入仓库，同步合并请求并查看仓库概览",
     team: "了解成员评审量、响应耗时与风险发现情况",
     settings: "配置 AI 模型与 API 密钥，查看本月 AI 用量（本地统计）",
     profile: "查看当前登录账号的基本信息与 GitHub 连接状态",
@@ -136,6 +136,7 @@ export const zh = {
     noReposHint: "暂无仓库数据。请前往代码仓库同步 GitHub 仓库。",
     goToRepos: "前往代码仓库",
     openRisks: "开放风险",
+    repoOverview: "仓库概览",
   },
   security: {
     findingsNote:

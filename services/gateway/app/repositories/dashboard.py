@@ -258,12 +258,14 @@ def _enrich_dashboard(
                 )
             )
         ) or 0
+        full_name = payload.get("fullName", repo.full_name)
         top_repos.append(
             {
-                "name": payload.get("fullName", repo.full_name).split("/")[-1],
+                "id": repo.id,
+                "name": full_name.split("/")[-1] if "/" in full_name else full_name,
+                "fullName": full_name,
                 "prs": repo_pr_count or payload.get("openPrCount", 0),
                 "issues": issue_count,
-                "health": payload.get("healthScore", 80),
             }
         )
 

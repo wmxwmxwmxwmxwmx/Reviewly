@@ -16,6 +16,8 @@ import {
   Database,
   Timer,
   DollarSign,
+  ChevronRight,
+  FolderGit2,
 } from "lucide-react"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
@@ -295,14 +297,13 @@ export function DashboardView() {
         <div className="rounded-lg border border-border overflow-hidden">
           <div className="px-4 py-3 bg-surface-2 border-b border-border flex items-center gap-2">
             <LayoutDashboard className="w-4 h-4 text-ai-blue" />
-            <span className="text-sm font-medium text-foreground">仓库健康度</span>
+            <span className="text-sm font-medium text-foreground">{zh.dashboard.repoOverview}</span>
           </div>
           <div className="divide-y divide-border">
             {loading ? (
               Array.from({ length: 3 }).map((_, idx) => (
-                <div key={idx} className="px-4 py-3 space-y-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-1.5 w-full" />
+                <div key={idx} className="px-4 py-3">
+                  <Skeleton className="h-10 w-full" />
                 </div>
               ))
             ) : topRepos.length === 0 ? (
@@ -318,54 +319,35 @@ export function DashboardView() {
               </div>
             ) : (
               topRepos.map((repo, idx) => (
-                <motion.div
-                  key={repo.name}
+                <motion.button
+                  key={repo.id}
+                  type="button"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: idx * 0.05 }}
-                  className="px-4 py-3"
+                  onClick={() => navigate("repos", { repoId: repo.id })}
+                  className="w-full px-4 py-3 text-left hover:bg-surface-2/80 transition-colors flex items-center gap-3 group"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-foreground font-mono">{repo.name}</span>
-                    <span
-                      className={cn(
-                        "text-xs font-medium",
-                        repo.health >= 85
-                          ? "text-risk-low"
-                          : repo.health >= 70
-                            ? "text-risk-medium"
-                            : "text-risk-high"
-                      )}
-                    >
-                      {repo.health}%
-                    </span>
+                  <div className="w-8 h-8 rounded-md bg-ai-blue/10 border border-ai-blue/20 flex items-center justify-center shrink-0">
+                    <FolderGit2 className="w-4 h-4 text-ai-blue" />
                   </div>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <GitPullRequest className="w-3 h-3" />
-                      {zh.dashboard.repoPrCount(repo.prs)}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3" />
-                      {repo.issues} 问题
-                    </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-foreground font-mono truncate">
+                      {repo.fullName ?? repo.name}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <GitPullRequest className="w-3 h-3" />
+                        {zh.dashboard.repoPrCount(repo.prs)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        {repo.issues} 问题
+                      </span>
+                    </div>
                   </div>
-                  <div className="mt-2 h-1.5 rounded-full bg-surface-3 overflow-hidden">
-                    <motion.div
-                      className={cn(
-                        "h-full rounded-full",
-                        repo.health >= 85
-                          ? "bg-risk-low"
-                          : repo.health >= 70
-                            ? "bg-risk-medium"
-                            : "bg-risk-high"
-                      )}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${repo.health}%` }}
-                      transition={{ duration: 0.8, delay: idx * 0.1 }}
-                    />
-                  </div>
-                </motion.div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-ai-blue shrink-0 transition-colors" />
+                </motion.button>
               ))
             )}
           </div>

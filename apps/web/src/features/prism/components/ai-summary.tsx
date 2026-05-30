@@ -40,6 +40,10 @@ interface AISummaryProps {
   error?: string | null
   usage?: AiUsageMetrics
   onGoToSettings?: () => void
+  /** Anchor id for in-page scroll from review bar */
+  sectionId?: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 export function AISummary({
@@ -53,20 +57,32 @@ export function AISummary({
   error,
   usage,
   onGoToSettings,
+  sectionId = "pr-ai-summary-section",
+  open,
+  onOpenChange,
 }: AISummaryProps) {
   const showSettingsAction =
     Boolean(onGoToSettings) &&
     Boolean(error?.includes("系统设置") || error?.includes("API 密钥"))
-  const [fullOpen, setFullOpen] = useState(Boolean(generatedSummary || jobSummary || error || hasAnalysis))
+  const [internalOpen, setInternalOpen] = useState(
+    Boolean(generatedSummary || jobSummary || error || hasAnalysis),
+  )
+  const isControlled = open !== undefined
+  const fullOpen = isControlled ? open : internalOpen
+  const setFullOpen = (next: boolean) => {
+    if (!isControlled) setInternalOpen(next)
+    onOpenChange?.(next)
+  }
   const summaryText = generatedSummary ?? jobSummary
   const busy = scanning || streaming
 
   return (
     <motion.div
+      id={sectionId}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.1 }}
-      className="rounded-lg border border-border bg-card overflow-hidden"
+      className="rounded-lg border border-border bg-card overflow-hidden scroll-mt-24"
     >
       <button
         type="button"

@@ -36,16 +36,12 @@ interface AiReviewWorkspaceProps {
   prId: string | null
   reviewTab?: string | null
   onMenuClick?: () => void
-  aiPanelOpen?: boolean
-  onToggleAIPanel?: () => void
 }
 
 export function AiReviewWorkspace({
   prId,
   reviewTab: reviewTabParam,
   onMenuClick,
-  aiPanelOpen = true,
-  onToggleAIPanel,
 }: AiReviewWorkspaceProps) {
   const { navigate, repoId: urlRepoId } = useNavigation()
   const { refresh: refreshRepos } = useReposStore()
@@ -199,13 +195,7 @@ export function AiReviewWorkspace({
       </div>
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        <AIReviewView
-          key={prId}
-          prId={prId}
-          aiPanelOpen={aiPanelOpen}
-          onToggleAIPanel={onToggleAIPanel}
-          onReviewStatusChanged={bumpHistory}
-        />
+        <AIReviewView key={prId} prId={prId} onReviewStatusChanged={bumpHistory} />
       </div>
     </div>
   )

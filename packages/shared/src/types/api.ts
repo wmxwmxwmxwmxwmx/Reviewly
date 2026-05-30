@@ -601,10 +601,13 @@ export interface DashboardActivity {
 }
 
 export interface DashboardRepoHealth {
+  id: string
   name: string
+  fullName?: string
   prs: number
   issues: number
-  health: number
+  /** @deprecated Not shown in UI; kept for backward compatibility */
+  health?: number
 }
 
 export interface DashboardRecentReview {

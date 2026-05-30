@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useState } from "react"
 import { Menu } from "lucide-react"
 import { Sidebar } from "@/features/prism/components/sidebar"
 import { AISettingsProvider } from "@/features/prism/contexts/ai-settings-context"
@@ -18,7 +18,6 @@ import { ErrorBoundary } from "@/components/error-boundary"
 function PRismPageContent() {
   const { activeView, prId, reviewTab, navigate } = useNavigation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [aiPanelOpen, setAiPanelOpen] = useState(true)
 
   const handleViewChange = (view: typeof activeView) => {
     if (view === "ai-review") {
@@ -28,14 +27,6 @@ function PRismPageContent() {
     }
     setSidebarOpen(false)
   }
-
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1280px)")
-    const syncPanel = () => setAiPanelOpen(mq.matches)
-    syncPanel()
-    mq.addEventListener("change", syncPanel)
-    return () => mq.removeEventListener("change", syncPanel)
-  }, [])
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
@@ -82,8 +73,6 @@ function PRismPageContent() {
               prId={prId}
               reviewTab={reviewTab}
               onMenuClick={() => setSidebarOpen(true)}
-              aiPanelOpen={aiPanelOpen}
-              onToggleAIPanel={() => setAiPanelOpen((open) => !open)}
             />
           </ErrorBoundary>
         ) : (
@@ -95,12 +84,6 @@ function PRismPageContent() {
         )}
       </div>
 
-      {activeView === "ai-review" && prId && aiPanelOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/40 xl:hidden"
-          onClick={() => setAiPanelOpen(false)}
-        />
-      )}
     </div>
   )
 }

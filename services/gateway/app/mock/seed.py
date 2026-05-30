@@ -229,8 +229,20 @@ def get_dashboard() -> dict[str, Any]:
             },
         ],
         "topRepos": [
-            {"name": "prism-core", "prs": 8, "issues": 3, "health": 92},
-            {"name": "api-gateway", "prs": 6, "issues": 5, "health": 72},
+            {
+                "id": "repo-payment",
+                "name": "backend",
+                "fullName": "acme-corp/backend",
+                "prs": 8,
+                "issues": 3,
+            },
+            {
+                "id": "repo-auth",
+                "name": "auth-service",
+                "fullName": "acme-corp/auth-service",
+                "prs": 6,
+                "issues": 5,
+            },
         ],
     }
 

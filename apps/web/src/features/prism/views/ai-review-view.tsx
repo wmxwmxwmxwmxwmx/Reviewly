@@ -5,14 +5,9 @@ import type { AnalysisFinding, AiUsageMetrics } from "@reviewly/shared"
 import { Loader2 } from "lucide-react"
 import { Header } from "@/features/prism/components/header"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
-import {
-  useAIReviewSession,
-  type AIReviewPanelTab,
-} from "@/features/prism/contexts/ai-review-session-context"
-import { PROverview } from "@/features/prism/components/pr-overview"
+import { useAIReviewSession } from "@/features/prism/contexts/ai-review-session-context"
 import { AISummary } from "@/features/prism/components/ai-summary"
 import { DiffViewer } from "@/features/prism/components/diff-viewer"
-import { AIPanel } from "@/features/prism/components/ai-panel"
 import { estimateCostCnyFromUsage, useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { usePullRequest } from "@/hooks/use-pull-request"
 import { usePullRequestDiff } from "@/hooks/use-pull-request-diff"
@@ -31,27 +26,17 @@ import {
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import { formatPrismApiError, PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
-import { cn } from "@/lib/utils"
 import { AdoptRepoBanner } from "@/features/prism/components/adopt-repo-banner"
-import { AiReviewerCard } from "@/features/prism/components/ai-reviewer-card"
 import { ReviewActionsBar } from "@/features/prism/components/review-actions-bar"
 import { ReviewTimeline } from "@/features/prism/components/review-timeline"
-import { PrArchitectureImpact } from "@/features/prism/components/pr-architecture-impact"
 import { Skeleton } from "@/components/ui/skeleton"
 
 interface AIReviewViewProps {
   prId: string
-  aiPanelOpen?: boolean
-  onToggleAIPanel?: () => void
   onReviewStatusChanged?: () => void
 }
 
-export function AIReviewView({
-  prId,
-  aiPanelOpen = true,
-  onToggleAIPanel,
-  onReviewStatusChanged,
-}: AIReviewViewProps) {
+export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps) {
   const { navigate } = useNavigation()
   const { settings, hasApiKey, recordUsage } = useAISettings()
   const {
@@ -94,11 +79,8 @@ export function AIReviewView({
   const [analysisError, setAnalysisError] = useState<string | null>(
     cached.analysisError ?? null,
   )
-  const [activePanelTab, setActivePanelTab] = useState<AIReviewPanelTab>(
-    cached.activePanelTab ?? "risks",
-  )
-  const [governanceRefreshKey, setGovernanceRefreshKey] = useState(0)
   const [reviewTimelineKey, setReviewTimelineKey] = useState(0)
+  const [aiSummaryOpen, setAiSummaryOpen] = useState(false)
   const [runUsage, setRunUsage] = useState<AiUsageMetrics | undefined>(aiSummary?.usage)
 
   const analyzeAbortRef = useRef<AbortController | null>(null)
@@ -170,7 +152,6 @@ export function AIReviewView({
       generatedSummary,
       analysisError,
       syncLabel,
-      activePanelTab,
     })
   }, [
     prId,
@@ -180,7 +161,6 @@ export function AIReviewView({
     generatedSummary,
     analysisError,
     syncLabel,
-    activePanelTab,
     loadingPersisted,
     sessionHasData,
     patchSession,
@@ -191,7 +171,6 @@ export function AIReviewView({
     [diffFiles],
   )
   const diffTotal = useMemo(() => Math.max(diffFiles.length, 1), [diffFiles.length])
-  const approxContextChars = diffBudget.charCount
 
   const hasFindings = findings.length > 0
   const hasAnalysis =
@@ -398,8 +377,6 @@ ${diffContext || "（无 diff 内容）"}`,
         total: Math.max(result.job.chunkTotal, diffTotal),
       })
 
-      setGovernanceRefreshKey((k) => k + 1)
-
       if (result.cacheHit) {
         setSyncLabel(zh.analysis.cacheLoaded)
         if (result.latest?.summary) {
@@ -445,7 +422,6 @@ ${diffContext || "（无 diff 内容）"}`,
         if (errors.length > 0) {
           setAnalysisError(errors.join("；"))
         }
-        setGovernanceRefreshKey((k) => k + 1)
       }
     }
   }, [
@@ -518,6 +494,16 @@ ${diffContext || "（无 diff 内容）"}`,
       }
     : undefined
 
+  const scrollToAiSummary = useCallback(() => {
+    setAiSummaryOpen(true)
+    window.setTimeout(() => {
+      document.getElementById("pr-ai-summary-section")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    }, 80)
+  }, [])
+
   const summaryError = analysisError ?? persistError
   const showPrSkeleton = prLoading && !sessionHasData && !pr
   const isExternalRepo =
@@ -534,25 +520,22 @@ ${diffContext || "（无 diff 内容）"}`,
   }
 
   return (
-    <div className="flex flex-1 min-w-0 overflow-hidden">
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <main className="flex-1 overflow-y-auto">
-          {pr ? (
-            <Header
-              prData={pr}
-              analyzing={analyzing}
-              scanning={scanning}
-              hasAnalysis={hasAnalysis}
-              hasFindings={hasFindings}
-              onAnalyze={handleAnalyze}
-              onRescan={hasFindings ? handleRescan : undefined}
-              syncLabel={syncLabel}
-              diffLoading={diffLoading}
-              prLoading={prLoading}
-              aiPanelOpen={aiPanelOpen}
-              onToggleAIPanel={onToggleAIPanel}
-            />
-          ) : showPrSkeleton ? (
+    <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+      <main className="flex-1 overflow-y-auto">
+        {pr ? (
+          <Header
+            prData={pr}
+            analyzing={analyzing}
+            scanning={scanning}
+            hasAnalysis={hasAnalysis}
+            hasFindings={hasFindings}
+            onAnalyze={handleAnalyze}
+            onRescan={hasFindings ? handleRescan : undefined}
+            syncLabel={syncLabel}
+            diffLoading={diffLoading}
+            prLoading={prLoading}
+          />
+        ) : showPrSkeleton ? (
             <div className="flex flex-col gap-2 px-4 sm:px-5 py-2.5 border-b border-border shrink-0 min-h-[100px]">
               <div className="space-y-1.5 max-w-3xl">
                 <Skeleton className="h-2.5 w-20" />
@@ -569,66 +552,49 @@ ${diffContext || "（无 diff 内容）"}`,
               <Loader2 className="w-4 h-4 animate-spin" />
               正在加载 PR 信息…
             </div>
-          )}
+        )}
 
+        <div className="p-5 space-y-4">
           {isExternalRepo && pr ? <AdoptRepoBanner pr={pr} /> : null}
 
-          <div className="p-5 space-y-4">
-            {pr ? (
-              <>
-                <AiReviewerCard
-                  securityScore={pr.securityScore}
-                  performanceScore={pr.performanceScore}
-                  maintainabilityScore={pr.maintainabilityScore}
-                  riskScore={pr.riskScore}
-                  mergeRecommendation={latest?.mergeRecommendation}
-                  criticalCount={findings.filter((f) => f.severity === "critical").length}
-                  aiSummary={generatedSummary ?? latest?.summary}
-                />
-                <ReviewActionsBar
-                  prId={prId}
-                  reviewStatus={pr.reviewStatus ?? "OPEN"}
-                  onUpdated={() => {
-                    setReviewTimelineKey((k) => k + 1)
-                    reloadPr()
-                  }}
-                  onStatusChange={(next) => {
-                    patchLocal({ reviewStatus: next })
-                    onReviewStatusChanged?.()
-                  }}
-                />
-              </>
-            ) : null}
-
-            {pr ? (
-              <PROverview prData={pr} analysisScores={analysisScores} />
-            ) : prError ? (
-              <p className="text-xs text-risk-high">{prError}</p>
-            ) : null}
-
-            <AISummary
-              scanning={scanning}
-              streaming={summaryStreaming}
-              model={settings.model}
-              generatedSummary={generatedSummary}
-              jobSummary={latest?.summary}
-              hasAnalysis={hasAnalysis}
-              restoring={restoring}
-              error={summaryError}
-              usage={runUsage}
-              onGoToSettings={() => navigate("settings")}
+          {pr ? (
+            <ReviewActionsBar
+                prId={prId}
+                reviewStatus={pr.reviewStatus ?? "OPEN"}
+                findings={findings}
+                latest={latest}
+                prTitle={pr.title}
+                repoLabel={pr.repo}
+                prNumber={pr.number}
+                aiSummary={generatedSummary}
+                hasCompletedAnalysis={
+                  findings.length > 0 ||
+                  job?.status === "completed" ||
+                  Boolean(latest?.summary) ||
+                  Boolean(generatedSummary)
+                }
+                fallbackScores={{
+                  riskScore: analysisScores?.riskScore ?? pr.riskScore,
+                  securityScore: analysisScores?.securityScore ?? pr.securityScore,
+                  performanceScore: analysisScores?.performanceScore ?? pr.performanceScore,
+                  maintainabilityScore:
+                    analysisScores?.maintainabilityScore ?? pr.maintainabilityScore,
+                }}
+                onScrollToAiSummary={scrollToAiSummary}
+                onUpdated={() => {
+                  setReviewTimelineKey((k) => k + 1)
+                  reloadPr()
+                }}
+                onStatusChange={(next) => {
+                  patchLocal({ reviewStatus: next })
+                  onReviewStatusChanged?.()
+                }}
             />
+          ) : prError ? (
+            <p className="text-xs text-risk-high">{prError}</p>
+          ) : null}
 
-            {pr?.repoId && (
-              <PrArchitectureImpact
-                repoId={pr.repoId}
-                diffFiles={diffFiles}
-                loadingDiff={diffLoading}
-                onOpenArchitecture={() => navigate("architecture", { repoId: pr.repoId })}
-              />
-            )}
-
-            {diffError && (
+          {diffError && (
               <p className="text-xs text-risk-high">
                 {zh.common.diffLoadFailed}：{diffError}
               </p>
@@ -650,42 +616,31 @@ ${diffContext || "（无 diff 内容）"}`,
               loading={diffLoading}
               analyzing={scanning}
               chunkProgress={scanning ? chunkProgress : undefined}
-            />
-
-            {pr ? (
-              <div className="rounded-lg border border-border bg-card p-4">
-                <h3 className="text-sm font-semibold text-foreground mb-4">审批历史</h3>
-                <ReviewTimeline prId={prId} refreshKey={reviewTimelineKey} />
-              </div>
-            ) : null}
-          </div>
-        </main>
-      </div>
-
-      <div
-        className={cn(
-          "shrink-0 transition-all duration-200",
-          aiPanelOpen ? "w-[390px]" : "w-0 overflow-hidden",
-          "max-xl:fixed max-xl:right-0 max-xl:top-0 max-xl:h-full max-xl:z-40 max-xl:shadow-2xl",
-          !aiPanelOpen && "max-xl:w-0 max-xl:overflow-hidden",
-        )}
-      >
-        {aiPanelOpen && (
-          <AIPanel
-            prId={prId}
-            governanceRefreshKey={governanceRefreshKey}
-            analyzing={analyzing}
-            findings={findings}
-            job={job ?? undefined}
-            mergeRecommendation={latest?.mergeRecommendation}
-            filesChanged={pr?.filesChanged ?? 0}
-            approxContextChars={approxContextChars}
-            runUsage={runUsage}
-            activeTab={activePanelTab}
-            onActiveTabChange={setActivePanelTab}
           />
-        )}
-      </div>
+
+          {pr ? (
+            <div className="rounded-lg border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground mb-4">审批历史</h3>
+              <ReviewTimeline prId={prId} refreshKey={reviewTimelineKey} />
+            </div>
+          ) : null}
+
+          <AISummary
+              scanning={scanning}
+              streaming={summaryStreaming}
+              model={settings.model}
+              generatedSummary={generatedSummary}
+              jobSummary={latest?.summary}
+              hasAnalysis={hasAnalysis}
+              restoring={restoring}
+              error={summaryError}
+              usage={runUsage}
+              open={aiSummaryOpen}
+              onOpenChange={setAiSummaryOpen}
+            onGoToSettings={() => navigate("settings")}
+          />
+        </div>
+      </main>
     </div>
   )
 }
