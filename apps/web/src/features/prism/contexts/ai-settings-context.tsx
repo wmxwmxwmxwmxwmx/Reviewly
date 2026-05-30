@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { fetchAiUsageSummary } from "@/lib/api/ai-usage"
 import { fetchSettings } from "@/lib/api/settings"
 import { zh } from "@/lib/i18n/zh"
 
@@ -170,6 +171,7 @@ type ServerSettingsPayload = {
 export function AISettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AISettings>(DEFAULT_SETTINGS)
   const [usageRecords, setUsageRecords] = useState<AIUsageRecord[]>([])
+  const [serverMonthlyUsage, setServerMonthlyUsage] = useState<MonthlyUsage | null>(null)
   const [settingsHydrated, setSettingsHydrated] = useState(false)
   const [serverSecretConfigured, setServerSecretConfigured] = useState(false)
 
@@ -240,6 +242,26 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!settingsHydrated) return
+    let cancelled = false
+    void fetchAiUsageSummary("month")
+      .then((summary) => {
+        if (cancelled) return
+        setServerMonthlyUsage({
+          totalTokens: summary.totalTokens,
+          costCny: summary.costCny,
+          calls: summary.calls,
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setServerMonthlyUsage(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [settingsHydrated])
+
+  useEffect(() => {
+    if (!settingsHydrated) return
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
   }, [settings, settingsHydrated])
 
@@ -278,6 +300,11 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
       AI_PROVIDER_OPTIONS.find((option) => option.value === resolvedSettings.provider)?.label ??
       zh.provider.custom
     const monthlyRecords = resolvedUsageRecords.filter((record) => isCurrentMonth(record.createdAt))
+    const localMonthlyUsage: MonthlyUsage = {
+      totalTokens: monthlyRecords.reduce((sum, record) => sum + record.totalTokens, 0),
+      costCny: monthlyRecords.reduce((sum, record) => sum + record.costCny, 0),
+      calls: monthlyRecords.length,
+    }
 
     return {
       settings: resolvedSettings,
@@ -288,11 +315,7 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
         (settings.apiKey.trim().length > 0 || serverSecretConfigured),
       maskedApiKey: maskApiKey(settingsHydrated ? settings.apiKey : ""),
       usageRecords: resolvedUsageRecords,
-      monthlyUsage: {
-        totalTokens: monthlyRecords.reduce((sum, record) => sum + record.totalTokens, 0),
-        costCny: monthlyRecords.reduce((sum, record) => sum + record.costCny, 0),
-        calls: monthlyRecords.length,
-      },
+      monthlyUsage: serverMonthlyUsage ?? localMonthlyUsage,
       updateSettings,
       updateSetting,
       recordUsage,
@@ -303,6 +326,7 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
     settingsHydrated,
     serverSecretConfigured,
     usageRecords,
+    serverMonthlyUsage,
     updateSettings,
     updateSetting,
     recordUsage,

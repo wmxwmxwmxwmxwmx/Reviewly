@@ -36,6 +36,7 @@ import { AdoptRepoBanner } from "@/features/prism/components/adopt-repo-banner"
 import { PrArchitectureImpact } from "@/features/prism/components/pr-architecture-impact"
 import { ExternalRepoOnboardDialog } from "@/features/prism/components/external-repo-onboard-dialog"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
+import { prNeedsAdoption } from "@/lib/repos-adopt"
 import { Skeleton } from "@/components/ui/skeleton"
 
 interface AIReviewViewProps {
@@ -61,7 +62,7 @@ export function AIReviewView({
   } = useAIReviewSession()
 
   const cached = getSession(prId)
-  const { data: pr, loading: prLoading, error: prError } = usePullRequest(prId)
+  const { data: pr, loading: prLoading, error: prError, refetch: refetchPr } = usePullRequest(prId)
   const { files: diffFiles, loading: diffLoading, error: diffError } = usePullRequestDiff(prId)
   const {
     findings,
@@ -489,10 +490,7 @@ ${diffContext || "（无 diff 内容）"}`,
 
   const summaryError = analysisError ?? persistError
   const showPrSkeleton = prLoading && !sessionHasData && !pr
-  const isExternalRepo =
-    pr?.repositoryType === "external" ||
-    pr?.managed === false ||
-    pr?.sourceType === "external"
+  const showAdoptBanner = pr ? prNeedsAdoption(pr) : false
 
   if ((prError || !pr) && !sessionHasData && !prLoading) {
     return (
@@ -511,7 +509,10 @@ ${diffContext || "（无 diff 内容）"}`,
           if (!open) clearPendingOnboard()
         }}
         repoLabel={pr?.repo}
-        onOnboarded={() => void refreshRepos()}
+        onOnboarded={() => {
+          void refreshRepos()
+          refetchPr()
+        }}
       />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <main className="flex-1 overflow-y-auto">
@@ -553,7 +554,16 @@ ${diffContext || "（无 diff 内容）"}`,
             </div>
           )}
 
-          {isExternalRepo && pr ? <AdoptRepoBanner pr={pr} /> : null}
+          {showAdoptBanner && pr ? (
+            <AdoptRepoBanner
+              pr={pr}
+              onAdopted={() => {
+                void refreshRepos()
+                refetchPr()
+              }}
+              onRefreshPr={refetchPr}
+            />
+          ) : null}
 
           <div className="p-5 space-y-4">
             {pr ? (

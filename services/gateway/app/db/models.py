@@ -193,6 +193,45 @@ class AnalysisJob(Base):
     findings: Mapped[list[AnalysisFinding]] = relationship(back_populates="job")
 
 
+class UserDismissedRepository(Base):
+    """Repos explicitly removed by user; sync/import should not recreate."""
+
+    __tablename__ = "user_dismissed_repositories"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("auth_users.id"), index=True)
+    github_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    dismissed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AiUsageLog(Base):
+    __tablename__ = "ai_usage_logs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("auth_users.id"), nullable=True, index=True)
+    team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), nullable=True)
+    feature: Mapped[str] = mapped_column(String(64))
+    provider: Mapped[str] = mapped_column(String(32))
+    model: Mapped[str] = mapped_column(String(128))
+    stream: Mapped[bool] = mapped_column(Boolean, default=False)
+    pull_request_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pull_requests.id"), nullable=True
+    )
+    repository_id: Mapped[str | None] = mapped_column(ForeignKey("repositories.id"), nullable=True)
+    finding_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    job_id: Mapped[str | None] = mapped_column(ForeignKey("analysis_jobs.id"), nullable=True)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="ok")
+    error_message: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    cost_cny_estimate: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
 class AnalysisCacheEvent(Base):
     __tablename__ = "analysis_cache_events"
 

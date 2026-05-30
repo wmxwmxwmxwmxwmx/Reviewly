@@ -47,6 +47,16 @@ export function FindingsView() {
   )
 
   useEffect(() => {
+    setSelected(null)
+  }, [
+    center.tab,
+    center.repoFilter,
+    center.statusFilter,
+    center.severityFilter,
+    center.searchInput,
+  ])
+
+  useEffect(() => {
     if (!urlFindingId || !center.items.length) return
     const match = center.items.find((i) => i.id === urlFindingId)
     if (match) {

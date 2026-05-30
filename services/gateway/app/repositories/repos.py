@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.errors import api_error
 from app.db.models import (
     ActivityEvent,
+    AnalysisCacheEvent,
     AnalysisFinding,
     AnalysisJob,
     GovernanceViolation,
@@ -22,6 +23,7 @@ from app.db.models import (
     PullRequestFile,
     Repository,
     RepositoryJob,
+    UserDismissedRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,7 +39,7 @@ from app.repositories.seed_filter import (
     only_external_repositories,
     only_stats_eligible_repositories,
 )
-from app.services.repo_health import compute_repo_health
+from app.services.repo_health import compute_repo_health, compute_repo_health_detail
 
 
 def _split_full_name(full_name: str) -> tuple[str, str]:
@@ -143,7 +145,7 @@ def upsert_repository(
     metadata: dict[str, Any],
     *,
     installation_id: str | None = None,
-) -> tuple[Repository, bool]:
+) -> tuple[Repository | None, bool]:
     github_id = metadata.get("github_id")
     full_name = metadata["full_name"]
     repo_id = metadata["id"]
@@ -158,6 +160,15 @@ def upsert_repository(
         row = get_repository_by_full_name(session, full_name)
     if row is None:
         row = session.get(Repository, repo_id)
+
+    owner_user_id = metadata.get("owner_user_id")
+    if row is None and is_repository_dismissed_for_user(
+        session,
+        owner_user_id,
+        github_id=str(github_id) if github_id else None,
+        full_name=full_name,
+    ):
+        return None, False
 
     created = row is None
     if created:
@@ -229,8 +240,9 @@ def _repo_to_api(session: Session, row: Repository) -> dict:
         data["githubUpdatedAt"] = _dt_to_iso(row.github_updated_at)
 
     open_count = int(data.get("openPrCount", 0))
-    if "healthScore" not in data or data.get("healthScore") == 80:
-        data["healthScore"] = compute_repo_health(session, row.id, open_count)
+    health_detail = compute_repo_health_detail(session, row.id, open_count)
+    data["healthScore"] = health_detail["score"]
+    data["healthBreakdown"] = health_detail
 
     data["aiAnalysis"] = extract_from_settings(row.settings, "aiAnalysis")
     data["aiArchitectureAnalysis"] = extract_from_settings(row.settings, "aiArchitectureAnalysis")
@@ -351,6 +363,54 @@ def adopt_repository_for_user(
     return row
 
 
+def record_user_dismissed_repository(
+    session: Session,
+    *,
+    user_id: str,
+    github_id: str | None,
+    full_name: str,
+) -> None:
+    import uuid
+
+    existing = session.scalar(
+        select(UserDismissedRepository.id).where(
+            UserDismissedRepository.user_id == user_id,
+            UserDismissedRepository.full_name == full_name,
+        )
+    )
+    if existing:
+        return
+    session.add(
+        UserDismissedRepository(
+            id=f"udr-{uuid.uuid4().hex[:12]}",
+            user_id=user_id,
+            github_id=github_id,
+            full_name=full_name,
+        )
+    )
+    session.flush()
+
+
+def is_repository_dismissed_for_user(
+    session: Session,
+    user_id: str | None,
+    *,
+    github_id: str | None,
+    full_name: str | None,
+) -> bool:
+    if not user_id or not full_name:
+        return False
+    stmt = select(UserDismissedRepository.id).where(UserDismissedRepository.user_id == user_id)
+    if github_id:
+        stmt = stmt.where(
+            (UserDismissedRepository.github_id == github_id)
+            | (UserDismissedRepository.full_name == full_name)
+        )
+    else:
+        stmt = stmt.where(UserDismissedRepository.full_name == full_name)
+    return session.scalar(stmt.limit(1)) is not None
+
+
 def _delete_repository_cascade(session: Session, repo_id: str) -> None:
     session.execute(delete(RepositoryJob).where(RepositoryJob.repository_id == repo_id))
     session.execute(delete(AnalysisFinding).where(AnalysisFinding.repository_id == repo_id))
@@ -359,9 +419,29 @@ def _delete_repository_cascade(session: Session, repo_id: str) -> None:
         session.scalars(select(PullRequest.id).where(PullRequest.repository_id == repo_id)).all()
     )
     if pr_ids:
-        job_ids = select(AnalysisJob.id).where(AnalysisJob.pull_request_id.in_(pr_ids))
-        session.execute(delete(AnalysisFinding).where(AnalysisFinding.job_id.in_(job_ids)))
-        session.execute(delete(AnalysisJob).where(AnalysisJob.pull_request_id.in_(pr_ids)))
+        pr_job_ids = list(
+            session.scalars(
+                select(AnalysisJob.id).where(AnalysisJob.pull_request_id.in_(pr_ids))
+            ).all()
+        )
+        all_job_ids = list(
+            session.scalars(
+                select(AnalysisJob.id).where(
+                    (AnalysisJob.pull_request_id.in_(pr_ids))
+                    | (AnalysisJob.repository_id == repo_id)
+                )
+            ).all()
+        )
+        if all_job_ids:
+            session.execute(
+                delete(AnalysisCacheEvent).where(AnalysisCacheEvent.job_id.in_(all_job_ids))
+            )
+        session.execute(
+            delete(AnalysisCacheEvent).where(AnalysisCacheEvent.pull_request_id.in_(pr_ids))
+        )
+        if pr_job_ids:
+            session.execute(delete(AnalysisFinding).where(AnalysisFinding.job_id.in_(pr_job_ids)))
+            session.execute(delete(AnalysisJob).where(AnalysisJob.pull_request_id.in_(pr_ids)))
         session.execute(
             delete(GovernanceViolation).where(GovernanceViolation.pull_request_id.in_(pr_ids))
         )
@@ -386,6 +466,12 @@ def delete_repository_for_user(
     if row.owner_user_id not in (None, user_id):
         raise api_error("您没有权限取消管理此仓库", 403)
     full_name = row.full_name
+    record_user_dismissed_repository(
+        session,
+        user_id=user_id,
+        github_id=row.github_id,
+        full_name=full_name,
+    )
     _delete_repository_cascade(session, repo_id)
     _purge_repo_clone_cache(repo_id)
     return full_name
@@ -524,6 +610,8 @@ def upsert_repo(
             metadata.setdefault("repository_type", REPOSITORY_TYPE_OWNED)
             metadata.setdefault("managed", True)
     row, created = upsert_repository(session, metadata, installation_id=installation_id)
+    if row is None:
+        raise api_error("该仓库已从管理中移除，无法再次同步。", 409)
     return row, created
 
 

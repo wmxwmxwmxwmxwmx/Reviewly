@@ -10,6 +10,7 @@ import { AIReviewSessionProvider } from "@/features/prism/contexts/ai-review-ses
 import { ReposProvider } from "@/features/prism/contexts/repos-context"
 import { RunningTasksProvider } from "@/features/prism/contexts/running-tasks-context"
 import { DashboardProvider } from "@/features/prism/contexts/dashboard-context"
+import { FindingsStatsProvider } from "@/features/prism/contexts/findings-stats-context"
 import { NavigationProvider, useNavigation } from "@/features/prism/contexts/navigation-context"
 import { AiReviewLanding } from "@/features/prism/components/ai-review-landing"
 import { AIReviewView } from "@/features/prism/views/ai-review-view"
@@ -120,12 +121,14 @@ export default function PRismPage() {
             <RunningTasksProvider>
               <ReposProvider>
                 <DashboardProvider>
+                <FindingsStatsProvider>
                 <NavigationProvider>
                   <ErrorBoundary section="PRism">
                     <PRismPageContent />
                     <SessionLockOverlay />
                   </ErrorBoundary>
                 </NavigationProvider>
+                </FindingsStatsProvider>
                 </DashboardProvider>
               </ReposProvider>
             </RunningTasksProvider>

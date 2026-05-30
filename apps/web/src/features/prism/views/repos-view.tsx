@@ -64,7 +64,7 @@ function formatSyncTime(iso: string) {
 }
 
 export function ReposView() {
-  const { repoId: highlightedRepoId } = useNavigation()
+  const { repoId: highlightedRepoId, navigate } = useNavigation()
   const {
     repos,
     loading,
@@ -203,6 +203,9 @@ export function ReposView() {
                 analyzeRepository={analyzeRepository}
                 removeRepo={removeRepo}
                 onReposRefresh={refresh}
+                onRemoved={() => {
+                  if (highlightedRepoId === repo.id) navigate("repos")
+                }}
               />
             ))}
           </div>
@@ -227,6 +230,9 @@ export function ReposView() {
                 analyzeRepository={analyzeRepository}
                 removeRepo={removeRepo}
                 onReposRefresh={refresh}
+                onRemoved={() => {
+                  if (highlightedRepoId === repo.id) navigate("repos")
+                }}
               />
             ))}
           </div>
@@ -252,6 +258,9 @@ export function ReposView() {
                 removeRepo={removeRepo}
                 isExternal
                 onReposRefresh={refresh}
+                onRemoved={() => {
+                  if (highlightedRepoId === repo.id) navigate("repos")
+                }}
               />
             ))}
           </div>
@@ -375,6 +384,7 @@ function RepoCard({
   removeRepo,
   isExternal = false,
   onReposRefresh,
+  onRemoved,
 }: {
   repo: Repository
   idx: number
@@ -386,8 +396,14 @@ function RepoCard({
   removeRepo: (repoId: string) => Promise<void>
   isExternal?: boolean
   onReposRefresh: () => Promise<void>
+  onRemoved?: () => void
 }) {
   const health = repo.healthScore
+  const deductions = repo.healthBreakdown?.deductions ?? []
+  const healthTitle =
+    deductions.length > 0
+      ? `${zh.repos.healthDeductions}：\n${deductions.map((d) => `${d.label} ×${d.count}（-${d.points}）`).join("\n")}`
+      : zh.repos.healthNoDeductions
   const isAnalyzing = analyzingRepoId === repo.id
   const isRemoving = removingRepoId === repo.id
   const analysisError = analysisErrorsByRepoId[repo.id]
@@ -402,13 +418,14 @@ function RepoCard({
     try {
       await removeRepo(repo.id)
       setConfirmOpen(false)
+      onRemoved?.()
       toast({ title: zh.repos.removeRepoSuccess })
     } catch {
       /* error surfaced via syncError in parent */
     }
   }
 
-  const removeDisabled = Boolean(analyzingRepoId) || Boolean(removingRepoId)
+  const removeDisabled = analyzingRepoId === repo.id || Boolean(removingRepoId)
 
   return (
     <motion.div
@@ -574,9 +591,9 @@ function RepoCard({
         </span>
       </div>
 
-      <div className="mt-3">
+      <div className="mt-3" title={healthTitle}>
         <div className="flex items-center justify-between text-xs mb-1">
-          <span className="text-muted-foreground">{zh.repos.health}</span>
+          <span className="text-muted-foreground cursor-help">{zh.repos.health}</span>
           <span
             className={cn(
               "font-medium",

@@ -10,8 +10,11 @@ from app.ai.anthropic import call_anthropic, stream_anthropic
 from app.ai.openai_compatible import call_openai_compatible, stream_openai_compatible
 from app.ai.providers import VALID_PROVIDERS, get_endpoint
 from app.core.errors import api_error
+from app.core.security import get_current_user
 from app.db.deps import get_db
+from app.db.models import AuthUser
 from app.services.ai_config import resolve_ai_config
+from app.services.ai_usage import log_ai_usage
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -84,7 +87,11 @@ async def _stream_chat(
 
 
 @router.post("/chat")
-async def chat(body: ChatRequestBody, db: Session = Depends(get_db)):
+async def chat(
+    body: ChatRequestBody,
+    db: Session = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
     if not body.messages:
         raise api_error("缺少待发送的消息内容")
 
@@ -140,10 +147,23 @@ async def chat(body: ChatRequestBody, db: Session = Depends(get_db)):
     except RuntimeError as exc:
         raise api_error(str(exc), 500) from exc
 
+    latency_ms = int((time.time() - started) * 1000)
+    log_ai_usage(
+        db,
+        user_id=user.id,
+        feature="chat",
+        provider=provider,
+        model=model,
+        usage=result.get("usage"),
+        stream=False,
+        latency_ms=latency_ms,
+    )
+    db.commit()
+
     return {
         "provider": provider,
         "model": model,
         "content": result["content"],
         "usage": result["usage"],
-        "latencyMs": int((time.time() - started) * 1000),
+        "latencyMs": latency_ms,
     }

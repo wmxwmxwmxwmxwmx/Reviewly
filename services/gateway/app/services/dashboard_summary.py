@@ -16,7 +16,9 @@ from app.repositories.analysis import _finding_to_api
 from app.repositories.dashboard import get_dashboard
 from app.repositories import settings as settings_repo
 from app.repositories.seed_filter import exclude_seed_findings, is_seed_repository
+from app.repositories import auth_users as auth_users_repo
 from app.services.ai_config import resolve_ai_config
+from app.services.ai_usage import log_ai_usage
 
 
 async def generate_weekly_summary(
@@ -88,11 +90,22 @@ async def generate_weekly_summary(
         model=model,
         provider=provider,
     )
+    latency_ms = int((time.time() - started) * 1000)
+    user = auth_users_repo.get_or_create_bypass_user(session)
+    log_ai_usage(
+        session,
+        user_id=user.id,
+        feature="dashboard_summary",
+        provider=provider,
+        model=model,
+        usage=result.get("usage"),
+        latency_ms=latency_ms,
+    )
     session.commit()
     return {
         "content": content,
         "usage": result.get("usage"),
-        "latencyMs": int((time.time() - started) * 1000),
+        "latencyMs": latency_ms,
         "weeklySummary": weekly,
     }
 

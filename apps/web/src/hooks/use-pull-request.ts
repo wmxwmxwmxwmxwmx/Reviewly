@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import { fetchPullRequest } from "@/lib/api/pull-requests"
 import { PrismApiError } from "@/lib/api/client"
@@ -11,6 +11,11 @@ export function usePullRequest(prId: string | null) {
   const [data, setData] = useState<PullRequest | null>(null)
   const [loading, setLoading] = useState(Boolean(prId))
   const [error, setError] = useState<string | null>(null)
+  const [reloadToken, setReloadToken] = useState(0)
+
+  const refetch = useCallback(() => {
+    setReloadToken((n) => n + 1)
+  }, [])
 
   useEffect(() => {
     if (!prId) {
@@ -35,7 +40,7 @@ export function usePullRequest(prId: string | null) {
       })
 
     return () => ac.abort()
-  }, [prId])
+  }, [prId, reloadToken])
 
-  return { data, loading, error }
+  return { data, loading, error, refetch }
 }
