@@ -6,10 +6,16 @@ import { Loader2 } from "lucide-react"
 import { Header } from "@/features/prism/components/header"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { useAIReviewSession } from "@/features/prism/contexts/ai-review-session-context"
+import { AISummary } from "@/features/prism/components/ai-summary"
 import { DiffViewer } from "@/features/prism/components/diff-viewer"
-import { ReviewFileRail } from "@/features/prism/components/review-file-rail"
-import { ReviewInsightPanel } from "@/features/prism/components/review-insight-panel"
+import {
+  bucketFindingsBySeverity,
+  ReviewFindingsDock,
+} from "@/features/prism/components/review-findings-dock"
+import { ReviewInsightDrawer } from "@/features/prism/components/review-insight-drawer"
+import { ReviewDecisionBar } from "@/features/prism/components/review-decision-bar"
 import { ReviewPageSkeleton } from "@/features/prism/components/review-page-skeleton"
+import { ReviewQuickVerdict } from "@/features/prism/components/review-quick-verdict"
 import { enrichDiffFilesWithFindings } from "@/features/prism/lib/map-findings-to-diff"
 import { deriveAnalysisPhase, useReviewLayout } from "@/hooks/use-review-layout"
 import { estimateCostCnyFromUsage, useAISettings } from "@/features/prism/contexts/ai-settings-context"
@@ -528,42 +534,22 @@ ${diffContext || "（无 diff 内容）"}`,
     Boolean(latest?.summary) ||
     Boolean(generatedSummary)
 
-  const insightPanelProps = pr
+  const fallbackScores = pr
     ? {
-        prId,
-        pr,
-        reviewStatus: pr.reviewStatus ?? "OPEN",
-        findings,
-        latest,
-        generatedSummary,
-        hasCompletedAnalysis,
-        fallbackScores: {
-          riskScore: analysisScores?.riskScore ?? pr.riskScore,
-          securityScore: analysisScores?.securityScore ?? pr.securityScore,
-          performanceScore: analysisScores?.performanceScore ?? pr.performanceScore,
-          maintainabilityScore:
-            analysisScores?.maintainabilityScore ?? pr.maintainabilityScore,
-        },
-        scanning,
-        streaming: summaryStreaming,
-        model: settings.model,
-        jobSummary: latest?.summary,
-        hasAnalysis,
-        restoring,
-        error: summaryError,
-        usage: runUsage,
-        reviewTimelineKey,
-        onGoToSettings: () => navigate("settings"),
-        onUpdated: () => {
-          setReviewTimelineKey((k) => k + 1)
-          reloadPr()
-        },
-        onStatusChange: (next: ReviewStatus) => {
-          patchLocal({ reviewStatus: next })
-          onReviewStatusChanged?.()
-        },
+        riskScore: analysisScores?.riskScore ?? pr.riskScore,
+        securityScore: analysisScores?.securityScore ?? pr.securityScore,
+        performanceScore: analysisScores?.performanceScore ?? pr.performanceScore,
+        maintainabilityScore:
+          analysisScores?.maintainabilityScore ?? pr.maintainabilityScore,
       }
-    : null
+    : undefined
+
+  const findingsBuckets = bucketFindingsBySeverity(findings)
+  const findingsCounts = {
+    critical: findingsBuckets.critical.length,
+    warning: findingsBuckets.warning.length,
+    other: findingsBuckets.other.length,
+  }
 
   if (showPrSkeleton) {
     return <ReviewPageSkeleton />
@@ -580,125 +566,128 @@ ${diffContext || "（无 diff 内容）"}`,
           hasFindings={hasFindings}
           onAnalyze={handleAnalyze}
           onRescan={hasFindings ? handleRescan : undefined}
-          syncLabel={syncLabel}
           diffLoading={diffLoading}
           prLoading={prLoading}
           analysisPhase={analysisPhase}
-          chunkProgress={scanning ? chunkProgress : undefined}
-          aiPanelOpen={layout.insightOpen}
-          onToggleAIPanel={layout.toggleInsight}
+          findingsCounts={findingsCounts}
+          insightOpen={layout.insightOpen}
+          onOpenInsight={layout.openInsight}
         />
       ) : (
-        <div className="flex items-center gap-2 min-h-[52px] px-5 py-2.5 border-b border-border text-sm text-muted-foreground shrink-0">
+        <div className="flex items-center gap-2 min-h-[44px] px-4 py-2 border-b border-border text-sm text-muted-foreground shrink-0">
           <Loader2 className="w-4 h-4 animate-spin" />
           正在加载 PR 信息…
         </div>
       )}
 
-      <div className="flex flex-1 min-h-0 relative">
-        {pr ? (
-          <ReviewFileRail
-            pr={pr}
-            findings={findings}
-            reviewStatus={pr.reviewStatus ?? "OPEN"}
-            selectedFindingId={selectedFindingId}
-            analyzing={analyzing}
-            hasAnalysis={hasAnalysis}
-            onSelectFinding={layout.jumpToFinding}
-            onAnalyze={handleAnalyze}
-            open={layout.leftRailOpen}
-            onToggleOpen={() => layout.setLeftRailOpen((v) => !v)}
-          />
+      <div className="flex flex-1 min-w-0 flex-col min-h-0">
+        {isExternalRepo && pr ? (
+          <div className="shrink-0 px-3 pt-2">
+            <AdoptRepoBanner pr={pr} />
+          </div>
+        ) : null}
+        {diffError ? (
+          <p className="shrink-0 px-3 pt-2 text-xs text-risk-high">
+            {zh.common.diffLoadFailed}：{diffError}
+          </p>
         ) : null}
 
-        <div className="flex flex-1 min-w-0 flex-col min-h-0">
-          {isExternalRepo && pr ? (
-            <div className="shrink-0 px-3 pt-2">
-              <AdoptRepoBanner pr={pr} />
-            </div>
-          ) : null}
-          {diffError ? (
-            <p className="shrink-0 px-3 pt-2 text-xs text-risk-high">
-              {zh.common.diffLoadFailed}：{diffError}
-            </p>
-          ) : null}
-          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3">
-            <DiffViewer
-              files={enrichedDiffFiles}
-              loading={diffLoading}
-              analyzing={scanning}
-              chunkProgress={scanning ? chunkProgress : undefined}
-              scrollTarget={layout.scrollTarget}
-              highlightTarget={layout.highlightTarget}
-            />
-          </div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3">
+          <DiffViewer
+            files={enrichedDiffFiles}
+            loading={diffLoading}
+            analyzing={scanning}
+            chunkProgress={scanning ? chunkProgress : undefined}
+            scrollTarget={layout.scrollTarget}
+            highlightTarget={layout.highlightTarget}
+          />
         </div>
 
-        {insightPanelProps && layout.insightOpen ? (
-          <ReviewInsightPanel
-            {...insightPanelProps}
-            className="hidden xl:flex"
-          />
-        ) : null}
-
-        {insightPanelProps && layout.insightOpen ? (
-          <div className="fixed inset-0 z-40 flex xl:hidden">
-            <button
-              type="button"
-              className="flex-1 bg-black/60"
-              aria-label="关闭洞察面板"
-              onClick={() => layout.setInsightOpen(false)}
-            />
-            <ReviewInsightPanel
-              {...insightPanelProps}
-              onClose={() => layout.setInsightOpen(false)}
-            />
-          </div>
-        ) : null}
-
-        {pr && findings.length > 0 ? (
-          <div className="lg:hidden fixed bottom-4 left-4 right-4 z-30 flex gap-2 justify-center pointer-events-none">
-            <button
-              type="button"
-              className="pointer-events-auto px-3 py-2 rounded-full border border-border bg-panel/95 backdrop-blur text-xs font-medium shadow-lg"
-              onClick={() => layout.setMobileSheet("findings")}
-            >
-              问题 {findings.length}
-            </button>
-            <button
-              type="button"
-              className="pointer-events-auto px-3 py-2 rounded-full border border-ai-blue/40 bg-ai-blue/15 text-ai-blue text-xs font-medium shadow-lg"
-              onClick={() => layout.setInsightOpen(true)}
-            >
-              洞察
-            </button>
-          </div>
-        ) : null}
-
-        {pr && layout.mobileSheet === "findings" ? (
-          <div className="fixed inset-0 z-50 flex lg:hidden">
-            <button
-              type="button"
-              className="flex-1 bg-black/60"
-              aria-label="关闭问题列表"
-              onClick={() => layout.setMobileSheet(null)}
-            />
-            <ReviewFileRail
-              pr={pr}
+        {pr ? (
+          <div className="shrink-0 border-t border-border grid grid-cols-1 md:grid-cols-2 gap-0 md:divide-x md:divide-border bg-panel/60">
+            <ReviewFindingsDock
               findings={findings}
-              reviewStatus={pr.reviewStatus ?? "OPEN"}
               selectedFindingId={selectedFindingId}
-              analyzing={analyzing}
-              hasAnalysis={hasAnalysis}
+              expanded={layout.findingsExpanded}
+              onExpandedChange={layout.setFindingsExpanded}
               onSelectFinding={layout.jumpToFinding}
+              hasAnalysis={hasAnalysis}
+              analyzing={analyzing}
               onAnalyze={handleAnalyze}
-              open
-              overlay
-              className="w-[min(100%,300px)] shadow-2xl"
+            />
+            <div className="px-3 py-2 border-t md:border-t-0 border-border min-w-0">
+              <AISummary
+                variant="teaser"
+                scanning={scanning}
+                streaming={summaryStreaming}
+                model={settings.model}
+                generatedSummary={generatedSummary}
+                jobSummary={latest?.summary}
+                hasAnalysis={hasAnalysis}
+                restoring={restoring}
+                error={summaryError}
+                onGoToSettings={() => navigate("settings")}
+                onOpenInsight={layout.openInsight}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {pr ? (
+          <div className="group relative shrink-0 sticky bottom-0 z-40 border-t border-border bg-panel/95 backdrop-blur px-3 py-2.5 shadow-[0_-8px_24px_rgba(0,0,0,0.25)]">
+            <div className="hidden md:block pointer-events-none absolute bottom-full left-3 right-3 mb-2 opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200">
+              <ReviewQuickVerdict
+                findings={findings}
+                latest={latest}
+                prTitle={pr.title}
+                repoLabel={pr.repo}
+                prNumber={pr.number}
+                aiSummary={generatedSummary}
+                hasCompletedAnalysis={hasCompletedAnalysis}
+                fallbackScores={fallbackScores}
+              />
+            </div>
+            <ReviewDecisionBar
+              prId={prId}
+              reviewStatus={pr.reviewStatus ?? "OPEN"}
+              layout="sticky"
+              compact
+              onUpdated={() => {
+                setReviewTimelineKey((k) => k + 1)
+                reloadPr()
+              }}
+              onStatusChange={(next: ReviewStatus) => {
+                patchLocal({ reviewStatus: next })
+                onReviewStatusChanged?.()
+              }}
             />
           </div>
         ) : null}
       </div>
+
+      {pr && layout.insightOpen ? (
+        <ReviewInsightDrawer
+          open={layout.insightOpen}
+          onClose={layout.closeInsight}
+          prId={prId}
+          pr={pr}
+          findings={findings}
+          latest={latest}
+          generatedSummary={generatedSummary}
+          hasCompletedAnalysis={hasCompletedAnalysis}
+          fallbackScores={fallbackScores}
+          scanning={scanning}
+          streaming={summaryStreaming}
+          model={settings.model}
+          jobSummary={latest?.summary}
+          hasAnalysis={hasAnalysis}
+          restoring={restoring}
+          error={summaryError}
+          usage={runUsage}
+          reviewTimelineKey={reviewTimelineKey}
+          onGoToSettings={() => navigate("settings")}
+        />
+      ) : null}
     </div>
   )
 }

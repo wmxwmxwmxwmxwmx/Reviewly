@@ -20,17 +20,20 @@ export function deriveAnalysisPhase(input: {
 }
 
 export function useReviewLayout() {
-  const [insightOpen, setInsightOpen] = useState(true)
-  const [leftRailOpen, setLeftRailOpen] = useState(true)
-  const [mobileSheet, setMobileSheet] = useState<"findings" | "insight" | null>(null)
+  const [insightOpen, setInsightOpen] = useState(false)
+  const [findingsExpanded, setFindingsExpanded] = useState(false)
   const [scrollTarget, setScrollTarget] = useState<FindingScrollTarget | null>(null)
   const [highlightTarget, setHighlightTarget] = useState<FindingScrollTarget | null>(null)
 
   const jumpToFinding = useCallback((target: FindingScrollTarget) => {
     setScrollTarget(target)
     setHighlightTarget(target)
-    setMobileSheet(null)
+    setFindingsExpanded(false)
   }, [])
+
+  const openInsight = useCallback(() => setInsightOpen(true), [])
+  const closeInsight = useCallback(() => setInsightOpen(false), [])
+  const toggleInsight = useCallback(() => setInsightOpen((v) => !v), [])
 
   useEffect(() => {
     if (!highlightTarget) return
@@ -41,13 +44,13 @@ export function useReviewLayout() {
   return {
     insightOpen,
     setInsightOpen,
-    leftRailOpen,
-    setLeftRailOpen,
-    mobileSheet,
-    setMobileSheet,
+    openInsight,
+    closeInsight,
+    toggleInsight,
+    findingsExpanded,
+    setFindingsExpanded,
     scrollTarget,
     jumpToFinding,
     highlightTarget,
-    toggleInsight: () => setInsightOpen((v) => !v),
   }
 }
