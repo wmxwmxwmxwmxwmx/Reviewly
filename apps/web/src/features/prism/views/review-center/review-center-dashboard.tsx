@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import type { ReviewCenterDashboard } from "@reviewly/shared"
+import type { ReviewCenterDashboard, ReviewStatus } from "@reviewly/shared"
 import {
   AlertTriangle,
   Bot,
@@ -13,12 +13,12 @@ import {
 import { fetchReviewDashboard } from "@/lib/api/review-center"
 import { PrismApiError } from "@/lib/api/client"
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
+import type { WorkbenchNavigatePayload } from "@/features/prism/lib/review-center-navigation"
 import { cn } from "@/lib/utils"
 
 interface ReviewCenterDashboardViewProps {
-  onNavigatePending: () => void
-  onNavigateAll: () => void
-  onSelectPr: (prId: string) => void
+  onNavigate: (payload: WorkbenchNavigatePayload) => void
+  onNavigateFindings: () => void
 }
 
 function MetricCard({
@@ -32,16 +32,15 @@ function MetricCard({
   value: number | string
   icon: typeof GitPullRequest
   accent?: string
-  onClick?: () => void
+  onClick: () => void
 }) {
-  const Comp = onClick ? "button" : "div"
   return (
-    <Comp
-      type={onClick ? "button" : undefined}
+    <button
+      type="button"
       onClick={onClick}
       className={cn(
         "flex flex-col gap-3 p-4 rounded-lg border border-border bg-card text-left transition-colors",
-        onClick && "hover:border-ai-blue/40 hover:bg-surface-2/80 cursor-pointer",
+        "hover:border-ai-blue/40 hover:bg-surface-2/80 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-blue/50",
       )}
     >
       <div className="flex items-center justify-between">
@@ -49,13 +48,37 @@ function MetricCard({
         <Icon className={cn("w-4 h-4", accent ?? "text-muted-foreground")} />
       </div>
       <div className="text-2xl font-semibold font-mono text-foreground">{value}</div>
-    </Comp>
+    </button>
+  )
+}
+
+function StatusBlock({
+  label,
+  value,
+  onClick,
+}: {
+  label: string
+  value: number
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "px-3 py-2 rounded-md bg-surface-2 border border-border text-left transition-colors",
+        "hover:border-ai-blue/40 hover:bg-surface-3/80 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-blue/50",
+      )}
+    >
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+      <div className="text-lg font-mono font-semibold">{value}</div>
+    </button>
   )
 }
 
 export function ReviewCenterDashboardView({
-  onNavigatePending,
-  onNavigateAll,
+  onNavigate,
+  onNavigateFindings,
 }: ReviewCenterDashboardViewProps) {
   const [data, setData] = useState<ReviewCenterDashboard | null>(null)
   const [loading, setLoading] = useState(true)
@@ -81,6 +104,10 @@ export function ReviewCenterDashboardView({
     return () => ac.abort()
   }, [])
 
+  const navigateAllWithStatus = (reviewStatus: ReviewStatus) => {
+    onNavigate({ tab: "all", reviewStatus })
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-muted-foreground gap-2">
@@ -94,6 +121,13 @@ export function ReviewCenterDashboardView({
     return <p className="py-12 text-center text-sm text-risk-high">{error ?? "暂无数据"}</p>
   }
 
+  const isEmpty =
+    data.pendingReview === 0 &&
+    data.inReview === 0 &&
+    data.myCreated === 0 &&
+    data.highRisk === 0 &&
+    (data.statusCounts.ALL ?? 0) === 0
+
   return (
     <div className="p-5 space-y-6">
       <div>
@@ -101,51 +135,59 @@ export function ReviewCenterDashboardView({
         <p className="text-[12px] text-muted-foreground mt-1">团队 PR 评审概览与待办事项</p>
       </div>
 
+      {isEmpty ? (
+        <div className="rounded-lg border border-dashed border-border bg-surface-2/40 px-4 py-6 text-center">
+          <p className="text-sm text-muted-foreground">暂无进行中的 PR，可通过右上角「导入 PR」开始评审。</p>
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         <MetricCard
           label="待我处理"
           value={data.pendingReview}
           icon={UserCheck}
           accent="text-ai-blue"
-          onClick={onNavigatePending}
+          onClick={() => onNavigate({ tab: "pending" })}
         />
         <MetricCard
-          label="评审中"
+          label="进行中 PR"
           value={data.inReview}
           icon={GitPullRequest}
           accent="text-amber-300"
-          onClick={onNavigateAll}
+          onClick={() => onNavigate({ tab: "all", reviewStatus: "IN_REVIEW" })}
         />
         <MetricCard
           label="我创建的 PR"
           value={data.myCreated}
           icon={GitPullRequest}
-          onClick={onNavigateAll}
+          onClick={() => onNavigate({ tab: "all", prFilter: "my-created" })}
         />
         <MetricCard
           label="高风险 PR"
           value={data.highRisk}
           icon={AlertTriangle}
           accent="text-risk-high"
-          onClick={onNavigateAll}
+          onClick={() => onNavigate({ tab: "all", prFilter: "high-risk" })}
         />
         <MetricCard
           label="本周审批数量"
           value={data.weeklyApprovals}
           icon={CheckCircle2}
           accent="text-risk-low"
+          onClick={() => onNavigate({ tab: "stats" })}
         />
         <MetricCard
           label="AI 发现问题"
           value={data.aiFindingsThisWeek}
           icon={Bot}
           accent="text-ai-purple"
+          onClick={onNavigateFindings}
         />
       </div>
 
       <div className="rounded-lg border border-border bg-card p-4">
         <h3 className="text-sm font-semibold text-foreground mb-3">状态分布</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {(
             [
               ["OPEN", "待评审"],
@@ -155,12 +197,12 @@ export function ReviewCenterDashboardView({
               ["MERGED", "已合并"],
             ] as const
           ).map(([key, label]) => (
-            <div key={key} className="px-3 py-2 rounded-md bg-surface-2 border border-border">
-              <div className="text-[10px] text-muted-foreground">{label}</div>
-              <div className="text-lg font-mono font-semibold">
-                {data.statusCounts[key] ?? 0}
-              </div>
-            </div>
+            <StatusBlock
+              key={key}
+              label={label}
+              value={data.statusCounts[key] ?? 0}
+              onClick={() => navigateAllWithStatus(key)}
+            />
           ))}
         </div>
       </div>

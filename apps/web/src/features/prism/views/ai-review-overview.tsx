@@ -28,6 +28,8 @@ import { Button } from "@/components/ui/button"
 import { EditPRDialog } from "@/features/prism/components/edit-pr-dialog"
 import { ImportPRDialog } from "@/features/prism/components/import-pr-dialog"
 import { ReviewStatusTabs } from "@/features/prism/components/review-status-tabs"
+import { useAuth } from "@/features/prism/contexts/auth-context"
+import type { ReviewPrFilter } from "@/features/prism/lib/review-center-navigation"
 import {
   REVIEW_STATUS_LABELS,
   reviewStatusBadgeClass,
@@ -81,6 +83,7 @@ interface AiReviewOverviewProps {
   repoId?: string
   pendingOnly?: boolean
   initialStatus?: ReviewStatus | "ALL"
+  prFilter?: ReviewPrFilter
 }
 
 export function AiReviewOverview({
@@ -97,12 +100,21 @@ export function AiReviewOverview({
   repoId,
   pendingOnly = false,
   initialStatus = "ALL",
+  prFilter,
 }: AiReviewOverviewProps) {
   const { toast } = useToast()
+  const { user } = useAuth()
   const [statusFilter, setStatusFilter] = useState<ReviewStatus | "ALL">(
     pendingOnly ? "OPEN" : initialStatus,
   )
   const [search, setSearch] = useState("")
+
+  useEffect(() => {
+    if (!pendingOnly) {
+      setStatusFilter(initialStatus)
+    }
+  }, [initialStatus, pendingOnly])
+
   const { items, statusCounts, loading, error, reload } = usePullRequests({
     includeExternal: "true",
     limit: "100",
@@ -110,6 +122,8 @@ export function AiReviewOverview({
     repoId: repoId || undefined,
     reviewStatus: statusFilter !== "ALL" ? statusFilter : undefined,
     search: search.trim() || undefined,
+    filter: prFilter === "high-risk" ? "high-risk" : undefined,
+    author: prFilter === "my-created" ? user?.username : undefined,
   })
   const [editPr, setEditPr] = useState<PullRequestListItem | null>(null)
   const [deletePr, setDeletePr] = useState<PullRequestListItem | null>(null)
@@ -133,6 +147,13 @@ export function AiReviewOverview({
       return (b.updatedAt || "").localeCompare(a.updatedAt || "")
     })
   }, [items, pendingOnly])
+
+  const activePresetLabel =
+    prFilter === "high-risk"
+      ? "高风险 PR"
+      : prFilter === "my-created"
+        ? "我创建的 PR"
+        : null
 
   const toggleFavorite = useCallback(
     async (pr: PullRequestListItem) => {
@@ -240,6 +261,14 @@ export function AiReviewOverview({
             onChange={setStatusFilter}
           />
         )}
+
+        {activePresetLabel ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="px-2 py-1 rounded-md border border-ai-blue/30 bg-ai-blue/10 text-ai-blue">
+              筛选：{activePresetLabel}
+            </span>
+          </div>
+        ) : null}
 
         {loading && (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">

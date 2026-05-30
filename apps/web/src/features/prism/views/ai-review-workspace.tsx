@@ -14,6 +14,11 @@ import { useImportPrByUrl } from "@/hooks/use-import-pr-by-url"
 import { usePullRequest } from "@/hooks/use-pull-request"
 import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
 import { useToast } from "@/hooks/use-toast"
+import type { WorkbenchNavigatePayload } from "@/features/prism/lib/review-center-navigation"
+import {
+  parsePrFilterParam,
+  parseReviewStatusParam,
+} from "@/features/prism/lib/review-center-navigation"
 import { zh } from "@/lib/i18n/zh"
 
 const REVIEW_TABS: ReviewCenterTab[] = [
@@ -43,7 +48,8 @@ export function AiReviewWorkspace({
   reviewTab: reviewTabParam,
   onMenuClick,
 }: AiReviewWorkspaceProps) {
-  const { navigate, repoId: urlRepoId } = useNavigation()
+  const { navigate, repoId: urlRepoId, reviewStatus: reviewStatusParam, prFilter: prFilterParam } =
+    useNavigation()
   const { refresh: refreshRepos } = useReposStore()
   const { data: currentPr } = usePullRequest(prId)
   const { toast } = useToast()
@@ -88,11 +94,20 @@ export function AiReviewWorkspace({
 
   const overviewRepoId = currentPr?.repoId ?? filterRepoId ?? urlRepoId ?? undefined
 
+  const listReviewStatus = parseReviewStatusParam(reviewStatusParam)
+  const listPrFilter = parsePrFilterParam(prFilterParam)
+
   const handleSelectPr = useCallback(
     (id: string) => {
-      navigate("ai-review", { prId: id, repoId: overviewRepoId, reviewTab: centerTab })
+      navigate("ai-review", {
+        prId: id,
+        repoId: overviewRepoId,
+        reviewTab: centerTab,
+        reviewStatus: listReviewStatus ?? undefined,
+        prFilter: listPrFilter ?? undefined,
+      })
     },
-    [navigate, overviewRepoId, centerTab],
+    [navigate, overviewRepoId, centerTab, listReviewStatus, listPrFilter],
   )
 
   const handleBackToList = useCallback(() => {
@@ -100,8 +115,10 @@ export function AiReviewWorkspace({
       aiReviewList: true,
       repoId: overviewRepoId,
       reviewTab: centerTab,
+      reviewStatus: listReviewStatus ?? undefined,
+      prFilter: listPrFilter ?? undefined,
     })
-  }, [navigate, overviewRepoId, centerTab])
+  }, [navigate, overviewRepoId, centerTab, listReviewStatus, listPrFilter])
 
   const handleTabChange = useCallback(
     (tab: ReviewCenterTab) => {
@@ -110,6 +127,24 @@ export function AiReviewWorkspace({
     },
     [navigate, filterRepoId],
   )
+
+  const handleWorkbenchNavigate = useCallback(
+    (payload: WorkbenchNavigatePayload) => {
+      setCenterTab(payload.tab)
+      navigate("ai-review", {
+        aiReviewList: true,
+        repoId: filterRepoId ?? undefined,
+        reviewTab: payload.tab,
+        reviewStatus: payload.reviewStatus,
+        prFilter: payload.prFilter,
+      })
+    },
+    [navigate, filterRepoId],
+  )
+
+  const handleNavigateFindings = useCallback(() => {
+    navigate("findings")
+  }, [navigate])
 
   const handleRepoChange = useCallback(
     (repoId: string | null) => {
@@ -142,6 +177,10 @@ export function AiReviewWorkspace({
           onTabChange={handleTabChange}
           onMenuClick={onMenuClick}
           onSelectPr={handleSelectPr}
+          onWorkbenchNavigate={handleWorkbenchNavigate}
+          onNavigateFindings={handleNavigateFindings}
+          listReviewStatus={listReviewStatus}
+          listPrFilter={listPrFilter}
           importOpen={importOpen}
           onImportOpenChange={setImportOpen}
           importing={importing}
