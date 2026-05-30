@@ -202,6 +202,8 @@ export const zh = {
       save: "保存结果",
       done: "完成",
     } as Record<string, string>,
+    scanTruncated:
+      "大仓库采样分析：已优先扫描 apps/services/packages 等目录，未覆盖全部文件。",
   },
   common: {
     all: "全部",

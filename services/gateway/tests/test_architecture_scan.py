@@ -16,7 +16,10 @@ def test_build_graph_from_fixture() -> None:
     graph = build_graph(FIXTURE_ROOT)
     assert len(graph["nodes"]) >= 4
     assert len(graph["edges"]) >= 1
-    assert graph["metrics"]["summary"]["fileCount"] == len(graph["nodes"])
+    summary = graph["metrics"]["summary"]
+    assert summary["fileCount"] == len(graph["nodes"])
+    assert "filesDiscovered" in summary
+    assert summary.get("truncated") is False
     langs = graph["metrics"]["summary"]["languages"]
     assert langs.get("python", 0) >= 3
 
