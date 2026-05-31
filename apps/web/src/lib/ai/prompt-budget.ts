@@ -1,3 +1,7 @@
+import type { AnalysisFinding } from "@reviewly/shared"
+
+import { sortFindingsForPrompt } from "@/lib/ai/ai-review-consistency"
+
 export type DiffFileLike = {
   path: string
   language: string
@@ -77,19 +81,12 @@ export function buildBoundedDiffContext(
   return { context, charCount: context.length, truncated }
 }
 
-export function buildFindingsContext(findings: Array<{
-  severity: string
-  file: string
-  line: number
-  title: string
-  description: string
-  fixSuggestion: string
-}>): string {
+export function buildFindingsContext(findings: AnalysisFinding[]): string {
   if (findings.length === 0) {
     return "（规则扫描未发现结构化风险项，请仅依据 Diff 做评审。）"
   }
 
-  return findings
+  return sortFindingsForPrompt(findings)
     .map(
       (f) =>
         `- [${f.severity}] ${f.file}:${f.line} ${f.title}\n  ${f.description}\n  修复建议：${f.fixSuggestion}`,

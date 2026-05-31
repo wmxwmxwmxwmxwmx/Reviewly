@@ -36,6 +36,10 @@ export interface AiPersistedContent {
   model?: string
   provider?: string
   usage?: AiUsageMetrics
+  /** 与 PR analysisVersion（repo#number:head_sha）绑定，防止 commit 变更后复用旧摘要 */
+  analysisVersion?: string | null
+  /** 与 AI_REVIEW_PROMPT_VERSION 绑定，prompt 变更后强制重新生成 */
+  promptVersion?: string | null
 }
 
 /** @deprecated Use AiPersistedContent */
@@ -367,6 +371,7 @@ export interface PullRequest extends PullRequestListItem {
   deploymentRisk: "high" | "medium" | "low"
   rollbackComplexity: "high" | "medium" | "low"
   url: string
+  analysisVersion?: string | null
 }
 
 export interface AnalysisJob {

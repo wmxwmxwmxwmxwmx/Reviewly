@@ -11,6 +11,7 @@ async def call_anthropic(
     api_key: str,
     messages: list[dict],
     temperature: float = 0.2,
+    max_tokens: int | None = None,
 ) -> dict:
     system = next((m["content"] for m in messages if m.get("role") == "system"), None)
     chat_messages = [
@@ -24,7 +25,7 @@ async def call_anthropic(
 
     body: dict = {
         "model": model,
-        "max_tokens": 1600,
+        "max_tokens": max_tokens if max_tokens is not None else 1600,
         "temperature": temperature,
         "messages": chat_messages,
     }
@@ -63,6 +64,7 @@ async def stream_anthropic(
     api_key: str,
     messages: list[dict],
     temperature: float = 0.2,
+    max_tokens: int | None = None,
 ) -> AsyncIterator[str | dict[str, dict[str, int]]]:
     system = next((m["content"] for m in messages if m.get("role") == "system"), None)
     chat_messages = [
@@ -76,7 +78,7 @@ async def stream_anthropic(
 
     body: dict = {
         "model": model,
-        "max_tokens": 1600,
+        "max_tokens": max_tokens if max_tokens is not None else 1600,
         "temperature": temperature,
         "messages": chat_messages,
         "stream": True,

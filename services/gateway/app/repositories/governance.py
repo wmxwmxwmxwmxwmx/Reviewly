@@ -126,6 +126,7 @@ def list_enabled_rule_definitions(session: Session) -> list[dict[str, Any]]:
         select(GovernanceRule)
         .where(GovernanceRule.enabled.is_(True))
         .where(not_(seed_governance_rule_predicate()))
+        .order_by(GovernanceRule.id)
     ).all()
     if not rows:
         return []

@@ -11,6 +11,7 @@ export type ChatRequest = {
   customEndpoint?: string
   messages: ChatMessage[]
   temperature?: number
+  maxTokens?: number
   stream?: boolean
 }
 
@@ -70,6 +71,9 @@ function buildChatBody(request: ChatRequest): Record<string, unknown> {
   }
   if (request.temperature !== undefined) {
     body.temperature = request.temperature
+  }
+  if (request.maxTokens !== undefined) {
+    body.maxTokens = request.maxTokens
   }
   return body
 }

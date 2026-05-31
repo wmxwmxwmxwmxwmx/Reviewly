@@ -71,6 +71,8 @@ class PrAiSummaryBody(BaseModel):
     model: str | None = None
     provider: str | None = None
     analyzed_at: str | None = Field(default=None, validation_alias="analyzedAt")
+    analysis_version: str | None = Field(default=None, validation_alias="analysisVersion")
+    prompt_version: str | None = Field(default=None, validation_alias="promptVersion")
     usage: AiUsageMetricsBody | None = None
 
     model_config = {"populate_by_name": True}
@@ -445,6 +447,10 @@ def patch_pr_ai_summary(
         payload["model"] = body.model.strip()
     if body.provider:
         payload["provider"] = body.provider.strip()
+    if body.analysis_version:
+        payload["analysisVersion"] = body.analysis_version.strip()
+    if body.prompt_version:
+        payload["promptVersion"] = body.prompt_version.strip()
     if body.usage:
         payload["usage"] = {
             "promptTokens": body.usage.prompt_tokens,
