@@ -109,7 +109,7 @@ export function ReposProvider({ children }: { children: ReactNode }) {
       }
       const data = await fetchRepos({ type: "all" })
       setRepos(data)
-      await syncManagedReposPullRequests(data)
+      await syncManagedReposPullRequests(data, undefined, "manual")
       const afterPrSync = await fetchRepos({ type: "all" })
       setRepos(afterPrSync)
       return result

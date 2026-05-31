@@ -360,6 +360,9 @@ export interface PullRequestListItem {
   repositoryType?: RepositoryType
   managed?: boolean
   isManaged?: boolean
+  isUnread?: boolean
+  needsRevisit?: boolean
+  attentionState?: "unread" | "reviewed" | "needs_revisit"
 }
 
 export interface PullRequest extends PullRequestListItem {

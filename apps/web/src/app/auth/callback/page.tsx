@@ -9,7 +9,7 @@ import { useAuth } from "@/features/prism/contexts/auth-context"
 import { clearOAuthPending } from "@/lib/auth/oauth-pending"
 import { safeNextPath } from "@/lib/auth/safe-next-path"
 import { handleSwitchAccountAfterCallback } from "@/lib/auth/switch-account-flow"
-import { syncMyRepositories } from "@/lib/api/repos"
+import { syncMyRepositories, syncManagedPullRequests } from "@/lib/api/repos"
 
 function AuthCallbackContent() {
   const router = useRouter()
@@ -47,6 +47,11 @@ function AuthCallbackContent() {
           await syncMyRepositories()
         } catch {
           /* sync is best-effort after login */
+        }
+        try {
+          await syncManagedPullRequests({ trigger: "login" })
+        } catch {
+          /* PR sync is best-effort after login */
         }
         if (!cancelled) router.replace(next)
       } catch {

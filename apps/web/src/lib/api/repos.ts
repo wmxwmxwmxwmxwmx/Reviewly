@@ -11,6 +11,12 @@ import type {
 } from "@reviewly/shared"
 
 import { apiFetch } from "./client"
+import {
+  recordIntervalManagedSync,
+  recordManagedSyncStats,
+  shouldSkipIntervalManagedSync,
+  skippedIntervalStats,
+} from "@/lib/pr-sync-dedup"
 
 export type SyncReposResult = SyncRepositoriesResponse
 
@@ -43,10 +49,56 @@ export function syncMyRepositories(signal?: AbortSignal) {
 }
 
 export function syncRepoPullRequests(repoId: string, signal?: AbortSignal) {
-  return apiFetch<{ synced: number; created: number; updated: number }>(
-    `/api/repos/${repoId}/sync-prs`,
-    { method: "POST", signal, noRetry: true },
-  )
+  return apiFetch<{
+    ok?: boolean
+    synced: number
+    created: number
+    updated: number
+    closed?: number
+    softMarked?: number
+  }>(`/api/repos/${repoId}/sync-prs`, { method: "POST", signal, noRetry: true })
+}
+
+export type PrSyncTrigger = "interval" | "manual" | "login" | "focus"
+
+export type ManagedPrSyncResult = {
+  ok?: boolean
+  skipped?: boolean
+  synced?: number
+  created?: number
+  updated?: number
+  closed?: number
+  softMarked?: number
+  repos?: number
+}
+
+export function syncManagedPullRequests(options?: {
+  repoIds?: string[]
+  signal?: AbortSignal
+  trigger?: PrSyncTrigger
+  forceReconcile?: boolean
+}) {
+  const trigger = options?.trigger ?? "manual"
+
+  if (trigger === "interval" && shouldSkipIntervalManagedSync()) {
+    return Promise.resolve(skippedIntervalStats())
+  }
+
+  return apiFetch<ManagedPrSyncResult>("/api/repos/sync-prs/managed", {
+    method: "POST",
+    signal: options?.signal,
+    noRetry: true,
+    body: JSON.stringify({
+      repoIds: options?.repoIds,
+      forceReconcile: options?.forceReconcile ?? trigger === "manual",
+    }),
+  }).then((stats) => {
+    recordManagedSyncStats(stats)
+    if (trigger === "interval") {
+      recordIntervalManagedSync(stats)
+    }
+    return stats
+  })
 }
 
 /** @deprecated Use syncRepositories */

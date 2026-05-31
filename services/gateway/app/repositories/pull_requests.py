@@ -457,4 +457,8 @@ def _pr_dict(row: PullRequest, repo: Repository | None = None) -> dict:
         data["note"] = row.note
     data["favorite"] = bool(row.favorite)
     data["reviewStatus"] = row.review_status or "OPEN"
+    if data.get("syncStaleAt"):
+        data["needsRevisit"] = True
+        if not data.get("attentionState"):
+            data["attentionState"] = "needs_revisit"
     return data

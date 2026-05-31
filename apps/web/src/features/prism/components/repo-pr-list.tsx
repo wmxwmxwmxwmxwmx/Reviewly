@@ -10,6 +10,8 @@ import { fetchPullRequests } from "@/lib/api/pull-requests"
 import { syncRepoPullRequests } from "@/lib/api/repos"
 import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
 import { formatPrismApiError } from "@/lib/api/client"
+import { isPrSyncInFlight } from "@/lib/pr-sync-mutex"
+import { PR_SYNC_UPDATED_EVENT } from "@/lib/pr-sync-events"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
@@ -67,6 +69,15 @@ export function RepoPrList({ repoId, repoFullName }: RepoPrListProps) {
   const syncInBackground = useCallback(
     async (signal: AbortSignal) => {
       if (!isManaged) return
+      if (isPrSyncInFlight()) {
+        try {
+          const sorted = await fetchList(signal)
+          if (!signal.aborted) setItems(sorted)
+        } catch {
+          /* keep cached list */
+        }
+        return
+      }
       setSyncing(true)
       try {
         await syncRepoPullRequests(repoId, signal)
@@ -80,6 +91,16 @@ export function RepoPrList({ repoId, repoFullName }: RepoPrListProps) {
     },
     [fetchList, isManaged, repoId],
   )
+
+  useEffect(() => {
+    if (!open) return
+    const handler = () => {
+      const ac = new AbortController()
+      void load(ac.signal)
+    }
+    window.addEventListener(PR_SYNC_UPDATED_EVENT, handler)
+    return () => window.removeEventListener(PR_SYNC_UPDATED_EVENT, handler)
+  }, [open, load])
 
   useEffect(() => {
     setItems([])

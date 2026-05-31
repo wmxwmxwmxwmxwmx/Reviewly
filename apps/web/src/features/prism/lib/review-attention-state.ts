@@ -108,6 +108,17 @@ export function computeAttentionState(
   return "reviewed"
 }
 
+/** Prefer API-driven attention; localStorage is UI fallback only. */
+export function resolveAttentionState(pr: PullRequestListItem): ReviewAttentionState {
+  if (pr.attentionState === "unread" || pr.attentionState === "reviewed" || pr.attentionState === "needs_revisit") {
+    return pr.attentionState
+  }
+  if (pr.needsRevisit) return "needs_revisit"
+  if (pr.isUnread === true) return "unread"
+  if (pr.isUnread === false) return "reviewed"
+  return computeAttentionState(pr.id, getFingerprintInput(pr))
+}
+
 export function getAttentionState(
   prId: string,
   current: FingerprintInput,
@@ -141,8 +152,7 @@ export function countAttentionStates(
   let unread = 0
   let needsRevisit = 0
   for (const pr of prs) {
-    const input = getFingerprintInput(pr)
-    const state = computeAttentionState(pr.id, input)
+    const state = resolveAttentionState(pr)
     if (state === "unread") unread += 1
     if (state === "needs_revisit") needsRevisit += 1
   }

@@ -2,8 +2,7 @@ import type { PullRequestListItem } from "@reviewly/shared"
 
 import type { PrioritySettings } from "@/features/prism/lib/governance-priority-settings"
 import {
-  computeAttentionState,
-  getFingerprintInput,
+  resolveAttentionState,
   type ReviewAttentionState,
 } from "@/features/prism/lib/review-attention-state"
 import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
@@ -146,8 +145,7 @@ export function computeInboxItems(
   const items = prs
     .filter(isRepositoryManaged)
     .map((pr) => {
-      const fingerprint = getFingerprintInput(pr)
-      const attentionState = computeAttentionState(pr.id, fingerprint)
+      const attentionState = resolveAttentionState(pr)
       const metrics = metricsCache?.get(pr.id)
       const realFiles = metrics?.filesChanged
       const hasRealFiles = realFiles !== undefined && realFiles > 0

@@ -14,7 +14,8 @@ import {
 import { useAuth } from "@/features/prism/contexts/auth-context"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { isAbortError } from "@/lib/abort-utils"
-import { syncManagedPullRequests } from "@/lib/api/repos"
+import { syncManagedPullRequests, type PrSyncTrigger } from "@/lib/api/repos"
+import { withPrSyncMutex } from "@/lib/pr-sync-mutex"
 import { dispatchPrSyncUpdated } from "@/lib/pr-sync-events"
 
 const SYNC_INTERVAL_MS = 90_000
@@ -23,7 +24,7 @@ const FOCUS_DEBOUNCE_MS = 60_000
 type PrSyncContextValue = {
   syncing: boolean
   lastSyncedAt: string | null
-  syncNow: () => Promise<void>
+  syncNow: (trigger?: PrSyncTrigger) => Promise<void>
 }
 
 const PrSyncContext = createContext<PrSyncContextValue | null>(null)
@@ -36,61 +37,66 @@ export function PrSyncProvider({ children }: { children: ReactNode }) {
   const syncingRef = useRef(false)
   const abortRef = useRef<AbortController | null>(null)
   const lastFocusRef = useRef(0)
-  const syncNowRef = useRef<() => Promise<void>>(async () => {})
+  const syncNowRef = useRef<(trigger?: PrSyncTrigger) => Promise<void>>(async () => {})
 
-  const syncNow = useCallback(async () => {
-    if (!isAuthenticated) return
-    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
-      return
-    }
-    if (syncingRef.current) return
-
-    abortRef.current?.abort()
-    const ac = new AbortController()
-    abortRef.current = ac
-    syncingRef.current = true
-    setSyncing(true)
-
-    try {
-      const stats = await syncManagedPullRequests({ signal: ac.signal })
-      if (ac.signal.aborted) return
-      const at = new Date().toISOString()
-      setLastSyncedAt(at)
-      await refreshRepos()
-      dispatchPrSyncUpdated({
-        at,
-        stats: {
-          synced: stats.synced,
-          created: stats.created,
-          updated: stats.updated,
-          closed: stats.closed,
-          repos: stats.repos,
-        },
-      })
-    } catch (error) {
-      if (!isAbortError(error) && !ac.signal.aborted) {
-        console.warn("[PrSync] managed sync failed", error)
+  const runSync = useCallback(
+    async (trigger: PrSyncTrigger = "manual") => {
+      if (!isAuthenticated) return
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return
       }
-    } finally {
-      if (abortRef.current === ac) {
-        syncingRef.current = false
-        setSyncing(false)
-      }
-    }
-  }, [isAuthenticated, refreshRepos])
+      if (syncingRef.current) return
 
-  syncNowRef.current = syncNow
+      abortRef.current?.abort()
+      const ac = new AbortController()
+      abortRef.current = ac
+      syncingRef.current = true
+      setSyncing(true)
+
+      try {
+        const stats = await withPrSyncMutex(() =>
+          syncManagedPullRequests({ signal: ac.signal, trigger }),
+        )
+        if (ac.signal.aborted || stats === undefined) return
+        const at = new Date().toISOString()
+        setLastSyncedAt(at)
+        await refreshRepos()
+        dispatchPrSyncUpdated({
+          at,
+          stats: {
+            synced: stats.synced,
+            created: stats.created,
+            updated: stats.updated,
+            closed: stats.closed,
+            repos: stats.repos,
+          },
+        })
+      } catch (error) {
+        if (!isAbortError(error) && !ac.signal.aborted) {
+          console.warn("[PrSync] managed sync failed", error)
+        }
+      } finally {
+        if (abortRef.current === ac) {
+          syncingRef.current = false
+          setSyncing(false)
+        }
+      }
+    },
+    [isAuthenticated, refreshRepos],
+  )
+
+  syncNowRef.current = runSync
 
   useEffect(() => {
     if (!isAuthenticated) return
 
     const runInitial = window.setTimeout(() => {
-      void syncNowRef.current()
+      void syncNowRef.current("focus")
     }, 2_000)
 
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === "visible") {
-        void syncNowRef.current()
+        void syncNowRef.current("interval")
       }
     }, SYNC_INTERVAL_MS)
 
@@ -99,12 +105,12 @@ export function PrSyncProvider({ children }: { children: ReactNode }) {
       if (now - lastFocusRef.current < FOCUS_DEBOUNCE_MS) return
       lastFocusRef.current = now
       if (document.visibilityState === "visible") {
-        void syncNowRef.current()
+        void syncNowRef.current("focus")
       }
     }
     const onVisibility = () => {
       if (document.visibilityState === "visible") {
-        void syncNowRef.current()
+        void syncNowRef.current("focus")
       }
     }
 
@@ -121,8 +127,8 @@ export function PrSyncProvider({ children }: { children: ReactNode }) {
   }, [isAuthenticated])
 
   const value = useMemo(
-    () => ({ syncing, lastSyncedAt, syncNow }),
-    [syncing, lastSyncedAt, syncNow],
+    () => ({ syncing, lastSyncedAt, syncNow: runSync }),
+    [syncing, lastSyncedAt, runSync],
   )
 
   return <PrSyncContext.Provider value={value}>{children}</PrSyncContext.Provider>
@@ -138,4 +144,9 @@ export function useGlobalPrSync(): PrSyncContextValue {
 
 export function usePrSyncState(): PrSyncContextValue {
   return useGlobalPrSync()
+}
+
+/** Safe hook when provider may be absent (fallback loop only). */
+export function useOptionalPrSyncState(): PrSyncContextValue | null {
+  return useContext(PrSyncContext)
 }

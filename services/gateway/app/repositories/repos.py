@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -183,7 +183,29 @@ def upsert_repository(
     return row, created
 
 
-def _repo_to_api(session: Session, row: Repository) -> dict:
+def open_pr_counts_for_repositories(
+    session: Session,
+    repo_ids: list[str],
+) -> dict[str, int]:
+    if not repo_ids:
+        return {}
+    rows = session.execute(
+        select(PullRequest.repository_id, func.count())
+        .where(
+            PullRequest.repository_id.in_(repo_ids),
+            PullRequest.state == "open",
+        )
+        .group_by(PullRequest.repository_id)
+    ).all()
+    return {str(repo_id): int(count) for repo_id, count in rows}
+
+
+def _repo_to_api(
+    session: Session,
+    row: Repository,
+    *,
+    open_pr_count: int | None = None,
+) -> dict:
     if row.payload:
         data = deepcopy(row.payload)
     else:
@@ -206,7 +228,12 @@ def _repo_to_api(session: Session, row: Repository) -> dict:
     data.setdefault("name", row.name or name)
     data.setdefault("owner", row.owner or owner)
     data.setdefault("defaultBranch", row.default_branch or "main")
-    data.setdefault("openPrCount", row.open_prs if row.open_prs is not None else 0)
+    derived_open = (
+        open_pr_count
+        if open_pr_count is not None
+        else open_pr_counts_for_repositories(session, [row.id]).get(row.id, 0)
+    )
+    data["openPrCount"] = derived_open
     data.setdefault("lastSyncTime", _dt_to_iso(row.last_synced_at) or "")
     data.setdefault("aiReviewEnabled", row.ai_review_enabled)
 
@@ -235,7 +262,7 @@ def _repo_to_api(session: Session, row: Repository) -> dict:
     if row.github_updated_at is not None:
         data["githubUpdatedAt"] = _dt_to_iso(row.github_updated_at)
 
-    open_count = int(data.get("openPrCount", 0))
+    open_count = derived_open
     if "healthScore" not in data or data.get("healthScore") == 80:
         data["healthScore"] = compute_repo_health(session, row.id, open_count)
 
@@ -310,7 +337,10 @@ def list_repos(
                 )
             query = query.where(or_(*conditions))
     rows = session.scalars(query.order_by(Repository.full_name)).all()
-    return [_repo_to_api(session, r) for r in rows]
+    open_counts = open_pr_counts_for_repositories(session, [r.id for r in rows])
+    return [
+        _repo_to_api(session, r, open_pr_count=open_counts.get(r.id, 0)) for r in rows
+    ]
 
 
 def get_repo_row_for_user(session: Session, repo_id: str, user_id: str, team_ids: list[str]) -> Repository | None:

@@ -85,6 +85,33 @@ async def remove_repository(
         raise
 
 
+class SyncManagedPrsBody(BaseModel):
+    repo_ids: list[str] | None = Field(default=None, alias="repoIds")
+    force_reconcile: bool = Field(default=False, alias="forceReconcile")
+
+    model_config = {"populate_by_name": True}
+
+
+@router.post("/sync-prs/managed")
+async def sync_managed_pull_requests(
+    request: Request,
+    body: SyncManagedPrsBody | None = None,
+    user: AuthUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    from app.services.pr_sync import sync_managed_repo_pull_requests_unified
+
+    repo_ids = body.repo_ids if body else None
+    force = body.force_reconcile if body else False
+    return await sync_managed_repo_pull_requests_unified(
+        db,
+        user,
+        repo_ids=repo_ids,
+        request=request,
+        force_reconcile=force,
+    )
+
+
 @router.post("/{repo_id}/sync-prs")
 async def sync_repo_pull_requests(
     repo_id: str,

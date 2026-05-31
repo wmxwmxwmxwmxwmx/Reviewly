@@ -9,6 +9,7 @@ import {
   type PrMetrics,
 } from "@/features/prism/ai/review-attention-score"
 import { ATTENTION_STATE_EVENT } from "@/features/prism/lib/review-attention-state"
+import { PR_SYNC_UPDATED_EVENT } from "@/lib/pr-sync-events"
 import { enrichTasksWithOpinion } from "@/features/prism/lib/review-task-verdict"
 import {
   readPrioritySettings,
@@ -36,6 +37,7 @@ export function useReviewInbox(options: UseReviewInboxOptions = {}) {
     includeExternal: "false",
     limit: "100",
     includeCounts: "false",
+    state: "open",
   })
 
   useEffect(() => {
@@ -43,17 +45,23 @@ export function useReviewInbox(options: UseReviewInboxOptions = {}) {
   }, [reloadToken, reload])
 
   useEffect(() => {
-    const bump = () => {
+    const bumpAttention = () => {
       setSettings(readPrioritySettings())
       setAttentionTick((n) => n + 1)
     }
-    window.addEventListener(RESCORE_EVENT, bump)
-    window.addEventListener(ATTENTION_STATE_EVENT, bump)
-    return () => {
-      window.removeEventListener(RESCORE_EVENT, bump)
-      window.removeEventListener(ATTENTION_STATE_EVENT, bump)
+    const onSyncUpdated = () => {
+      bumpAttention()
+      reload()
     }
-  }, [])
+    window.addEventListener(RESCORE_EVENT, bumpAttention)
+    window.addEventListener(ATTENTION_STATE_EVENT, bumpAttention)
+    window.addEventListener(PR_SYNC_UPDATED_EVENT, onSyncUpdated)
+    return () => {
+      window.removeEventListener(RESCORE_EVENT, bumpAttention)
+      window.removeEventListener(ATTENTION_STATE_EVENT, bumpAttention)
+      window.removeEventListener(PR_SYNC_UPDATED_EVENT, onSyncUpdated)
+    }
+  }, [reload])
 
   const allItems = useMemo(() => {
     void attentionTick

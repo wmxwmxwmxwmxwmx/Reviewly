@@ -10,6 +10,7 @@ import {
 import { computeInboxItems } from "@/features/prism/ai/review-attention-score"
 import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
 import { syncManagedReposPullRequests } from "@/lib/repos/sync-managed-prs"
+import type { PrSyncTrigger } from "@/lib/api/repos"
 import { repoManagementDisplayOrder } from "@/lib/repos-utils"
 import { usePullRequests } from "@/hooks/use-pull-requests"
 
@@ -84,7 +85,7 @@ export function useManagedRepoPrSyncLoop(options: {
   )
   const syncingRef = useRef(false)
   const syncAbortRef = useRef<AbortController | null>(null)
-  const syncAllRef = useRef<() => Promise<void>>(async () => {})
+  const syncAllRef = useRef<(trigger?: PrSyncTrigger) => Promise<void>>(async () => {})
   const lastFocusRef = useRef(0)
   const [syncBadges, setSyncBadges] = useState<SyncBadgeState>({
     newPrCount: 0,
@@ -114,30 +115,33 @@ export function useManagedRepoPrSyncLoop(options: {
     setSyncBadges({ newPrCount, revisitCount: needsRevisit })
   }, [items])
 
-  const syncAll = useCallback(async () => {
-    if (!enabled || managedRepos.length === 0) return
-    syncAbortRef.current?.abort()
-    const ac = new AbortController()
-    syncAbortRef.current = ac
-    syncingRef.current = true
-    try {
-      await syncManagedReposPullRequests(managedRepos, ac.signal)
-      if (!ac.signal.aborted) {
-        reload()
-        onSynced?.()
+  const syncAll = useCallback(
+    async (trigger: PrSyncTrigger = "interval") => {
+      if (!enabled || managedRepos.length === 0) return
+      syncAbortRef.current?.abort()
+      const ac = new AbortController()
+      syncAbortRef.current = ac
+      syncingRef.current = true
+      try {
+        await syncManagedReposPullRequests(managedRepos, ac.signal, trigger)
+        if (!ac.signal.aborted) {
+          reload()
+          onSynced?.()
+        }
+      } finally {
+        if (syncAbortRef.current === ac) {
+          syncingRef.current = false
+        }
       }
-    } finally {
-      if (syncAbortRef.current === ac) {
-        syncingRef.current = false
-      }
-    }
-  }, [enabled, managedRepos, onSynced, reload])
+    },
+    [enabled, managedRepos, onSynced, reload],
+  )
 
   syncAllRef.current = syncAll
 
   useEffect(() => {
     if (!enabled || !managedRepoIdsKey) return
-    const timer = window.setTimeout(() => void syncAllRef.current(), SYNC_DEBOUNCE_MS)
+    const timer = window.setTimeout(() => void syncAllRef.current("focus"), SYNC_DEBOUNCE_MS)
     return () => {
       window.clearTimeout(timer)
       syncAbortRef.current?.abort()
@@ -146,7 +150,7 @@ export function useManagedRepoPrSyncLoop(options: {
 
   useEffect(() => {
     if (!enabled) return
-    const id = window.setInterval(() => void syncAll(), SYNC_INTERVAL_MS)
+    const id = window.setInterval(() => void syncAll("interval"), SYNC_INTERVAL_MS)
     return () => window.clearInterval(id)
   }, [enabled, syncAll])
 
@@ -156,7 +160,7 @@ export function useManagedRepoPrSyncLoop(options: {
       const now = Date.now()
       if (now - lastFocusRef.current < FOCUS_DEBOUNCE_MS) return
       lastFocusRef.current = now
-      void syncAll()
+      void syncAll("focus")
     }
     window.addEventListener("focus", onFocus)
     return () => window.removeEventListener("focus", onFocus)

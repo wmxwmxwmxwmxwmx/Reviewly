@@ -7,6 +7,7 @@ import { AISettingsProvider } from "@/features/prism/contexts/ai-settings-contex
 import { SecuritySettingsProvider } from "@/features/prism/contexts/security-settings-context"
 import { SessionLockOverlay } from "@/features/prism/components/session-lock-overlay"
 import { AIReviewSessionProvider } from "@/features/prism/contexts/ai-review-session-context"
+import { PrSyncProvider } from "@/features/prism/contexts/pr-sync-context"
 import { ReposProvider } from "@/features/prism/contexts/repos-context"
 import { RunningTasksProvider } from "@/features/prism/contexts/running-tasks-context"
 import { DashboardProvider } from "@/features/prism/contexts/dashboard-context"
@@ -99,6 +100,7 @@ export default function PRismPage() {
           <AIReviewSessionProvider>
             <RunningTasksProvider>
               <ReposProvider>
+                <PrSyncProvider>
                 <DashboardProvider>
                 <NavigationProvider>
                   <ErrorBoundary section="PRism">
@@ -107,6 +109,7 @@ export default function PRismPage() {
                   </ErrorBoundary>
                 </NavigationProvider>
                 </DashboardProvider>
+                </PrSyncProvider>
               </ReposProvider>
             </RunningTasksProvider>
           </AIReviewSessionProvider>
