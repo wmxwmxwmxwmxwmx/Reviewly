@@ -137,6 +137,72 @@ bash deploy/deploy.sh -y                            # 再次部署
 docker compose -f deploy/docker-compose.yml down -v # 清空数据库卷
 ```
 
+### GitHub OAuth 登录配置
+
+> **部署时会自动引导**：运行 `bash deploy/bootstrap.sh` 或 `bash deploy/deploy.sh` 时，若未配置 OAuth，终端会提示输入 **Client ID / Secret** 并自动写入 `deploy/.env`（也会从 `services/gateway/.env` 合并已有配置）。
+
+**已部署、仅需补配 OAuth：**
+
+```bash
+bash deploy/setup-github-oauth.sh
+docker compose -f deploy/docker-compose.yml restart gateway
+```
+
+**非交互（CI / 脚本）传入：**
+
+```bash
+export GITHUB_OAUTH_CLIENT_ID=Ov23li...
+export GITHUB_OAUTH_CLIENT_SECRET=...
+export PRISM_PUBLIC_URL=http://192.168.1.10:3000   # 可选，用于生成 Callback URL
+bash deploy/deploy.sh -y
+```
+
+> **普通用户**：若登录页提示「需管理员配置 OAuth」，请联系部署人员完成上述步骤。
+
+**最快试用（不配 GitHub，内网 only）：**
+
+```bash
+# 编辑 deploy/.env
+PRISM_AUTH_BYPASS=1
+
+# 重启 gateway
+docker compose -f deploy/docker-compose.yml restart gateway
+```
+
+刷新 http://localhost:3000/login → 点击 **「开发模式进入（无需 GitHub）」**。
+
+**正式 GitHub 登录配置：**
+
+1. 打开 [GitHub Developer Settings → OAuth Apps](https://github.com/settings/developers) → **New OAuth App**
+2. 填写：
+   - **Application name**：任意（如 `PRism Local`）
+   - **Homepage URL**：`http://localhost:3000`（若用 IP 访问则改为 `http://<你的IP>:3000`）
+   - **Authorization callback URL**（必须与 `deploy/.env` 中 `OAUTH_CALLBACK_URL` **完全一致**）：
+     ```
+     http://localhost:3001/api/auth/github/callback
+     ```
+     若从其他电脑通过局域网 IP 访问，例如 `http://192.168.1.10:3000`，则 Callback 应设为：
+     ```
+     http://192.168.1.10:3001/api/auth/github/callback
+     ```
+     并同步修改 `deploy/.env`：
+     ```env
+     FRONTEND_URL=http://192.168.1.10:3000
+     APP_URL=http://192.168.1.10:3000
+     OAUTH_CALLBACK_URL=http://192.168.1.10:3001/api/auth/github/callback
+     ```
+3. 创建后复制 **Client ID** 与 **Client secret**，写入 `deploy/.env`：
+   ```env
+   GITHUB_OAUTH_CLIENT_ID=Ov23lixxxxxxxxxxxx
+   GITHUB_OAUTH_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+4. 重启 Gateway：
+   ```bash
+   docker compose -f deploy/docker-compose.yml restart gateway
+   ```
+
+**内网试用、暂不想配 OAuth**：在 `deploy/.env` 设 `PRISM_AUTH_BYPASS=1` 后重启 gateway（**禁止用于公网生产**）。
+
 ### 可选配置
 
 | 需求 | 操作 |
@@ -358,7 +424,8 @@ Reviewly/
 | 现象 | 处理 |
 |------|------|
 | Gateway 3001 启动失败 | `npm run kill:gateway` 或 `npm run dev:clean`；执行 `alembic upgrade head` |
-| GitHub 限流 | 配置 `GITHUB_PAT` 或使用 GitHub OAuth 登录 |
+| GitHub 登录 404 | `deploy/.env` 中 OAuth 仍是占位符；按 README「GitHub OAuth 登录配置」创建 OAuth App 并填写真实 Client ID/Secret |
+| GitHub OAuth 回调失败 | Callback URL 与 GitHub App 设置不一致；检查 IP/端口是否与 `OAUTH_CALLBACK_URL` 相同 |
 | Docker 部署失败 | 确认 Docker 已运行；`docker compose -f deploy/docker-compose.yml logs gateway` |
 | Linux `Permission denied` | 执行 `bash deploy/deploy.sh` 或 `bash deploy/bootstrap.sh` |
 | Linux `docker: permission denied` | `sudo usermod -aG docker $USER` 后重新登录 |

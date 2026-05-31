@@ -64,6 +64,90 @@ function Merge-GatewayEnv {
     }
 }
 
+function Clear-PlaceholderEnvKeys {
+    $keys = @("GITHUB_OAUTH_CLIENT_ID", "GITHUB_OAUTH_CLIENT_SECRET", "GITHUB_PAT")
+    foreach ($key in $keys) {
+        $line = Select-String -Path $EnvFile -Pattern "^\s*$([regex]::Escape($key))\s*=" -ErrorAction SilentlyContinue
+        if (-not $line) { continue }
+        $val = ($line.Line -split "=", 2)[1]
+        if ($val -match '<your-|your-client|your-pat|changeme|replace-me') {
+            Set-EnvKey $EnvFile $key ""
+        }
+    }
+}
+
+function Test-OAuthConfigured {
+    $cid = (Select-String -Path $EnvFile -Pattern '^GITHUB_OAUTH_CLIENT_ID=' -ErrorAction SilentlyContinue | Select-Object -First 1)
+    $sec = (Select-String -Path $EnvFile -Pattern '^GITHUB_OAUTH_CLIENT_SECRET=' -ErrorAction SilentlyContinue | Select-Object -First 1)
+    $cidVal = if ($cid) { ($cid.Line -split "=", 2)[1].Trim() } else { "" }
+    $secVal = if ($sec) { ($sec.Line -split "=", 2)[1].Trim() } else { "" }
+    if (-not $cidVal -or -not $secVal) { return $false }
+    if ($cidVal -match '<your-|your-client' -or $secVal -match '<your-|your-client') { return $false }
+    return $true
+}
+
+function Set-PublicUrls([string]$FrontendUrl) {
+    $front = if ($FrontendUrl) { $FrontendUrl.TrimEnd("/") } else { "http://localhost:3000" }
+    if ($front -match '^(https?)://([^:/]+)') {
+        $scheme = $Matches[1]
+        $host = $Matches[2]
+        $callback = "${scheme}://${host}:3001/api/auth/github/callback"
+    } else {
+        $callback = "http://localhost:3001/api/auth/github/callback"
+        $front = "http://localhost:3000"
+    }
+    Set-EnvKey $EnvFile "FRONTEND_URL" $front
+    Set-EnvKey $EnvFile "APP_URL" $front
+    Set-EnvKey $EnvFile "OAUTH_CALLBACK_URL" $callback
+    return $callback
+}
+
+function Ensure-GithubOAuth {
+    if (-not (Test-Path $EnvFile)) {
+        Copy-Item $EnvExample $EnvFile
+    }
+    Merge-GatewayEnv
+    Clear-PlaceholderEnvKeys
+
+    if (Test-OAuthConfigured) {
+        Write-Host "  GitHub OAuth 已就绪" -ForegroundColor Green
+        return $true
+    }
+
+    $envCid = $env:GITHUB_OAUTH_CLIENT_ID
+    $envSec = $env:GITHUB_OAUTH_CLIENT_SECRET
+    if ($envCid -and $envSec) {
+        $cb = Set-PublicUrls -FrontendUrl $env:PRISM_PUBLIC_URL
+        Set-EnvKey $EnvFile "GITHUB_OAUTH_CLIENT_ID" $envCid.Trim()
+        Set-EnvKey $EnvFile "GITHUB_OAUTH_CLIENT_SECRET" $envSec.Trim()
+        Set-EnvKey $EnvFile "PRISM_AUTH_BYPASS" "0"
+        Write-Host "  已从环境变量写入 GitHub OAuth" -ForegroundColor Green
+        return $true
+    }
+
+    Write-Host ""
+    Write-Host "── GitHub OAuth 配置（登录必需）──" -ForegroundColor Green
+    Write-Host "在 https://github.com/settings/developers 创建 OAuth App"
+    $front = Read-Host "浏览器访问前端的地址 [http://localhost:3000]"
+    if (-not $front) { $front = "http://localhost:3000" }
+    $callback = Set-PublicUrls -FrontendUrl $front
+    Write-Host ""
+    Write-Host "请在 GitHub OAuth App 中设置 Authorization callback URL 为：" -ForegroundColor Yellow
+    Write-Host "  $callback"
+    Write-Host ""
+    $cid = Read-Host "GitHub OAuth Client ID"
+    $sec = Read-Host "GitHub OAuth Client Secret"
+    if (-not $cid.Trim() -or -not $sec.Trim()) {
+        Write-Host "  Client ID / Secret 不能为空" -ForegroundColor Red
+        return $false
+    }
+    Set-EnvKey $EnvFile "GITHUB_OAUTH_CLIENT_ID" $cid.Trim()
+    Set-EnvKey $EnvFile "GITHUB_OAUTH_CLIENT_SECRET" $sec.Trim()
+    Set-EnvKey $EnvFile "PRISM_AUTH_BYPASS" "0"
+    Write-Host "  GitHub OAuth 已写入 deploy/.env" -ForegroundColor Green
+    return $true
+}
+
 function Initialize-DeployEnv {
     param([bool]$FirstDeploy)
     if (-not (Test-Path $EnvFile)) {
@@ -71,6 +155,7 @@ function Initialize-DeployEnv {
         Merge-GatewayEnv
         Write-Host "  已创建 deploy/.env" -ForegroundColor Yellow
     }
+    Clear-PlaceholderEnvKeys
     $content = Get-Content $EnvFile -Raw -Encoding UTF8
     if ($content -match 'JWT_SECRET=<generate>|JWT_SECRET=\s*$') {
         Set-EnvKey $EnvFile "JWT_SECRET" (New-RandomHex 32)
@@ -89,9 +174,21 @@ function Initialize-DeployEnv {
         Write-Host "  首次部署已设 PRISM_STUB_ENGINE=1（跳过 C++ 编译）" -ForegroundColor Yellow
     }
     if (-not $Yes) {
-        Write-Host "  可按需编辑 deploy/.env，然后继续" -ForegroundColor Yellow
-        Read-Host "按 Enter 继续，Ctrl+C 取消"
+        Write-Host "  配置已保存。按 Enter 开始构建镜像，Ctrl+C 取消" -ForegroundColor Yellow
+        Read-Host
     }
+}
+
+function Require-GithubOAuthOrExit {
+    if (Ensure-GithubOAuth) { return }
+    $skip = Read-Host "跳过 GitHub 配置并启用开发模式? [y/N]"
+    if ($skip -match '^[yY]') {
+        Set-EnvKey $EnvFile "PRISM_AUTH_BYPASS" "1"
+        Write-Host "  已启用 PRISM_AUTH_BYPASS=1" -ForegroundColor Yellow
+        return
+    }
+    Write-Err "未配置 GitHub OAuth，部署已取消。"
+    exit 1
 }
 
 function Test-Docker {
@@ -138,6 +235,7 @@ try {
 $firstDeploy = -not (Test-Path $EnvFile)
 Write-Step "[2/7] 准备 deploy/.env ..."
 Initialize-DeployEnv -FirstDeploy:$firstDeploy
+Require-GithubOAuthOrExit
 
 $useEngine = -not (Select-String -Path $EnvFile -Pattern '^PRISM_STUB_ENGINE=1' -Quiet)
 if (-not $useEngine) {

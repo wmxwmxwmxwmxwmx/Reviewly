@@ -88,6 +88,162 @@ prism_autofill_deploy_env() {
   fi
 }
 
+prism_oauth_is_configured() {
+  local f="$ROOT/deploy/.env"
+  [ -f "$f" ] || return 1
+  local cid sec
+  cid="$(grep '^GITHUB_OAUTH_CLIENT_ID=' "$f" 2>/dev/null | head -1 | cut -d= -f2- || true)"
+  sec="$(grep '^GITHUB_OAUTH_CLIENT_SECRET=' "$f" 2>/dev/null | head -1 | cut -d= -f2- || true)"
+  cid="${cid// /}"
+  sec="${sec// /}"
+  [ -n "$cid" ] && [ -n "$sec" ] || return 1
+  case "${cid,,}" in
+    *"<your-"*|*"your-client"*) return 1 ;;
+  esac
+  case "${sec,,}" in
+    *"<your-"*|*"your-client"*) return 1 ;;
+  esac
+  return 0
+}
+
+prism_apply_public_urls() {
+  local f="$ROOT/deploy/.env"
+  local front="${1:-http://localhost:3000}"
+  front="${front%/}"
+  local scheme="http" host="localhost"
+  if [[ "$front" =~ ^(https?)://([^:/]+)(:([0-9]+))?$ ]]; then
+    scheme="${BASH_REMATCH[1]}"
+    host="${BASH_REMATCH[2]}"
+  fi
+  local callback="${scheme}://${host}:3001/api/auth/github/callback"
+  prism_set_env_key "$f" "FRONTEND_URL" "$front"
+  prism_set_env_key "$f" "APP_URL" "$front"
+  prism_set_env_key "$f" "OAUTH_CALLBACK_URL" "$callback"
+}
+
+prism_interactive_github_oauth() {
+  local f="$ROOT/deploy/.env"
+  [ -f "$f" ] || cp "$ROOT/deploy/.env.example" "$f"
+
+  echo ""
+  prism_color green "── GitHub OAuth 配置（登录必需）──"
+  echo "在 https://github.com/settings/developers 创建 OAuth App → New OAuth App"
+  echo ""
+
+  local front="${PRISM_PUBLIC_URL:-}"
+  if [ -z "$front" ] && [ -t 0 ]; then
+    read -r -p "浏览器访问前端的地址 [http://localhost:3000]: " front
+  fi
+  front="${front:-http://localhost:3000}"
+  prism_apply_public_urls "$front"
+
+  local callback
+  callback="$(grep '^OAUTH_CALLBACK_URL=' "$f" | cut -d= -f2-)"
+  prism_color yellow "  请在 GitHub OAuth App 中设置 Authorization callback URL 为："
+  echo "  $callback"
+  echo ""
+
+  local cid sec
+  if [ -n "${GITHUB_OAUTH_CLIENT_ID:-}" ] && [ -n "${GITHUB_OAUTH_CLIENT_SECRET:-}" ]; then
+    cid="$GITHUB_OAUTH_CLIENT_ID"
+    sec="$GITHUB_OAUTH_CLIENT_SECRET"
+    prism_color green "  使用环境变量中的 GITHUB_OAUTH_CLIENT_ID / SECRET"
+  elif [ -t 0 ]; then
+    read -r -p "GitHub OAuth Client ID: " cid
+    read -r -s -p "GitHub OAuth Client Secret: " sec
+    echo ""
+  else
+    return 1
+  fi
+
+  cid="$(echo "$cid" | xargs)"
+  sec="$(echo "$sec" | xargs)"
+  if [ -z "$cid" ] || [ -z "$sec" ]; then
+    prism_color red "  Client ID / Secret 不能为空"
+    return 1
+  fi
+
+  prism_set_env_key "$f" "GITHUB_OAUTH_CLIENT_ID" "$cid"
+  prism_set_env_key "$f" "GITHUB_OAUTH_CLIENT_SECRET" "$sec"
+  prism_set_env_key "$f" "PRISM_AUTH_BYPASS" "0"
+  prism_color green "  GitHub OAuth 已写入 deploy/.env"
+  return 0
+}
+
+# 确保 OAuth 可用：合并 gateway/.env → 环境变量 → 交互输入
+prism_ensure_github_oauth() {
+  local f="$ROOT/deploy/.env"
+  [ -f "$f" ] || cp "$ROOT/deploy/.env.example" "$f"
+
+  prism_merge_gateway_env
+  prism_sanitize_placeholders
+
+  if prism_oauth_is_configured; then
+    prism_color green "  GitHub OAuth 已就绪（来自 deploy/.env 或 services/gateway/.env）"
+    return 0
+  fi
+
+  if [ -n "${GITHUB_OAUTH_CLIENT_ID:-}" ] && [ -n "${GITHUB_OAUTH_CLIENT_SECRET:-}" ]; then
+    prism_apply_public_urls "${PRISM_PUBLIC_URL:-http://localhost:3000}"
+    prism_set_env_key "$f" "GITHUB_OAUTH_CLIENT_ID" "$GITHUB_OAUTH_CLIENT_ID"
+    prism_set_env_key "$f" "GITHUB_OAUTH_CLIENT_SECRET" "$GITHUB_OAUTH_CLIENT_SECRET"
+    prism_set_env_key "$f" "PRISM_AUTH_BYPASS" "0"
+    prism_color green "  已从环境变量写入 GitHub OAuth"
+    return 0
+  fi
+
+  if [ -t 0 ]; then
+  if prism_interactive_github_oauth; then
+      return 0
+    fi
+    echo ""
+    read -r -p "跳过 GitHub 配置并启用开发模式（无 GitHub 登录）? [y/N] " skip_oauth
+    case "${skip_oauth:-N}" in
+      y|Y|yes|YES)
+        prism_set_env_key "$f" "PRISM_AUTH_BYPASS" "1"
+        prism_color yellow "  已启用 PRISM_AUTH_BYPASS=1，请使用登录页「开发模式进入」"
+        return 0
+        ;;
+    esac
+    prism_color red "  未配置 GitHub OAuth，部署已取消。"
+    return 1
+  fi
+
+  prism_warn_oauth
+  return 1
+}
+
+prism_sanitize_placeholders() {
+  local f="$ROOT/deploy/.env"
+  [ -f "$f" ] || return 0
+  local key val
+  for key in GITHUB_OAUTH_CLIENT_ID GITHUB_OAUTH_CLIENT_SECRET GITHUB_PAT; do
+    val="$(grep "^${key}=" "$f" 2>/dev/null | head -1 | cut -d= -f2- || true)"
+    case "${val,,}" in
+      *"<your-"*|*"your-client"*|*"your-pat"*|*"changeme"*|*"replace-me"*)
+        prism_set_env_key "$f" "$key" ""
+        ;;
+    esac
+  done
+}
+
+prism_warn_oauth() {
+  local f="$ROOT/deploy/.env"
+  [ -f "$f" ] || return 0
+  local cid sec
+  cid="$(grep '^GITHUB_OAUTH_CLIENT_ID=' "$f" 2>/dev/null | cut -d= -f2- || true)"
+  sec="$(grep '^GITHUB_OAUTH_CLIENT_SECRET=' "$f" 2>/dev/null | cut -d= -f2- || true)"
+  if [ -z "${cid// /}" ] || [ -z "${sec// /}" ]; then
+    echo ""
+    prism_color yellow "  ⚠ GitHub OAuth 未配置：登录 GitHub 会失败。"
+    prism_color yellow "    1) 打开 https://github.com/settings/developers → OAuth Apps → New"
+    prism_color yellow "    2) Callback URL 填: $(grep '^OAUTH_CALLBACK_URL=' "$f" 2>/dev/null | cut -d= -f2- || echo 'http://localhost:3001/api/auth/github/callback')"
+    prism_color yellow "    3) 将 Client ID / Secret 写入 deploy/.env 后重启: docker compose -f deploy/docker-compose.yml restart gateway"
+    prism_color yellow "    内网试用可临时设 PRISM_AUTH_BYPASS=1（勿用于公网）"
+    echo ""
+  fi
+}
+
 prism_setup_deploy_env() {
   local created=0
   if [ ! -f "$ROOT/deploy/.env" ]; then
@@ -95,14 +251,20 @@ prism_setup_deploy_env() {
     PRISM_FIRST_DEPLOY=1
     created=1
     prism_merge_gateway_env
+    prism_sanitize_placeholders
     prism_autofill_deploy_env
     prism_color yellow "  已创建 deploy/.env"
   else
+    prism_sanitize_placeholders
     prism_autofill_deploy_env
   fi
+
+  if ! prism_ensure_github_oauth; then
+    exit 1
+  fi
+
   if [ "$created" = "1" ] && [ "$PRISM_DEPLOY_YES" != "1" ]; then
-    prism_color yellow "  可按需编辑 deploy/.env（OAuth 等），然后继续。"
-    prism_color yellow "  按 Enter 继续，Ctrl+C 取消；下次可用: bash deploy/deploy.sh -y"
+    prism_color yellow "  配置已保存。按 Enter 开始构建镜像，Ctrl+C 取消。"
     read -r
   fi
 }

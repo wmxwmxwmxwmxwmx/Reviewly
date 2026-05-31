@@ -24,6 +24,16 @@ def test_github_account_bypass(client: TestClient) -> None:
     assert body["tokenStatus"] in ("valid", "missing", "expired")
 
 
+def test_auth_status_bypass(client: TestClient) -> None:
+    r = client.get("/api/auth/status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["authBypassEnabled"] is True
+    assert "githubOAuthConfigured" in body
+    assert "oauthCallbackUrl" in body
+    assert body["oauthCallbackUrl"].endswith("/api/auth/github/callback")
+
+
 def test_github_login_url(client: TestClient) -> None:
     r = client.get("/api/auth/github/login")
     # 501 when OAuth env vars are unset in CI/local test

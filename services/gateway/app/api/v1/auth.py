@@ -15,6 +15,17 @@ from app.services import auth_oauth
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+@router.get("/status")
+def auth_status() -> dict:
+    """Login page: whether GitHub OAuth is ready and if dev bypass is on."""
+    return {
+        "githubOAuthConfigured": auth_oauth.is_oauth_configured(),
+        "authBypassEnabled": settings.prism_auth_bypass,
+        "oauthCallbackUrl": settings.oauth_callback_url,
+        "frontendUrl": settings.frontend_url,
+    }
+
+
 @router.get("/github/login")
 def github_login() -> dict:
     url = auth_oauth.build_github_login_url()

@@ -214,6 +214,13 @@ export interface AuthLoginResponse {
   url: string
 }
 
+export interface AuthStatusResponse {
+  githubOAuthConfigured: boolean
+  authBypassEnabled: boolean
+  oauthCallbackUrl: string
+  frontendUrl: string
+}
+
 export interface SyncPrsResponse {
   synced: number
   created: number

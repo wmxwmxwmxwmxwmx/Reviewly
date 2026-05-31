@@ -1,6 +1,10 @@
-import type { AuthLoginResponse, AuthUser, GithubAccountInfo } from "@reviewly/shared"
+import type { AuthLoginResponse, AuthStatusResponse, AuthUser, GithubAccountInfo } from "@reviewly/shared"
 
 import { apiFetch } from "./client"
+
+export function fetchAuthStatus(signal?: AbortSignal) {
+  return apiFetch<AuthStatusResponse>("/api/auth/status", { signal })
+}
 
 export function fetchGithubLoginUrl() {
   return apiFetch<AuthLoginResponse>("/api/auth/github/login")

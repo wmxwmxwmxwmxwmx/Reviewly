@@ -22,14 +22,44 @@ _GITHUB_EMAILS = "https://api.github.com/user/emails"
 
 _SCOPES = "repo read:user user:email"
 
+_PLACEHOLDER_MARKERS = (
+    "<your-client-id>",
+    "<your-client-secret>",
+    "<your-pat>",
+    "your-client-id",
+    "your-client-secret",
+    "changeme",
+    "replace-me",
+)
+
+
+def _is_real_secret(value: str) -> bool:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        return False
+    lower = cleaned.lower()
+    return not any(marker in lower for marker in _PLACEHOLDER_MARKERS)
+
 
 def _oauth_configured() -> bool:
-    return bool(settings.github_oauth_client_id.strip() and settings.github_oauth_client_secret.strip())
+    return _is_real_secret(settings.github_oauth_client_id) and _is_real_secret(
+        settings.github_oauth_client_secret
+    )
+
+
+def is_oauth_configured() -> bool:
+    """Public check for OAuth App credentials (excludes template placeholders)."""
+    return _oauth_configured()
 
 
 def build_github_login_url(*, state: str | None = None) -> str:
     if not _oauth_configured():
-        raise api_error("GitHub OAuth is not configured on the server", 501)
+        raise api_error(
+            "GitHub OAuth 未配置：请在 deploy/.env 或 services/gateway/.env 中设置有效的 "
+            "GITHUB_OAUTH_CLIENT_ID 与 GITHUB_OAUTH_CLIENT_SECRET（勿使用 <your-client-id> 占位符）。"
+            "详见 README「GitHub OAuth 登录配置」。",
+            501,
+        )
     oauth_state = state or secrets.token_urlsafe(16)
     params = {
         "client_id": settings.github_oauth_client_id,

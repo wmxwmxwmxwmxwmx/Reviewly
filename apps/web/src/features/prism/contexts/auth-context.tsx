@@ -12,7 +12,7 @@ import {
 
 import type { AuthUser } from "@reviewly/shared"
 
-import { fetchAuthMe, fetchGithubLoginUrl, logoutAuth } from "@/lib/api/auth"
+import { fetchAuthMe, fetchAuthStatus, fetchGithubLoginUrl, logoutAuth } from "@/lib/api/auth"
 import { PrismApiError } from "@/lib/api/client"
 import {
   clearAuthSession,
@@ -37,7 +37,9 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const bypass = isAuthBypassEnabled()
+  const envBypass = isAuthBypassEnabled()
+  const [serverBypass, setServerBypass] = useState(false)
+  const bypass = envBypass || serverBypass
   const [user, setUser] = useState<AuthUser | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -75,6 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
+      try {
+        const status = await fetchAuthStatus()
+        if (!cancelled && status.authBypassEnabled) {
+          setServerBypass(true)
+        }
+      } catch {
+        /* gateway unreachable; rely on env bypass only */
+      }
       await refreshUser()
       if (!cancelled) setLoading(false)
     })()

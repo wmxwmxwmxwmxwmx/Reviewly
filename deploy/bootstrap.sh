@@ -20,7 +20,6 @@ echo ""
 if [ -z "$PRISM_DEPLOY_STUB_ENGINE" ]; then
   PRISM_DEPLOY_STUB_ENGINE=1
 fi
-PRISM_DEPLOY_YES=1
 
 if ! prism_check_docker; then
   if [ "$(uname -s)" = "Linux" ]; then
@@ -44,6 +43,19 @@ fi
 
 if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
   prism_color yellow "未检测到 curl/wget，健康检查可能跳过；建议: sudo apt install -y curl"
+fi
+
+# 先配置 GitHub OAuth（交互式），再静默构建
+export PRISM_DEPLOY_YES=1
+if [ ! -f "$ROOT/deploy/.env" ]; then
+  cp "$ROOT/deploy/.env.example" "$ROOT/deploy/.env"
+  PRISM_FIRST_DEPLOY=1
+  prism_merge_gateway_env
+  prism_sanitize_placeholders
+  prism_autofill_deploy_env
+fi
+if ! prism_ensure_github_oauth; then
+  exit 1
 fi
 
 exec bash "$ROOT/deploy/deploy.sh" -y --stub-engine
