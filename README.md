@@ -295,6 +295,17 @@ npm install
 npm run dev
 ```
 
+启动时 Gateway **自动选择数据库**（无需手改 `.env` 即可兼容）：
+
+| 优先级 | 场景 | 行为 |
+|--------|------|------|
+| 1 | Docker / 本机 Postgres `prism:prism@localhost:5432` 可用 | 使用 PostgreSQL |
+| 2 | 5432 未启动但已装 Docker | 自动执行 `docker compose … up -d postgres` 并重试 |
+| 3 | 仍不可用（密码不对、无 Docker 等） | 自动回退 **SQLite**（`services/gateway/prism.db`） |
+| 可选 | 手动起 Postgres | `npm run dev:db` 后再 `npm run dev` |
+
+在 `services/gateway/.env` 可设 `PRISM_DATABASE_MODE`：`auto`（默认）、`postgres`（仅 PG）、`sqlite`（仅 SQLite）。
+
 | 地址 | 说明 |
 |------|------|
 | http://localhost:3000 | Web 前端 |
@@ -306,14 +317,14 @@ npm run dev
 
 ```bash
 npm run dev:gateway
-# 脚本会自动执行 alembic upgrade head
+# 自动探测数据库并执行 alembic upgrade head
 ```
 
-**仅启动数据库（PostgreSQL）**
+**仅启动数据库（PostgreSQL，与 deploy 栈一致）**
 
 ```bash
-docker compose up -d
-cd services/gateway && alembic upgrade head
+npm run dev:db
+npm run dev
 ```
 
 **C++ 引擎（可选）**
@@ -489,7 +500,8 @@ Reviewly/
 
 | 现象 | 处理 |
 |------|------|
-| Gateway 3001 启动失败 | `npm run kill:gateway` 或 `npm run dev:clean`；执行 `alembic upgrade head` |
+| Gateway 3001 启动失败 | `npm run kill:gateway` 或 `npm run dev:clean`；`npm run dev` 会自动探测 DB 并迁移 |
+| 本地 dev：`prism` 密码认证失败 / 5432 连不上 | 正常：`npm run dev` 会自动回退 SQLite；要 Postgres 则 `npm run dev:db` 后再启动 |
 | GitHub 登录 404 | `deploy/.env` 中 OAuth 仍是占位符；按 README「GitHub OAuth 登录配置」创建 OAuth App 并填写真实 Client ID/Secret |
 | GitHub OAuth 回调失败 | Callback URL 与 GitHub App 设置不一致；检查 IP/端口是否与 `OAUTH_CALLBACK_URL` 相同 |
 | 只能登录浏览器当前 GitHub 账号 | 见上文 [多 GitHub 账号登录](#多-github-账号登录)：登录页「使用其他 GitHub 账号登录」或右上角「切换账号」 |

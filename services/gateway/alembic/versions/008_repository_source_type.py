@@ -18,12 +18,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     bind = op.get_bind()
+    dialect = bind.dialect.name
     if not column_exists(bind, "repositories", "source_type"):
         op.add_column(
             "repositories",
             sa.Column("source_type", sa.String(32), nullable=False, server_default="github"),
         )
-        op.alter_column("repositories", "source_type", server_default=None)
+        if dialect != "sqlite":
+            op.alter_column("repositories", "source_type", server_default=None)
 
 
 def downgrade() -> None:

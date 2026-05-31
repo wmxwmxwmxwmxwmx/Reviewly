@@ -25,13 +25,30 @@ if (Test-Path $envFile) {
     }
 }
 
+$resolveScript = Join-Path $Gateway "scripts\resolve_dev_database.py"
+Write-Host "Resolving database (Postgres / SQLite auto)..."
+$resolveErr = Join-Path $env:TEMP "prism-db-resolve.err"
+$dbUrl = & $python $resolveScript 2> $resolveErr
+if ($LASTEXITCODE -ne 0) {
+    if (Test-Path $resolveErr) { Get-Content $resolveErr | Write-Host }
+    exit 1
+}
+if (Test-Path $resolveErr) { Get-Content $resolveErr | Write-Host }
+Remove-Item $resolveErr -ErrorAction SilentlyContinue
+$dbUrl = ($dbUrl | Out-String).Trim()
+if (-not $dbUrl) {
+    Write-Error "Failed to resolve DATABASE_URL."
+    exit 1
+}
+[System.Environment]::SetEnvironmentVariable("DATABASE_URL", $dbUrl, "Process")
+
 Write-Host "Running database migrations..."
 & $python -m alembic upgrade head
 if ($LASTEXITCODE -ne 0) {
     Write-Warning "Alembic migration failed."
-    Write-Warning "  PostgreSQL: run 'docker compose up -d' from repo root, then retry."
-    Write-Warning "  Or use SQLite in services/gateway/.env:"
-    Write-Warning "    DATABASE_URL=sqlite:///./prism.db"
+    Write-Warning "  PostgreSQL: npm run dev:db  (Docker Postgres prism/prism@localhost:5432)"
+    Write-Warning "  Force SQLite: set PRISM_DATABASE_MODE=sqlite in services/gateway/.env"
+    Write-Warning "  Force Postgres only: PRISM_DATABASE_MODE=postgres"
     exit 1
 }
 
