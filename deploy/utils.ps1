@@ -22,16 +22,79 @@ function Test-IsAdmin {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Invoke-DockerCommand {
+    <#
+    .SYNOPSIS
+      调用 docker CLI；仅以进程 ExitCode 判断成败，不触发 PowerShell NativeCommandError。
+    .OUTPUTS
+      PSCustomObject：ExitCode (int)、Output (string)
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Args,
+
+        [switch]$Quiet
+    )
+
+    $dockerExe = "docker"
+    $cmd = Get-Command docker -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source) {
+        $dockerExe = $cmd.Source
+    }
+
+    $stdoutFile = [System.IO.Path]::GetTempFileName()
+    $stderrFile = [System.IO.Path]::GetTempFileName()
+    try {
+        $proc = Start-Process `
+            -FilePath $dockerExe `
+            -ArgumentList $Args `
+            -NoNewWindow `
+            -Wait `
+            -PassThru `
+            -RedirectStandardOutput $stdoutFile `
+            -RedirectStandardError $stderrFile
+
+        $stdout = ""
+        $stderr = ""
+        if (Test-Path -LiteralPath $stdoutFile) {
+            $stdout = [System.IO.File]::ReadAllText($stdoutFile)
+        }
+        if (Test-Path -LiteralPath $stderrFile) {
+            $stderr = [System.IO.File]::ReadAllText($stderrFile)
+        }
+
+        if (-not $Quiet) {
+            if ($stdout.Length -gt 0) {
+                Write-Host $stdout.TrimEnd("`r", "`n")
+            }
+            if ($stderr.Length -gt 0) {
+                Write-Host $stderr.TrimEnd("`r", "`n")
+            }
+        }
+
+        $combined = $stdout
+        if ($stderr.Length -gt 0) {
+            if ($combined.Length -gt 0) { $combined += "`n" }
+            $combined += $stderr
+        }
+
+        return [PSCustomObject]@{
+            ExitCode = [int]$proc.ExitCode
+            Output   = $combined
+        }
+    } finally {
+        Remove-Item -LiteralPath $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Test-DockerReady {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
         return $false
     }
-    & docker version *> $null
-    if ($LASTEXITCODE -ne 0) { return $false }
-    & docker info *> $null
-    if ($LASTEXITCODE -ne 0) { return $false }
-    & docker compose version *> $null
-    if ($LASTEXITCODE -ne 0) { return $false }
+    if ((Invoke-DockerCommand -Args @("version") -Quiet).ExitCode -ne 0) { return $false }
+    if ((Invoke-DockerCommand -Args @("info") -Quiet).ExitCode -ne 0) { return $false }
+    if ((Invoke-DockerCommand -Args @("compose", "version") -Quiet).ExitCode -ne 0) { return $false }
     return $true
 }
 

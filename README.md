@@ -30,7 +30,7 @@ git clone <仓库地址> Reviewly && cd Reviewly
 
 启动后打开 http://localhost:3000 → **使用 GitHub 登录**。
 
-需换号时：登录页选「使用其他 GitHub 账号登录」，或登录后右上角「切换账号」。详见 [多 GitHub 账号登录](#多-github-账号登录)。
+需换号时：登录页 **「使用其他 GitHub 账号登录」** 进入分流页，选 **「切换账号（推荐）」**；若仍为同一 GitHub 用户，系统会自动尝试一次强制重登。已登录用户也可在右上角 **「切换账号」** 发起。详见 [多 GitHub 账号登录](#多-github-账号登录)。
 
 > GitHub OAuth App 的 Callback 须为 `http://localhost:3001/api/auth/github/callback`（已在演示配置中）。**勿将本仓库公开到公网**（含 Client Secret）；正式环境请更换密钥。
 
@@ -237,27 +237,64 @@ docker compose -f deploy/docker-compose.yml restart gateway
 
 ### 多 GitHub 账号登录
 
-浏览器若已登录 GitHub，OAuth 会默认复用当前 session。PRism 使用**双层换号**策略：
+浏览器若已登录 GitHub，OAuth 会默认复用当前 **github.com** 会话；仅清除 PRism 本地 JWT **不能**换号。PRism 采用 **双层换号**：先尽量弹出 GitHub 账号选择器（Tier 1），仍回到同一用户时再经 GitHub 退出页重登（Tier 2，**仅**此时使用 `github.com/logout`）。
 
-| 层级 | 入口 | Gateway 行为 |
-|------|------|----------------|
-| **快速登录** | 登录页「使用 GitHub 登录」 | 纯 `oauth/authorize`，无 `prompt` |
-| **Tier 1 切换** | `/login/switch` →「切换账号（推荐）」或账户菜单「切换账号」 | `prompt=select_account` + 可选 `login` hint |
-| **Tier 2 强制** | 同账号自动 fallback（回调检测）或「强制重新登录」按钮 | `github.com/logout?return_to=<authorize>`（仅此时） |
+#### 用户入口（`/login/switch`）
 
-分流页 `/login/switch` 提供三个按钮：当前账号（最快）、切换账号（Tier 1）、强制重新登录（Tier 2）。换号前会在 `sessionStorage` 记录原 `githubId`；若 Tier 1 后仍为同一账号，回调页自动触发**一次** Tier 2；若仍失败则跳转 `/login?error=same_github_account`。
+| 按钮 | 行为 |
+|------|------|
+| 使用当前 GitHub 账号（最快） | 普通 `login()`：纯 `oauth/authorize`，无 `prompt`，复用浏览器已登录账号 |
+| 切换账号（推荐） | Tier 1：`prompt=select_account`，可选填写目标 GitHub 用户名作为 `login` hint |
+| 无法切换？强制重新登录 | Tier 2：经 `github.com/logout` 后回到 OAuth 授权（跳过自动检测，直接强制） |
 
-OAuth `state` 携带 `return_path`，回调后进入 `FRONTEND_URL/auth/callback?token=…&next=…` 再跳转项目首页。
+已登录用户从右上角 **切换账号** 进入时，等价于 Tier 1（带 `force_reauth`）。
 
-**限制与排错：**
+#### 自动同账号检测（Tier 1 → Tier 2）
 
-- OAuth App 为 **Development** 模式时，目标用户须在 GitHub OAuth App 的 allowlist 中（与会话无关）
-- `prompt=select_account` 不保证 100% 弹出选择器；Tier 2 用于清除 `github.com` 会话
-- 若 `logout` 后停在 GitHub 首页：在首页点目标账号旁的 **Sign out**，再回到 PRism 点「继续 GitHub 授权」
-- OAuth 流程中断时，回到 PRism 登录页点「继续 GitHub 授权」
-- 确认 `FRONTEND_URL` 与浏览器访问地址一致（如 `http://localhost:3000`）
+换号前前端在 `sessionStorage` 记录 `prism_switch_from_github_id`（当前用户的 `githubId`）。OAuth 回调 `/auth/callback` 完成后：
+
+1. 若新 `githubId` **与记录不同** → 换号成功，清理标记并进入首页。
+2. 若 **相同** 且尚未做过 Tier 2 → 自动跳转 **一次** `hard_reauth`（logout → authorize）。
+3. 若 Tier 2 后仍相同 → `/login?error=same_github_account`，提示使用强制重登或先在 GitHub 退出目标账号。
+
+`prism_hard_reauth_attempted` 用于防止 logout 循环。
+
+#### Gateway API（`/api/auth/github/login`）
+
+| 查询参数 | 说明 |
+|----------|------|
+| （无） | 默认快速登录 URL |
+| `force_reauth=1` | Tier 1：`prompt=select_account` |
+| `hard_reauth=1` 或 `github_logout=1` | Tier 2：外层 `github.com/logout?return_to=<encode authorize>`；内层 authorize **不**再带 `hard_reauth` / `prompt` |
+| `login` | 可选 GitHub 用户名 hint |
+| `return_to` | OAuth 完成后前端路径（写入 `state`） |
+
+> GitHub OAuth App **不支持** `prompt=login`；换号依赖 `select_account` + 条件 logout。
+
+OAuth `state` 携带 `return_path`；Gateway 回调 302 至 `FRONTEND_URL/auth/callback?token=…&next=…`，再由前端写入 JWT 并跳转。
+
+#### 限制与排错
+
+- **Development** 模式 OAuth App：目标用户须在 App allowlist 中（与浏览器是否多账号无关）
+- `prompt=select_account` **不保证** 100% 弹出选择器；单 session 时 GitHub 可能仍 instant-auth
+- **logout 后停在 GitHub 首页**：在首页对目标账号点 **Sign out**，回到 PRism 登录页点 **「继续 GitHub 授权」**
+- OAuth 流程中断：登录页 **「继续 GitHub 授权」**（`prism_oauth_pending`）
+- `FRONTEND_URL` / `OAUTH_CALLBACK_URL` 须与浏览器实际访问地址一致（本机 `localhost` vs 局域网 IP）
 
 **内网试用、暂不想配 OAuth**：在 `deploy/.env` 设 `PRISM_AUTH_BYPASS=1` 后重启 gateway（**禁止用于公网生产**）。
+
+### PR 同步与收件箱
+
+纳管仓库的 **开放 PR** 由单一后端入口 `POST /api/repos/sync-prs/managed` 与 GitHub 对齐（前端 `PrSyncProvider` 每 **90 秒**、页面可见时轮询）。同步会 **upsert 开放 PR** 并将 GitHub 上已关闭的 PR 在库中标为 `closed`。
+
+| 概念 | 说明 |
+|------|------|
+| `openPrCount` | **派生值**：`COUNT(pull_requests WHERE state='open')`，不读 `repositories.open_prs` 缓存列 |
+| 收件箱「未查阅」 | **DB 驱动**：`pull_request_user_views`；`last_seen_at` 为空或早于 PR `updated_at` |
+| 标记已读 | 打开 PR 评审页时 `POST /api/pull-requests/{id}/seen` |
+| 组件禁止自行 sync | 仅全局 `useGlobalPrSync` 调度；列表通过 `pr:sync:updated` 事件刷新 |
+
+**限制：** 本地开发无公网 Webhook 时，新 PR 最多约 90 秒延迟；仓库卡片上的「X 分钟前」为仓库元数据 `lastSyncTime`，不是 PR 列表专用时间戳。
 
 ### 可选配置
 
@@ -513,10 +550,14 @@ Reviewly/
 | 本地 dev：`prism` 密码认证失败 / 5432 连不上 | 正常：`npm run dev` 会自动回退 SQLite；要 Postgres 则 `npm run dev:db` 后再启动 |
 | GitHub 登录 404 | `deploy/.env` 中 OAuth 仍是占位符；按 README「GitHub OAuth 登录配置」创建 OAuth App 并填写真实 Client ID/Secret |
 | GitHub OAuth 回调失败 | Callback URL 与 GitHub App 设置不一致；检查 IP/端口是否与 `OAUTH_CALLBACK_URL` 相同 |
-| 只能登录浏览器当前 GitHub 账号 | 见上文 [多 GitHub 账号登录](#多-github-账号登录)：登录页「使用其他 GitHub 账号登录」或右上角「切换账号」 |
+| PR 列表 / 收件箱不更新 | 见 [PR 同步与收件箱](#pr-同步与收件箱)；确认已登录且 Gateway 正常；等待约 90 秒或切换页签触发同步 |
+| 只能登录浏览器当前 GitHub 账号 | [多 GitHub 账号登录](#多-github-账号登录)：`/login/switch` →「切换账号」；仍相同则用「强制重新登录」或等回调自动 Tier 2 |
+| 提示「仍登录为同一 GitHub 账号」 | Tier 1/2 均未换号：在 github.com 对当前账号 Sign out，或换浏览器/无痕后再登录；勿无限重试 |
+| 换号后停在 GitHub 首页 | logout 的 `return_to` 偶发失效；在 GitHub 首页 Sign out 目标账号后，回 PRism 点「继续 GitHub 授权」 |
 | `gateway is unhealthy` / 连 `127.0.0.1:5432` 失败 | 确认 `deploy/.env` 中 `DATABASE_URL` 为 `@postgres:5432`；拉最新代码后 `docker compose -f deploy/docker-compose.yml build gateway --no-cache && docker compose -f deploy/docker-compose.yml up -d` |
 | Docker 部署失败 | 确认 Docker 已运行；`docker compose -f deploy/docker-compose.yml logs gateway` |
 | 双击 `deploy.bat` 闪退 | 已修复：失败会 `pause` 并显示退出码；若仍瞬间关闭，请从 CMD 运行 `deploy.bat` 查看输出 |
+| `[1/7]` 报 `Container Stopping` 后失败 | 已修复：`deploy.ps1` 通过 `Invoke-DockerCommand`（Start-Process）调用 docker，stderr 进度不会误判为 PowerShell 错误 |
 | Windows 无法自动装 Docker | 安装 [App Installer](https://aka.ms/getwinget) 或手动安装 Docker Desktop；右键 **以管理员身份运行** deploy.bat |
 | apt：`kali-rolling Release` 没有 Release 文件 | **Kali/Parrot** 等滚动版不能用 Docker 官方 apt 源。`sudo rm /etc/apt/sources.list.d/docker.list` 后执行 `bash install.sh`；`install-docker.sh` 会自动选 `apt_distro`（`docker.io`） |
 | Docker 安装方式 | `deploy/install-docker.sh` 按系统智能选择：Kali→系统源、Ubuntu/Debian 稳定版→官方脚本、Fedora/RHEL→dnf 通道、Arch→pacman、openSUSE→zypper |

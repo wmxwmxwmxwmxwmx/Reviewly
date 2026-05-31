@@ -1,5 +1,10 @@
 # Reviewly / PRism 卸载共享函数（仅操作白名单资源）
 
+$script:ReviewlyUtilsPath = Join-Path $PSScriptRoot "utils.ps1"
+if (Test-Path -LiteralPath $script:ReviewlyUtilsPath) {
+    . $script:ReviewlyUtilsPath
+}
+
 $script:ReviewlyContainers = @(
     "prism-postgres", "prism-gateway", "prism-web", "prism-engine",
     "reviewly-postgres", "reviewly-gateway", "reviewly-web", "reviewly-engine"
@@ -89,6 +94,10 @@ function Remove-ReviewlyNetwork([string]$Name) {
 function Invoke-ReviewlyComposeDown([string]$ComposeFile) {
     if (-not (Test-ReviewlyDocker)) { return }
     if (-not (Test-Path $ComposeFile)) { return }
+    if (Get-Command Invoke-DockerCommand -ErrorAction SilentlyContinue) {
+        $null = Invoke-DockerCommand -Args @("compose", "-f", $ComposeFile, "down", "--remove-orphans") -Quiet
+        return
+    }
     docker compose -f $ComposeFile down --remove-orphans 2>$null | Out-Null
 }
 

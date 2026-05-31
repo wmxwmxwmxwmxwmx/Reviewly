@@ -21,6 +21,7 @@ if ($Help) {
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $Root
+. (Join-Path $PSScriptRoot "utils.ps1")
 
 $ComposeFile = Join-Path $Root "deploy\docker-compose.yml"
 $EnvFile = Join-Path $Root "deploy\.env"
@@ -117,11 +118,15 @@ function Set-PublicUrls([string]$FrontendUrl) {
 function Stop-ExistingStack {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return }
     if (Test-Path $ComposeFile) {
-        docker compose -f $ComposeFile down --remove-orphans 2>$null | Out-Null
+        $null = Invoke-DockerCommand -Args @(
+            "compose", "-f", $ComposeFile, "down", "--remove-orphans"
+        ) -Quiet
     }
     $devCompose = Join-Path $Root "docker-compose.yml"
     if (Test-Path $devCompose) {
-        docker compose -f $devCompose down --remove-orphans 2>$null | Out-Null
+        $null = Invoke-DockerCommand -Args @(
+            "compose", "-f", $devCompose, "down", "--remove-orphans"
+        ) -Quiet
     }
 }
 
@@ -238,22 +243,30 @@ function Test-Docker {
         Write-Host "  或使用: winget install Docker.DockerDesktop"
         exit 1
     }
-    & docker compose version *> $null
-    if ($LASTEXITCODE -ne 0) {
+    $composeVer = Invoke-DockerCommand -Args @("compose", "version") -Quiet
+    if ($composeVer.ExitCode -ne 0) {
         Write-Err "未检测到 docker compose。请更新 Docker Desktop。"
         exit 1
     }
-    & docker info *> $null
-    if ($LASTEXITCODE -ne 0) {
+    $info = Invoke-DockerCommand -Args @("info") -Quiet
+    if ($info.ExitCode -ne 0) {
         Write-Err "Docker 未运行。请打开 Docker Desktop 等待 Ready。"
         exit 1
     }
 }
 
 function Invoke-Compose {
-    param([string[]]$Args)
-    & docker compose -f $ComposeFile --env-file $EnvFile @Args
-    if ($LASTEXITCODE -ne 0) { throw "docker compose failed: $($Args -join ' ')" }
+    param([string[]]$ComposeArgs)
+    $dockerArgs = @(
+        "compose",
+        "-f", $ComposeFile,
+        "--env-file", $EnvFile
+    ) + $ComposeArgs
+    $result = Invoke-DockerCommand -Args $dockerArgs
+    if ($result.ExitCode -ne 0) {
+        Write-Err "docker compose failed: $($ComposeArgs -join ' ') (exit $($result.ExitCode))"
+        exit $result.ExitCode
+    }
 }
 
 function Test-PortInUse([int]$Port, [string]$Name) {
@@ -292,8 +305,11 @@ Invoke-Compose @("up", "-d", "postgres")
 
 Write-Step "[5/7] 等待 PostgreSQL..."
 for ($i = 1; $i -le 30; $i++) {
-    & docker compose -f $ComposeFile --env-file $EnvFile exec -T postgres pg_isready -U prism -d prism 2>$null
-    if ($LASTEXITCODE -eq 0) { Write-Ok "  PostgreSQL 已就绪"; break }
+    $ready = Invoke-DockerCommand -Args @(
+        "compose", "-f", $ComposeFile, "--env-file", $EnvFile,
+        "exec", "-T", "postgres", "pg_isready", "-U", "prism", "-d", "prism"
+    ) -Quiet
+    if ($ready.ExitCode -eq 0) { Write-Ok "  PostgreSQL 已就绪"; break }
     Start-Sleep -Seconds 2
 }
 
