@@ -2,115 +2,94 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-COMPOSE="docker compose -f deploy/docker-compose.yml --env-file deploy/.env"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+# shellcheck source=lib/common.sh
+source "$ROOT/deploy/lib/common.sh"
 
-check_port() {
-  local port="$1"
-  local name="$2"
-  if command -v ss >/dev/null 2>&1; then
-    if ss -tln | grep -q ":${port} "; then
-      echo -e "${RED}Port ${port} (${name}) is already in use. Stop the conflicting process or change the port mapping.${NC}"
-      exit 1
-    fi
-  elif command -v lsof >/dev/null 2>&1; then
-    if lsof -iTCP:"${port}" -sTCP:LISTEN -t >/dev/null 2>&1; then
-      echo -e "${RED}Port ${port} (${name}) is already in use.${NC}"
-      exit 1
-    fi
-  fi
+prism_parse_deploy_args "$@"
+
+COMPOSE=(docker compose -f deploy/docker-compose.yml --env-file deploy/.env)
+
+prism_step() {
+  prism_color yellow "$1"
 }
 
-merge_gateway_env() {
-  local gateway_env="$ROOT/services/gateway/.env"
-  local deploy_env="$ROOT/deploy/.env"
-  [ -f "$gateway_env" ] || return 0
-  while IFS= read -r line || [ -n "$line" ]; do
-    line="${line%%#*}"
-    line="$(echo "$line" | xargs)"
-    [ -z "$line" ] && continue
-    [[ "$line" != *=* ]] && continue
-    local key="${line%%=*}"
-    local value="${line#*=}"
-    key="$(echo "$key" | xargs)"
-    if grep -q "^${key}=" "$deploy_env" 2>/dev/null; then
-      if [[ "$OSTYPE" == darwin* ]]; then
-        sed -i '' "s|^${key}=.*|${key}=${value}|" "$deploy_env"
-      else
-        sed -i "s|^${key}=.*|${key}=${value}|" "$deploy_env"
-      fi
-    else
-      printf '%s=%s\n' "$key" "$value" >> "$deploy_env"
-    fi
-  done < "$gateway_env"
-}
+prism_step "[1/7] 检查运行环境..."
+prism_check_docker
+prism_check_port 5432 "PostgreSQL" || exit 1
+prism_check_port 3001 "Gateway" || exit 1
+prism_check_port 3000 "Web" || exit 1
 
-echo -e "${YELLOW}[1/7] Checking prerequisites...${NC}"
-command -v docker >/dev/null 2>&1 || { echo -e "${RED}docker not found${NC}"; exit 1; }
-docker compose version >/dev/null 2>&1 || { echo -e "${RED}docker compose not found${NC}"; exit 1; }
-command -v curl >/dev/null 2>&1 || { echo -e "${RED}curl not found${NC}"; exit 1; }
-
-check_port 5432 "PostgreSQL"
-check_port 3001 "Gateway"
-check_port 3000 "Web"
-
-echo -e "${YELLOW}[2/7] Setting up environment...${NC}"
-if [ ! -f "deploy/.env" ]; then
-  cp deploy/.env.example deploy/.env
-  merge_gateway_env
-  echo -e "${YELLOW}  deploy/.env created. Review JWT_SECRET / OAuth / encryption keys if needed.${NC}"
-  echo -e "${YELLOW}  Press Enter to continue or Ctrl+C to abort...${NC}"
-  read -r
+if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+  prism_color yellow "  未安装 curl/wget，将跳过 HTTP 健康轮询（不影响容器启动）"
 fi
 
-echo -e "${YELLOW}[3/7] Building Docker images...${NC}"
-$COMPOSE build
+prism_step "[2/7] 准备 deploy/.env ..."
+prism_setup_deploy_env
 
-echo -e "${YELLOW}[4/7] Starting PostgreSQL...${NC}"
-$COMPOSE up -d postgres
+# stub 模式下不构建/启动 engine，加快新机首次部署
+USE_ENGINE=1
+if [ -f deploy/.env ] && grep -q '^PRISM_STUB_ENGINE=1' deploy/.env; then
+  USE_ENGINE=0
+  prism_color yellow "  PRISM_STUB_ENGINE=1，将跳过 engine 容器"
+fi
 
-echo -e "${YELLOW}[5/7] Waiting for PostgreSQL...${NC}"
+prism_step "[3/7] 构建 Docker 镜像（首次较慢）..."
+if [ "$USE_ENGINE" = "1" ]; then
+  "${COMPOSE[@]}" build
+else
+  "${COMPOSE[@]}" build postgres gateway web
+fi
+
+prism_step "[4/7] 启动 PostgreSQL..."
+"${COMPOSE[@]}" up -d postgres
+
+prism_step "[5/7] 等待 PostgreSQL 就绪..."
 for _ in $(seq 1 30); do
-  if $COMPOSE exec -T postgres pg_isready -U prism -d prism 2>/dev/null; then
-    echo -e "${GREEN}  PostgreSQL is ready.${NC}"
+  if "${COMPOSE[@]}" exec -T postgres pg_isready -U prism -d prism 2>/dev/null; then
+    prism_color green "  PostgreSQL 已就绪"
     break
   fi
   sleep 2
 done
 
-echo -e "${YELLOW}[6/7] Starting Gateway & Engine...${NC}"
-$COMPOSE up -d gateway engine
+prism_step "[6/7] 启动 Gateway${USE_ENGINE:+ 与 Engine}..."
+if [ "$USE_ENGINE" = "1" ]; then
+  "${COMPOSE[@]}" up -d gateway engine
+else
+  "${COMPOSE[@]}" up -d gateway
+fi
 
 for _ in $(seq 1 30); do
-  if curl -sf http://localhost:3001/health >/dev/null 2>&1; then
-    echo -e "${GREEN}  Gateway is healthy.${NC}"
+  if prism_http_ok "http://localhost:3001/health"; then
+    prism_color green "  Gateway 已就绪"
     break
   fi
   sleep 2
 done
 
-echo -e "${YELLOW}[7/7] Starting Web...${NC}"
-$COMPOSE up -d web
+prism_step "[7/7] 启动 Web..."
+"${COMPOSE[@]}" up -d web
 
 for _ in $(seq 1 20); do
-  if curl -sf http://localhost:3000/ >/dev/null 2>&1; then
-    echo -e "${GREEN}  Web is healthy.${NC}"
+  if prism_http_ok "http://localhost:3000/"; then
+    prism_color green "  Web 已就绪"
     break
   fi
   sleep 2
 done
 
 echo ""
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}  PRism is now running!${NC}"
-echo -e "${GREEN}  Frontend:  http://localhost:3000${NC}"
-echo -e "${GREEN}  API:       http://localhost:3001${NC}"
-echo -e "${GREEN}  API Docs:  http://localhost:3001/docs${NC}"
-echo -e "${GREEN}========================================${NC}"
+prism_color green "========================================"
+prism_color green "  PRism 已启动"
+prism_color green "  前端:     http://localhost:3000"
+prism_color green "  API:      http://localhost:3001"
+prism_color green "  API 文档: http://localhost:3001/docs"
+prism_color green "========================================"
 echo ""
-echo "To view logs:  docker compose -f deploy/docker-compose.yml logs -f"
-echo "To stop:       docker compose -f deploy/docker-compose.yml down"
+echo "查看日志: docker compose -f deploy/docker-compose.yml logs -f"
+echo "停止服务: docker compose -f deploy/docker-compose.yml down"
+if [ "$USE_ENGINE" = "0" ]; then
+  echo ""
+  echo "当前为引擎 stub 模式。需要 C++ 引擎时: 编辑 deploy/.env 设 PRISM_STUB_ENGINE=0 后重新部署。"
+fi

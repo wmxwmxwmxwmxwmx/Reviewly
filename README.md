@@ -17,17 +17,135 @@
 
 详细说明见 [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)。
 
+**想本地跑完整环境？** → 新机请看 [新机从零部署](#新机从零部署)；已装 Docker 可直接 [一键部署](#一键部署已有-docker)。
+
 ---
 
 ## 目录
 
+- [新机从零部署](#新机从零部署)
+- [一键部署（已有 Docker）](#一键部署已有-docker)
 - [环境要求](#环境要求)
 - [本地开发](#本地开发)
-- [生产部署（Docker）](#生产部署docker)
+- [生产部署详解](#生产部署详解)
 - [环境变量](#环境变量)
 - [项目结构](#项目结构)
 - [常用命令](#常用命令)
 - [常见问题](#常见问题)
+
+---
+
+## 新机从零部署
+
+**前提**：新机只需 **Git**（拉代码）和 **Bash**（Linux 自带；Windows 用 Git Bash 或 WSL 亦可）。**不需要**预装 Node、Python、PostgreSQL——全部由 Docker 容器提供。
+
+### 你需要准备什么
+
+| 必须 | 不必 |
+|------|------|
+| Git（克隆仓库） | Node.js / npm |
+| Docker（脚本可引导安装） | Python |
+| 约 4GB 磁盘 + 网络 | PostgreSQL / CMake |
+
+### Linux 新机（推荐流程）
+
+```bash
+# 1. 克隆项目
+git clone <仓库地址> Reviewly && cd Reviewly
+
+# 2. 一条命令：检查环境 → 可选安装 Docker → 自动部署
+bash deploy/bootstrap.sh
+```
+
+- 若**没有 Docker**：脚本会询问是否自动安装（调用 `deploy/install-docker.sh`，需 sudo），装完后**注销重新登录**，再执行一次 `bash deploy/bootstrap.sh`。
+- 若**已有 Docker**：直接构建并启动，全程无需按 Enter（自动生成 `deploy/.env` 与 JWT 密钥）。
+- **首次默认跳过 C++ 引擎**（`PRISM_STUB_ENGINE=1`），避免新机编译失败；功能完整可用，稳定后可在 `deploy/.env` 改 `PRISM_STUB_ENGINE=0` 重新部署。
+
+等价命令：
+
+```bash
+bash bootstrap.sh                    # 根目录快捷入口
+bash deploy/deploy.sh -y --stub-engine # 已有 Docker，静默部署
+```
+
+### Windows 新机
+
+1. 安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/) 并启动（或 `winget install Docker.DockerDesktop`）。
+2. 克隆仓库后，**双击 `deploy.bat`**（内部调用 `deploy/bootstrap.ps1`）。
+
+无需安装 Node。若未装 Docker，脚本会提示下载地址。
+
+### macOS 新机
+
+1. 安装并启动 [Docker Desktop](https://www.docker.com/products/docker-desktop/)。
+2. 终端执行：
+
+```bash
+git clone <仓库地址> Reviewly && cd Reviewly
+bash deploy/bootstrap.sh
+```
+
+### 部署成功后
+
+打开 http://localhost:3000 → **系统设置** 配置 AI 模型（API Key 存数据库，不写 `.env`）。
+
+---
+
+## 一键部署（已有 Docker）
+
+已安装并启动 Docker 时使用。**无需 Node/npm**（`npm run deploy` 仅为可选入口）。
+
+| 系统 | 命令 |
+|------|------|
+| **Linux（新机推荐）** | `bash deploy/bootstrap.sh` |
+| **Linux / macOS** | `bash deploy/deploy.sh -y` |
+| **Windows** | 双击 `deploy.bat` |
+| 可选 | `npm run deploy`（需已装 Node） |
+
+**脚本自动完成：**
+
+1. 检查 Docker 是否运行、端口 3000/3001/5432 是否空闲
+2. 创建 `deploy/.env`，合并 `services/gateway/.env`，**自动生成** `JWT_SECRET` / `SETTINGS_ENCRYPTION_KEY`
+3. 构建镜像并启动：**PostgreSQL → Gateway（含迁移）→ Web**（首次默认 stub，不启 engine）
+4. 输出访问地址
+
+加 `-y` 跳过确认；加 `--with-engine` 构建 C++ 引擎：
+
+```bash
+bash deploy/deploy.sh -y --with-engine
+```
+
+### 验证
+
+| 用途 | 地址 |
+|------|------|
+| **前端** | http://localhost:3000 |
+| API / 文档 | http://localhost:3001 / http://localhost:3001/docs |
+| 健康检查 | http://localhost:3001/health |
+
+```bash
+curl http://localhost:3001/health
+docker compose -f deploy/docker-compose.yml ps
+# stub 模式 3 个业务容器 + postgres；--with-engine 时 4 个
+```
+
+### 停止与重启
+
+```bash
+docker compose -f deploy/docker-compose.yml down    # 停止，保留数据
+bash deploy/deploy.sh -y                            # 再次部署
+docker compose -f deploy/docker-compose.yml down -v # 清空数据库卷
+```
+
+### 可选配置
+
+| 需求 | 操作 |
+|------|------|
+| GitHub OAuth | 编辑 `deploy/.env` 中的 `GITHUB_OAUTH_*` |
+| 启用 C++ 引擎 | `deploy/.env` 设 `PRISM_STUB_ENGINE=0` 后 `bash deploy/deploy.sh -y --with-engine` |
+| 仅 Docker 不用脚本 | 见 [生产部署详解](#生产部署详解) |
+
+> **说明**：「一键」= 一条 Bash 命令或双击 bat，由 Docker 拉起服务栈；不是单个 `.exe` 安装包。
 
 ---
 
@@ -36,8 +154,9 @@
 | 场景 | 依赖 |
 |------|------|
 | 本地开发 | Node.js 20+、npm 9+、Python 3.11+ |
-| 生产部署 | [Docker Desktop](https://www.docker.com/products/docker-desktop/)（或 Docker Engine + Compose v2） |
-| C++ 引擎（可选） | CMake 3.20+、C++ 编译器；生产镜像见 `deploy/Dockerfile.engine` |
+| **新机 Docker 部署** | **仅 Git + Docker**（`bash deploy/bootstrap.sh` 可引导装 Docker） |
+| 生产部署（已有 Docker） | Docker Engine + Compose v2 |
+| C++ 引擎（可选） | `deploy/deploy.sh --with-engine` 或本地 CMake |
 
 ---
 
@@ -91,35 +210,33 @@ alembic upgrade head
 
 ---
 
-## 生产部署（Docker）
+## 生产部署详解
 
-`deploy/` 提供全栈容器化部署：PostgreSQL + Gateway + Web + C++ 引擎。
+`deploy/` 目录包含全栈 Compose 与 Dockerfile，与根目录 `deploy.bat` / `npm run deploy` 使用同一套配置。
 
-> PRism 含多个运行时，**无法**打包为单个 `.exe` 内嵌全部依赖。需先安装并启动 Docker，再通过下方入口一键部署。
+### 脚本内部流程（`deploy/deploy.ps1` · `deploy/deploy.sh`）
 
-### 一键入口
-
-| 平台 | 操作 |
+| 步骤 | 动作 |
 |------|------|
-| Windows | 双击根目录 **`deploy.bat`** 或 **`deploy.cmd`** |
-| 全平台 | `npm run deploy` |
-| Linux / macOS | `chmod +x deploy.sh && ./deploy.sh` |
+| 1/7 | 检查 `docker`、`docker compose`、端口 3000/3001/5432 |
+| 2/7 | 初始化 `deploy/.env`（必要时合并 `services/gateway/.env`） |
+| 3/7 | `docker compose -f deploy/docker-compose.yml build` |
+| 4/7 | 启动 `postgres`，等待 `pg_isready` |
+| 5/7 | 等待 PostgreSQL 健康 |
+| 6/7 | 启动 `gateway`、`engine`；Gateway 入口执行 `alembic upgrade head` 后启动 Uvicorn |
+| 7/7 | 启动 `web`，等待 http://localhost:3000 可访问 |
 
-脚本将：检查 Docker 与端口 → 生成/合并 `deploy/.env` → 构建镜像 → 按序启动 **PostgreSQL → Gateway + Engine → Web**。
+### 不用一键脚本、手动 Compose
 
-### 部署后访问
+```bash
+# 1. 准备环境文件
+cp deploy/.env.example deploy/.env
+# 编辑 deploy/.env；若有 services/gateway/.env 可手工对照合并
 
-| 服务 | 地址 |
-|------|------|
-| 前端 | http://localhost:3000 |
-| API | http://localhost:3001 |
-| API 文档 | http://localhost:3001/docs |
-
-### 前置条件
-
-- Docker 守护进程已运行
-- 端口 **3000 / 3001 / 5432** 未被占用
-- 首次构建约 10–30 分钟（视网络与 CPU）
+# 2. 构建并启动（在项目根目录）
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env build
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
+```
 
 ### 部署环境变量
 
@@ -207,6 +324,10 @@ Reviewly/
 │   ├── shared/               # 共享 TypeScript 类型
 │   └── contracts/            # OpenAPI + Protobuf
 ├── deploy/                   # 生产 Docker 全栈
+│   ├── bootstrap.sh          # 新机引导（装 Docker + 部署）
+│   ├── deploy.sh / deploy.ps1
+│   └── install-docker.sh     # Linux Docker 安装助手
+├── bootstrap.sh              # → deploy/bootstrap.sh
 ├── deploy.bat / deploy.cmd / deploy.sh
 ├── docker-compose.yml        # 开发：仅 PostgreSQL
 ├── docs/                     # 开发者指南、路线图
@@ -222,7 +343,8 @@ Reviewly/
 | `npm run dev` | Web + Gateway |
 | `npm run dev:gateway` | 仅 Gateway |
 | `npm run dev:engine` | 仅 C++ 引擎 |
-| `npm run deploy` | **生产**：Docker 全栈（同 `deploy.bat`） |
+| `npm run deploy` | Docker 全栈（需 Node；等价于 deploy 脚本） |
+| `bash deploy/bootstrap.sh` | **新机推荐**：引导装 Docker + 部署 |
 | `npm run build` | 构建 shared + web |
 | `npm run lint` | ESLint + TypeScript 检查 |
 | `npm run test` | Gateway pytest |
@@ -238,6 +360,9 @@ Reviewly/
 | Gateway 3001 启动失败 | `npm run kill:gateway` 或 `npm run dev:clean`；执行 `alembic upgrade head` |
 | GitHub 限流 | 配置 `GITHUB_PAT` 或使用 GitHub OAuth 登录 |
 | Docker 部署失败 | 确认 Docker 已运行；`docker compose -f deploy/docker-compose.yml logs gateway` |
+| Linux `Permission denied` | 执行 `bash deploy/deploy.sh` 或 `bash deploy/bootstrap.sh` |
+| Linux `docker: permission denied` | `sudo usermod -aG docker $USER` 后重新登录 |
+| 新机无 Docker | `bash deploy/bootstrap.sh` 选 y 自动安装，或 `bash deploy/install-docker.sh` |
 | Engine 镜像构建失败 | 在 `deploy/.env` 设 `PRISM_STUB_ENGINE=1` 后重启 gateway |
 | 流式响应卡住 | 确保仅一个 Gateway 实例；长连接走 BFF 路由 |
 | Dashboard / 导入 500 | 检查 `/health` 中 `migrations`；执行迁移后重启 Gateway |
