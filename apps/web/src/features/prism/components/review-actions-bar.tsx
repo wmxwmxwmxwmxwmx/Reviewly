@@ -84,7 +84,7 @@ export function ReviewActionsBar({
   prNumber,
   aiSummary,
   hasCompletedAnalysis,
-  fallbackScores,
+  fallbackScores: _fallbackScores,
   onScrollToAiSummary,
   onUpdated,
   onStatusChange,

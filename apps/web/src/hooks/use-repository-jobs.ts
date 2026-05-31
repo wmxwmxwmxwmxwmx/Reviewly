@@ -8,8 +8,6 @@ import { fetchRepoAnalysisStatus } from "@/lib/api/repos"
 import { isAbortError } from "@/lib/abort-utils"
 import { PrismApiError } from "@/lib/api/client"
 
-const TERMINAL = new Set(["success", "failed", "cancelled"])
-
 function isActiveJob(job: RepositoryJob | null | undefined): boolean {
   return Boolean(job && (job.status === "running" || job.status === "pending"))
 }

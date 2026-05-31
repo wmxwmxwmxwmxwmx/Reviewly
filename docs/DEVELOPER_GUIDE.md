@@ -391,17 +391,29 @@ async rewrites() {
 
 ### 9.1 分层结构
 
+**目标分层（Gateway）：**
+
 ```
-api/v1/*.py          # HTTP 路由，参数校验，依赖注入 get_db
-    ↓
-repositories/*.py    # 查询与 ORM → API dict 映射
-    ↓
-services/*.py        # 业务流程（同步、分析 job、LLM SSE）
-    ↓
-db/models.py         # SQLAlchemy 模型
-github/              # 外部 GitHub 集成
-grpc_client/         # Engine 客户端（含 stub）
+app/api/v1/         # request/response only — 参数校验、依赖注入、调用 services
+app/services/       # business logic — 同步、分析 job、LLM、编排
+app/core/           # config、errors、security
+app/repositories/   # data access — ORM 查询与 API dict 映射
+app/db/             # SQLAlchemy models
+app/github/         # GitHub 集成
+app/grpc_client/    # Engine 客户端（含 stub）
 ```
+
+**当前实现：** 多数路由已委托 `services/`；部分模块（如 `api/v1/data.py`）仍含内联业务逻辑，视为 **tech debt**，新代码应放入 `services/`，不在本次重构中批量搬迁。
+
+**前端 fetch 分层：**
+
+| 入口 | 模块 | 用途 |
+|------|------|------|
+| `apiFetch` | `lib/api/client.ts` | 浏览器 JSON 唯一入口 |
+| `postSse` | `lib/api/sse-reader.ts` | 浏览器 SSE 唯一入口 |
+| `proxyToGateway` / `proxyToGatewayStream` | `lib/server/gateway-proxy.ts` | Next.js BFF route 唯一服务端入口 |
+
+Hooks 与 views 必须通过 `lib/api/*` 调用，禁止 `fetch` 直连外部 GitHub / LLM。
 
 新增 REST 接口建议：
 

@@ -8,7 +8,6 @@ import {
   Minus,
   Clock,
   Tag,
-  Users,
   AlertTriangle,
   TrendingUp,
   Shield,

@@ -11,6 +11,13 @@ services/gateway/**/__pycache__/
 services/gateway/.pytest_cache/
 services/engine/build/
 
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.venv/
+venv/
+
 # Caches
 .turbo/
 .npm-cache/
@@ -24,10 +31,23 @@ services/engine/build/
 
 # Logs & debug
 *.log
+logs/
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Runtime / temp / DB
+tmp/
+temp/
+*.pid
+*.sqlite
+services/gateway/prism.db
+services/gateway/*.db
+
+# Debug artifacts
+scripts/debug-*.png
+scripts/*workbench*.png
 
 # OS
 .DS_Store

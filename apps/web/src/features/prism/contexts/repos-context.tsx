@@ -16,8 +16,8 @@ import type { Repository, SyncRepositoriesResponse } from "@reviewly/shared"
 import { estimateCostCnyFromUsage } from "@/lib/ai/pricing"
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
-import { extractApiErrorMessage, parseFetchJson, PrismApiError } from "@/lib/api/client"
-import { getAuthToken } from "@/lib/auth/storage"
+import { PrismApiError } from "@/lib/api/client"
+import { completeChat } from "@/lib/api/ai-chat"
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import { useReposSync } from "@/hooks/use-repos-sync"
 import { useAuth } from "@/features/prism/contexts/auth-context"
@@ -206,40 +206,22 @@ export function ReposProvider({ children }: { children: ReactNode }) {
           contextWarnings: ctx.contextWarnings,
         })
 
-        const authToken = getAuthToken()
-        const response = await fetch("/api/ai/chat", {
-          method: "POST",
-          signal: ac.signal,
-          headers: {
-            "Content-Type": "application/json",
-            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-          },
-          body: JSON.stringify({
+        const chat = await completeChat(
+          {
             provider: settings.provider,
             model: settings.model,
-            ...(settings.apiKey.trim() ? { apiKey: settings.apiKey.trim() } : {}),
+            apiKey: settings.apiKey,
             messages: [
-              {
-                role: "system",
-                content: REPO_ANALYSIS_SYSTEM_PROMPT,
-              },
+              { role: "system", content: REPO_ANALYSIS_SYSTEM_PROMPT },
               { role: "user", content: prompt },
             ],
-          }),
-        })
-
-        const data = await parseFetchJson<{
-          content?: string
-          usage?: { totalTokens?: number; promptTokens?: number; completionTokens?: number }
-          latencyMs?: number
-        }>(response)
-        if (!response.ok) {
-          throw new Error(extractApiErrorMessage(data, "AI 分析失败"))
-        }
+          },
+          ac.signal,
+        )
 
         if (ac.signal.aborted) return
 
-        const content = data?.content || "模型未返回内容。"
+        const content = chat.content || "模型未返回内容。"
         const updated = await saveRepoAiAnalysis(repoId, {
           content,
           model: settings.model,
@@ -247,9 +229,9 @@ export function ReposProvider({ children }: { children: ReactNode }) {
         })
         setRepos((prev) => prev.map((r) => (r.id === repoId ? updated : r)))
 
-        const totalTokens = Number(data?.usage?.totalTokens) || 0
-        const promptTokens = Number(data?.usage?.promptTokens) || 0
-        const completionTokens = Number(data?.usage?.completionTokens) || 0
+        const totalTokens = Number(chat.usage?.totalTokens) || 0
+        const promptTokens = Number(chat.usage?.promptTokens) || 0
+        const completionTokens = Number(chat.usage?.completionTokens) || 0
         recordUsage({
           provider: settings.provider,
           model: settings.model,
@@ -262,7 +244,7 @@ export function ReposProvider({ children }: { children: ReactNode }) {
             promptTokens,
             completionTokens,
           ),
-          latencyMs: Number(data?.latencyMs) || 0,
+          latencyMs: Number(chat.latencyMs) || 0,
         })
       } catch (e: unknown) {
         if (isAbortError(e)) return

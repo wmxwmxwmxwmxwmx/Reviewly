@@ -21,14 +21,6 @@ export function fetchArchitectureGraph(repoId: string, signal?: AbortSignal) {
   return apiFetch<ArchitectureGraph>(`/api/architecture/repos/${repoId}/graph`, { signal })
 }
 
-export function postArchitectureScan(repoId: string, signal?: AbortSignal) {
-  return apiFetch<ArchitectureGraph>("/api/architecture/scan", {
-    method: "POST",
-    body: JSON.stringify({ repoId, stream: false }),
-    signal,
-  })
-}
-
 export async function streamArchitectureScan(
   repoId: string,
   options: {

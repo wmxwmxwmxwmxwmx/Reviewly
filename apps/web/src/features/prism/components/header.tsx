@@ -65,7 +65,7 @@ export function Header({
   prData,
   analyzing,
   scanning = false,
-  hasAnalysis = false,
+  hasAnalysis: _hasAnalysis = false,
   hasFindings = false,
   onAnalyze,
   onRescan,

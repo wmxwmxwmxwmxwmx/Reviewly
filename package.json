@@ -14,7 +14,11 @@
     "kill:web": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/kill-port.ps1 -Port 3000",
     "dev:engine": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev-engine.ps1",
     "build": "npm run build -w @reviewly/shared && npm run build -w @reviewly/web",
-    "lint": "npm run lint -w @reviewly/web",
+    "lint": "npm run lint -w @reviewly/web && npm run typecheck",
+    "typecheck": "npm run typecheck -w @reviewly/shared && npm run typecheck -w @reviewly/web",
+    "test": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location services/gateway; if (-not (Test-Path .venv)) { python -m venv .venv }; .venv\\Scripts\\python -m pytest\"",
+    "test:e2e": "python scripts/test_review_center_workbench.py",
+    "clean": "node scripts/clean.mjs",
     "start:app": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start.ps1"
   },
   "devDependencies": {

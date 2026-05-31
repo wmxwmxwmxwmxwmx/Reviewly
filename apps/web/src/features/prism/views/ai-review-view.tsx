@@ -15,7 +15,7 @@ import {
 import { ReviewInsightDrawer } from "@/features/prism/components/review-insight-drawer"
 import { ReviewCompletionBanner } from "@/features/prism/components/review-completion-banner"
 import { ReviewPageSkeleton } from "@/features/prism/components/review-page-skeleton"
-import { enrichDiffFilesWithFindings, scrollTargetFromFinding } from "@/features/prism/lib/map-findings-to-diff"
+import { enrichDiffFilesWithFindings } from "@/features/prism/lib/map-findings-to-diff"
 import { enrichTasksWithOpinion } from "@/features/prism/lib/review-task-verdict"
 import {
   getFingerprintInput,
@@ -38,7 +38,7 @@ import {
   generateAiReviewSummary,
 } from "@/lib/ai/ai-review-summary"
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
-import { formatPrismApiError, PrismApiError } from "@/lib/api/client"
+import { formatPrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { AdoptRepoBanner, shouldShowAdoptBanner } from "@/features/prism/components/adopt-repo-banner"
 import { ReviewCopilotPanel } from "@/features/prism/components/review-copilot-panel"
@@ -99,7 +99,7 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
   const [analysisError, setAnalysisError] = useState<string | null>(
     cached.analysisError ?? null,
   )
-  const [reviewTimelineKey, setReviewTimelineKey] = useState(0)
+  const [reviewTimelineKey] = useState(0)
   const [runUsage, setRunUsage] = useState<AiUsageMetrics | undefined>(aiSummary?.usage)
   const layout = useReviewLayout()
 
