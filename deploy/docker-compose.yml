@@ -1,0 +1,112 @@
+name: prism
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: prism-postgres
+    environment:
+      POSTGRES_USER: prism
+      POSTGRES_PASSWORD: prism
+      POSTGRES_DB: prism
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - prism-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prism -d prism"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.gateway
+    container_name: prism-gateway
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.example
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://prism:prism@postgres:5432/prism}
+      ENGINE_GRPC_ADDR: ${ENGINE_GRPC_ADDR:-engine:50051}
+      PRISM_STUB_ENGINE: ${PRISM_STUB_ENGINE:-0}
+      PRISM_REPO_CACHE_DIR: ${PRISM_REPO_CACHE_DIR:-/data/repo-cache}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      OAUTH_CALLBACK_URL: ${OAUTH_CALLBACK_URL:-http://localhost:3001/api/auth/github/callback}
+      PRISM_FAIL_ON_MIGRATION_ERROR: ${PRISM_FAIL_ON_MIGRATION_ERROR:-1}
+      PRISM_AUTH_BYPASS: ${PRISM_AUTH_BYPASS:-0}
+      PRISM_SEED_DB: ${PRISM_SEED_DB:-0}
+    ports:
+      - "3001:3001"
+    volumes:
+      - repo-cache:/data/repo-cache
+    networks:
+      - prism-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+
+  engine:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.engine
+    container_name: prism-engine
+    volumes:
+      - repo-cache:/data/repo-cache
+    networks:
+      - prism-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "50051"
+    ports:
+      - "50051:50051"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        API_URL: ${API_URL:-http://gateway:3001}
+    container_name: prism-web
+    environment:
+      API_URL: ${API_URL:-http://gateway:3001}
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    networks:
+      - prism-net
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+networks:
+  prism-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+  repo-cache:

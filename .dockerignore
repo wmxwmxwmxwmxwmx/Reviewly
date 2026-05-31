@@ -1,0 +1,16 @@
+**/.git
+**/.next
+**/node_modules
+**/__pycache__
+**/.venv
+**/*.pyc
+**/.env
+**/.env.*
+!**/.env.example
+**/build
+**/dist
+**/.cursor
+**/.agents
+**/terminals
+**/*.md
+!services/engine/README.md

@@ -1,0 +1,31 @@
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY packages/shared/ ./packages/shared/
+COPY apps/web/ ./apps/web/
+
+ARG API_URL=http://gateway:3001
+ENV API_URL=$API_URL
+
+RUN npm ci
+RUN npm run build -w @reviewly/shared
+RUN npm run build -w @reviewly/web
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+RUN apk add --no-cache curl
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/web/.next ./apps/web/.next
+COPY --from=builder /app/apps/web/public ./apps/web/public
+COPY --from=builder /app/apps/web/next.config.mjs ./apps/web/
+COPY --from=builder /app/apps/web/package.json ./apps/web/
+COPY --from=builder /app/package.json ./
+
+ENV NODE_ENV=production
+WORKDIR /app/apps/web
+EXPOSE 3000
+CMD ["npm", "run", "start"]

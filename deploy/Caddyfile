@@ -1,0 +1,5 @@
+# 取消注释并修改域名后启用 HTTPS：
+# prism.example.com {
+#     reverse_proxy /api/* gateway:3001
+#     reverse_proxy /* web:3000
+# }

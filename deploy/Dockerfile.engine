@@ -1,0 +1,26 @@
+FROM gcc:13-bookworm AS builder
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    cmake ninja-build git \
+    protobuf-compiler-grpc libgrpc++-dev libprotobuf-dev pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY services/engine/ ./services/engine/
+COPY packages/contracts/proto/ ./packages/contracts/proto/
+
+WORKDIR /app/services/engine
+RUN cmake -B build -G Ninja \
+    -DPRISM_USE_GRPC=ON \
+    -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build build -j"$(nproc)"
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgrpc++1.51 libprotobuf32 ca-certificates git && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/services/engine/build/prism_engine /usr/local/bin/prism_engine
+
+EXPOSE 50051
+CMD ["prism_engine"]
