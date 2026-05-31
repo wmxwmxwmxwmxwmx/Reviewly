@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 if ($Help) {
-    Write-Host "用法: .\deploy\bootstrap.ps1  或双击 deploy.bat / install.bat"
+    Write-Host "用法: .\deploy\bootstrap.ps1  或双击 deploy.bat"
     exit 0
 }
 

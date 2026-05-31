@@ -5,7 +5,7 @@ import base64
 import json
 import logging
 import secrets
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 
 import httpx
 from sqlalchemy.orm import Session
@@ -18,7 +18,6 @@ from app.repositories import auth_users as auth_users_repo
 logger = logging.getLogger(__name__)
 
 _OAUTH_AUTHORIZE = "https://github.com/login/oauth/authorize"
-_GITHUB_LOGOUT = "https://github.com/logout"
 _OAUTH_TOKEN = "https://github.com/login/oauth/access_token"
 _GITHUB_USER = "https://api.github.com/user"
 _GITHUB_EMAILS = "https://api.github.com/user/emails"
@@ -89,8 +88,8 @@ def parse_oauth_state(state: str | None) -> str:
 def build_github_login_url(
     *,
     state: str | None = None,
-    force_reauth: bool = False,  # noqa: ARG001 — API compat, no longer triggers logout
-    github_logout: bool = False,
+    force_reauth: bool = False,  # noqa: ARG001 — API compat, no-op
+    github_logout: bool = False,  # noqa: ARG001 — API compat, no-op
     login: str | None = None,
     return_path: str = "/",
 ) -> str:
@@ -111,11 +110,7 @@ def build_github_login_url(
     login_hint = (login or "").strip()
     if login_hint:
         params["login"] = login_hint
-    authorize_url = f"{_OAUTH_AUTHORIZE}?{urlencode(params)}"
-    # force_reauth query kept for API compat; GitHub logout only when github_logout=True.
-    if github_logout:
-        return f"{_GITHUB_LOGOUT}?return_to={quote(authorize_url, safe='')}"
-    return authorize_url
+    return f"{_OAUTH_AUTHORIZE}?{urlencode(params)}"
 
 
 async def _exchange_code(code: str) -> dict:

@@ -23,7 +23,7 @@
 
 ```bash
 git clone <仓库地址> Reviewly && cd Reviewly
-# Windows: 双击 deploy.bat 或 install.bat（全程无交互）
+# Windows: 双击 deploy.bat（全程无交互）
 # Linux:   bash install.sh
 # 或:      npm run deploy
 ```
@@ -77,17 +77,10 @@ bash install.sh
 - 若**已有 Docker**：直接构建并启动，**全程无交互**（使用仓库内 `deploy/.env`，无需手填 OAuth）。
 - **首次默认跳过 C++ 引擎**（`PRISM_STUB_ENGINE=1`），避免新机编译失败；功能完整可用，稳定后可在 `deploy/.env` 改 `PRISM_STUB_ENGINE=0` 重新部署。
 
-等价命令：
-
-```bash
-bash install.sh                        # 推荐：一键安装
-bash deploy/bootstrap.sh -y --stub-engine
-```
-
 ### Windows 新机
 
 1. 安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/) 并启动（或 `winget install Docker.DockerDesktop`）。
-2. 克隆仓库后，**双击 `install.bat` 或 `deploy.bat`**（静默部署，无弹窗确认）。
+2. 克隆仓库后，**双击 `deploy.bat`**（静默部署，无弹窗确认）。
 
 无需安装 Node。须先安装并启动 Docker Desktop。
 
@@ -98,7 +91,7 @@ bash deploy/bootstrap.sh -y --stub-engine
 
 ```bash
 git clone <仓库地址> Reviewly && cd Reviewly
-bash deploy/bootstrap.sh
+bash install.sh
 ```
 
 ### 部署成功后
@@ -113,7 +106,7 @@ bash deploy/bootstrap.sh
 
 | 系统 | 命令 |
 |------|------|
-| **Linux（新机推荐）** | `bash deploy/bootstrap.sh` |
+| **Linux（新机推荐）** | `bash install.sh` |
 | **Linux / macOS** | `bash deploy/deploy.sh -y` |
 | **Windows** | 双击 `deploy.bat` |
 | 可选 | `npm run deploy`（需已装 Node） |
@@ -250,16 +243,16 @@ docker compose -f deploy/docker-compose.yml restart gateway
 |------|------|------|
 | 快速登录 | 登录页主按钮「使用 GitHub 登录」 | 复用浏览器已登录 GitHub，一键授权 |
 | 其他账号 | 登录页「使用其他 GitHub 账号登录」 | 进入 `/login/switch` 分流页后选择 |
-| 切换账号 | 右上角账户菜单 → 切换账号 | 同上 |
-| 重新授权 | GitHub 账号对话框 → 重新授权 GitHub | 同上 |
+| 切换账号 | 右上角账户菜单 → 切换账号 | 直接 OAuth authorize（不经 GitHub logout） |
+| 重新授权 | GitHub 账号对话框 → 重新授权 GitHub | 进入 `/login/switch` 或主登录页 |
 
-分流页提供「当前 GitHub 账号」（直达 OAuth authorize）与「其他账号」（`github_logout=1` 时经 `github.com/logout` 再授权）。OAuth `state` 携带 `return_path`，回调后进入 `FRONTEND_URL/auth/callback?token=…&next=…` 再跳转项目首页。
+所有登录路径均仅使用 `https://github.com/login/oauth/authorize`（**不使用** `github.com/logout`）。分流页 `/login/switch` 提供「当前账号」与「其他账号」（可选 `login` 用户名 hint）。OAuth `state` 携带 `return_path`，回调后进入 `FRONTEND_URL/auth/callback?token=…&next=…` 再跳转项目首页。
 
 **限制与排错：**
 
 - OAuth App 为 **Development** 模式时，目标用户须在 GitHub OAuth App 的 allowlist 中（与会话无关）
-- GitHub 退出页请点**单个账号**旁的 Sign out，勿点 **Sign out from all accounts**（易落到 GitHub 首页）
-- 若中断在 GitHub 首页，回到 PRism 登录页点「继续 GitHub 授权」
+- 换号需浏览器已登录目标 GitHub 账号，或先在 GitHub 手动退出 / 使用无痕窗口
+- OAuth 流程中断时，回到 PRism 登录页点「继续 GitHub 授权」
 - 确认 `FRONTEND_URL` 与浏览器访问地址一致（如 `http://localhost:3000`）
 
 **内网试用、暂不想配 OAuth**：在 `deploy/.env` 设 `PRISM_AUTH_BYPASS=1` 后重启 gateway（**禁止用于公网生产**）。
@@ -281,7 +274,7 @@ docker compose -f deploy/docker-compose.yml restart gateway
 | 场景 | 依赖 |
 |------|------|
 | 本地开发 | Node.js 20+、npm 9+、Python 3.11+ |
-| **新机 Docker 部署** | **仅 Git + Docker**（`bash deploy/bootstrap.sh` 可引导装 Docker） |
+| **新机 Docker 部署** | **仅 Git + Docker**（`bash install.sh` 可引导装 Docker） |
 | 生产部署（已有 Docker） | Docker Engine + Compose v2 |
 | C++ 引擎（可选） | `deploy/deploy.sh --with-engine` 或本地 CMake |
 
@@ -477,8 +470,8 @@ Reviewly/
 │   ├── uninstall.sh / uninstall.ps1  # 安全卸载（仅 Reviewly 资源）
 │   ├── cleanup.sh / cleanup.ps1      # 卸载共享函数
 │   └── install-docker.sh     # Linux Docker 安装助手
-├── bootstrap.sh              # → deploy/bootstrap.sh
-├── deploy.bat / deploy.cmd / deploy.sh
+├── install.sh                # Linux/macOS 一键安装
+├── deploy.bat                # Windows 一键安装
 ├── docker-compose.yml        # 开发：仅 PostgreSQL
 ├── docs/                     # 开发者指南、路线图
 └── scripts/                  # 开发/部署脚本
@@ -499,7 +492,7 @@ Reviewly/
 | `npm run uninstall:purge` | 彻底卸载（含配置与 `node_modules`，需确认） |
 | `bash deploy/uninstall.sh` | Linux/macOS 卸载（同上） |
 | `.\deploy\uninstall.ps1` | Windows 卸载（PowerShell 7+） |
-| `bash deploy/bootstrap.sh` | **新机推荐**：引导装 Docker + 部署 |
+| `bash install.sh` | **新机推荐**：引导装 Docker + 部署 |
 | `npm run build` | 构建 shared + web |
 | `npm run lint` | ESLint + TypeScript 检查 |
 | `npm run test` | Gateway pytest |
@@ -521,9 +514,9 @@ Reviewly/
 | Docker 部署失败 | 确认 Docker 已运行；`docker compose -f deploy/docker-compose.yml logs gateway` |
 | apt：`kali-rolling Release` 没有 Release 文件 | **Kali/Parrot** 等滚动版不能用 Docker 官方 apt 源。`sudo rm /etc/apt/sources.list.d/docker.list` 后执行 `bash install.sh`；`install-docker.sh` 会自动选 `apt_distro`（`docker.io`） |
 | Docker 安装方式 | `deploy/install-docker.sh` 按系统智能选择：Kali→系统源、Ubuntu/Debian 稳定版→官方脚本、Fedora/RHEL→dnf 通道、Arch→pacman、openSUSE→zypper |
-| Linux `Permission denied` | 执行 `bash deploy/deploy.sh` 或 `bash deploy/bootstrap.sh` |
+| Linux `Permission denied` | 执行 `bash deploy/deploy.sh -y` 或 `bash install.sh` |
 | Linux `docker: permission denied` | `sudo usermod -aG docker $USER` 后重新登录 |
-| 新机无 Docker | `bash deploy/bootstrap.sh` 选 y 自动安装，或 `bash deploy/install-docker.sh` |
+| 新机无 Docker | `bash install.sh` 自动安装 Docker，或 `bash deploy/install-docker.sh` |
 | Engine 镜像构建失败 | 在 `deploy/.env` 设 `PRISM_STUB_ENGINE=1` 后重启 gateway |
 | 流式响应卡住 | 确保仅一个 Gateway 实例；长连接走 BFF 路由 |
 | Dashboard / 导入 500 | 检查 `/health` 中 `migrations`；执行迁移后重启 Gateway |

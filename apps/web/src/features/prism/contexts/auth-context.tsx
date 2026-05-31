@@ -29,8 +29,7 @@ interface AuthContextValue {
   loading: boolean
   isAuthenticated: boolean
   login: (returnTo?: string) => Promise<void>
-  loginWithOtherAccount: () => Promise<void>
-  startOtherAccountOAuth: (loginHint?: string) => Promise<void>
+  loginWithOtherAccount: (loginHint?: string) => Promise<void>
   logout: () => Promise<void>
   switchAccount: () => Promise<void>
   setTokenFromCallback: (token: string) => Promise<void>
@@ -101,21 +100,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = url
   }, [])
 
-  const loginWithOtherAccount = useCallback(async () => {
-    clearAuthSession()
-    setToken(null)
-    setUser(null)
-    window.location.href = "/login/switch"
-  }, [])
-
-  const startOtherAccountOAuth = useCallback(async (loginHint?: string) => {
+  const loginWithOtherAccount = useCallback(async (loginHint?: string) => {
     markOAuthPending()
     clearAuthSession()
     setToken(null)
     setUser(null)
+    const hint = loginHint?.trim()
     const { url } = await fetchGithubLoginUrl({
-      githubLogout: true,
-      login: loginHint,
+      login: hint || undefined,
       returnTo: "/",
     })
     window.location.href = url
@@ -133,11 +125,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const switchAccount = useCallback(async () => {
-    clearAuthSession()
-    setToken(null)
-    setUser(null)
-    window.location.href = "/login/switch"
-  }, [])
+    await loginWithOtherAccount()
+  }, [loginWithOtherAccount])
 
   const setTokenFromCallback = useCallback(
     async (newToken: string) => {
@@ -158,7 +147,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       login,
       loginWithOtherAccount,
-      startOtherAccountOAuth,
       logout,
       switchAccount,
       setTokenFromCallback,
@@ -171,7 +159,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       login,
       loginWithOtherAccount,
-      startOtherAccountOAuth,
       logout,
       switchAccount,
       setTokenFromCallback,
