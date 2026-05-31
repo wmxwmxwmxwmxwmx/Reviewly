@@ -3,7 +3,6 @@
 import { motion } from "framer-motion"
 import {
   ArrowRight,
-  BrainCircuit,
   Loader2,
   Menu,
   PlayCircle,
@@ -33,8 +32,6 @@ interface HeaderProps {
   diffLoading?: boolean
   prLoading?: boolean
   onMenuClick?: () => void
-  onOpenInsight?: () => void
-  insightOpen?: boolean
   analysisPhase?: AnalysisPhase
   findingsCounts?: { critical: number; warning: number; other: number }
 }
@@ -73,8 +70,6 @@ export function Header({
   diffLoading = false,
   prLoading = false,
   onMenuClick,
-  onOpenInsight,
-  insightOpen = false,
   analysisPhase = "idle",
   findingsCounts,
 }: HeaderProps) {
@@ -138,23 +133,6 @@ export function Header({
               </span>
             ) : null}
           </div>
-        ) : null}
-
-        {onOpenInsight ? (
-          <button
-            type="button"
-            onClick={onOpenInsight}
-            className={cn(
-              "flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium border transition-colors shrink-0",
-              insightOpen
-                ? "border-ai-blue/40 bg-ai-blue/15 text-ai-blue"
-                : "border-border text-muted-foreground hover:text-foreground hover:bg-accent",
-            )}
-            aria-label="评审洞察"
-          >
-            <BrainCircuit className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">评审洞察</span>
-          </button>
         ) : null}
 
         {onRescan && hasFindings ? (

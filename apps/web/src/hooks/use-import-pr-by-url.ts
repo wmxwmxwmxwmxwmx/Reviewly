@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 
 import type { ImportPullRequestResult } from "@reviewly/shared"
 
@@ -9,14 +9,9 @@ import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { debugApiError, debugApiLog } from "@/lib/debug-api-log"
 import { importPullRequestByUrl } from "@/lib/api/pull-requests"
 import { formatImportErrorMessage } from "@/lib/api/client"
-import {
-  adoptDismissKey,
-  shouldPromptExternalOnboard,
-} from "@/lib/repository-onboarding"
 import { zh } from "@/lib/i18n/zh"
 
 export const PENDING_AUTO_ANALYZE_KEY = "prism:pending-auto-analyze"
-export const PENDING_ONBOARD_REPO_KEY = "prism:pending-onboard-repo-id"
 
 export type { ImportPullRequestResult }
 
@@ -28,15 +23,6 @@ interface UseImportPrByUrlOptions {
   onSamePrImport?: () => void
 }
 
-function readPendingOnboardRepoId(): string | null {
-  if (typeof sessionStorage === "undefined") return null
-  const id = sessionStorage.getItem(PENDING_ONBOARD_REPO_KEY)
-  if (!id) return null
-  sessionStorage.removeItem(PENDING_ONBOARD_REPO_KEY)
-  if (sessionStorage.getItem(adoptDismissKey(id)) === "1") return null
-  return id
-}
-
 export function useImportPrByUrl(options: UseImportPrByUrlOptions = {}) {
   const { currentPrId, onBeforeImport, onImportSuccess, onImportError, onSamePrImport } =
     options
@@ -44,16 +30,6 @@ export function useImportPrByUrl(options: UseImportPrByUrlOptions = {}) {
   const { refresh: refreshRepos } = useReposStore()
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
-  const [pendingOnboardRepoId, setPendingOnboardRepoId] = useState<string | null>(null)
-
-  useEffect(() => {
-    const id = readPendingOnboardRepoId()
-    if (id) setPendingOnboardRepoId(id)
-  }, [])
-
-  const clearPendingOnboard = useCallback(() => {
-    setPendingOnboardRepoId(null)
-  }, [])
 
   const handleImportUrl = useCallback(
     async (url: string) => {
@@ -74,11 +50,6 @@ export function useImportPrByUrl(options: UseImportPrByUrlOptions = {}) {
         })
         await refreshRepos()
         onImportSuccess?.(result)
-
-        if (shouldPromptExternalOnboard(result)) {
-          sessionStorage.setItem(PENDING_ONBOARD_REPO_KEY, result.repoId)
-          setPendingOnboardRepoId(result.repoId)
-        }
 
         if (currentPrId && result.prId === currentPrId) {
           onSamePrImport?.()
@@ -111,7 +82,5 @@ export function useImportPrByUrl(options: UseImportPrByUrlOptions = {}) {
     importError,
     setImportError,
     handleImportUrl,
-    pendingOnboardRepoId,
-    clearPendingOnboard,
   }
 }

@@ -1,8 +1,9 @@
 "use client"
 
-import { Menu, Plus } from "lucide-react"
+import { Menu, Plus, Settings2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { ImportPRDialog } from "@/features/prism/components/import-pr-dialog"
 import {
   ReviewCenterNav,
@@ -36,6 +37,8 @@ export function ReviewCenterShell({
   onImport,
   reloadToken,
 }: ReviewCenterShellProps) {
+  const { navigate } = useNavigation()
+
   const content = (() => {
     switch (activeTab) {
       case "inbox":
@@ -96,15 +99,31 @@ export function ReviewCenterShell({
             </p>
           </div>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => onImportOpenChange(true)}
-          className="bg-ai-blue hover:bg-sky-300 text-primary-foreground shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          {zh.aiReview.importButton}
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 hidden sm:inline-flex"
+            onClick={() =>
+              navigate("governance", {
+                returnView: "ai-review",
+              })
+            }
+          >
+            <Settings2 className="w-3.5 h-3.5" />
+            {zh.nav.governance}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => onImportOpenChange(true)}
+            className="bg-ai-blue hover:bg-sky-300 text-primary-foreground"
+          >
+            <Plus className="w-4 h-4" />
+            {zh.aiReview.importButton}
+          </Button>
+        </div>
       </div>
 
       <ReviewCenterNav active={activeTab} onChange={onTabChange} />

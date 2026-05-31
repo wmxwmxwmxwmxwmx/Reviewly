@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   BookOpen,
   Settings,
+  Settings2,
   ChevronRight,
 } from "lucide-react"
 import { SidebarFooter } from "@/features/prism/components/sidebar-footer"
@@ -20,6 +21,7 @@ export type PrimaryNavView =
   | "dashboard"
   | "repos"
   | "ai-review"
+  | "governance"
   | "findings"
   | "settings"
 
@@ -29,7 +31,6 @@ export type HiddenNavView =
   | "security"
   | "performance"
   | "architecture"
-  | "governance"
   | "team"
 
 export type NavView = PrimaryNavView | HiddenNavView
@@ -42,6 +43,7 @@ const primaryNavItems: {
   { icon: LayoutDashboard, label: zh.nav.dashboard, view: "dashboard" },
   { icon: BookOpen, label: zh.nav.repos, view: "repos" },
   { icon: GitPullRequest, label: zh.nav.aiReview, view: "ai-review" },
+  { icon: Settings2, label: zh.nav.governance, view: "governance" },
   { icon: AlertTriangle, label: zh.nav.findings, view: "findings" },
   { icon: Settings, label: zh.nav.settings, view: "settings" },
 ]

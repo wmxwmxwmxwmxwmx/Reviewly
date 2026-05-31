@@ -37,6 +37,25 @@ const VERDICT_LABELS: Record<Exclude<AiReviewerVerdict, "pending">, string> = {
   block: "不建议合并",
 }
 
+const PLACEHOLDER_BULLET =
+  /^(严重|高|中|低|总计)[：:]\s*0\s*$|共\s*0\s*项发现|未发现阻塞合并项/i
+
+/** Whether PR-level analysis has real output worth showing in Copilot / task cards. */
+export function isPrAnalysisComplete(input: {
+  findings: AnalysisFinding[]
+  generatedSummary?: string
+  latest?: AnalysisSummary | null
+  analyzing?: boolean
+  restoring?: boolean
+}): boolean {
+  if (input.analyzing || input.restoring) return false
+  return (
+    input.findings.length > 0 ||
+    Boolean(input.generatedSummary?.trim()) ||
+    input.latest?.mergeRecommendation != null
+  )
+}
+
 /** Align badge verdict with the generated AI summary report when possible. */
 export function inferVerdictFromSummaryText(text: string): AiReviewerVerdict | null {
   const normalized = text.trim()
@@ -55,14 +74,12 @@ export function inferVerdictFromSummaryText(text: string): AiReviewerVerdict | n
 
 function applyVerdict(
   verdict: AiReviewerVerdict,
-  scores: AiReviewerOpinion["scores"],
   findings: AnalysisFinding[],
 ): Pick<AiReviewerOpinion, "verdict" | "verdictLabel" | "suggestChanges"> {
   const suggestChanges =
     verdict === "block" ||
     verdict === "request_changes" ||
-    findings.some((f) => f.severity === "critical") ||
-    (verdict !== "pending" && scores.securityScore < 60 && verdict !== "approve")
+    findings.some((f) => f.severity === "critical")
 
   const verdictLabel =
     verdict === "pending" ? "待完成分析" : VERDICT_LABELS[verdict]
@@ -88,21 +105,16 @@ function deriveVerdictFromFindings(findings: AnalysisFinding[]): AiReviewerVerdi
   return "approve"
 }
 
-function countByType(findings: AnalysisFinding[]) {
-  const counts: Record<string, number> = {}
-  for (const f of findings) {
-    counts[f.type] = (counts[f.type] ?? 0) + 1
-  }
-  return counts
-}
-
-function extractMarkdownBullets(summary: string, max = 4): string[] {
+function extractMarkdownBullets(summary: string, max = 5): string[] {
   const lines = summary.split("\n")
   const bullets: string[] = []
   for (const line of lines) {
     const trimmed = line.trim()
     if (trimmed.startsWith("- ")) {
-      bullets.push(trimmed.slice(2).replace(/\*\*/g, "").trim())
+      const text = trimmed.slice(2).replace(/\*\*/g, "").trim()
+      if (text && !PLACEHOLDER_BULLET.test(text)) {
+        bullets.push(text)
+      }
     }
     if (bullets.length >= max) break
   }
@@ -119,19 +131,48 @@ function stripMarkdown(text: string, maxLen: number): string {
   return plain.length > maxLen ? `${plain.slice(0, maxLen)}…` : plain
 }
 
+function buildReasonPoints(input: {
+  findings: AnalysisFinding[]
+  generatedSummary?: string
+  latest?: AnalysisSummary | null
+  prRef: string
+}): string[] {
+  const { findings, generatedSummary, latest, prRef } = input
+  const points: string[] = []
+
+  if (generatedSummary?.trim()) {
+    const fromLlm = extractMarkdownBullets(generatedSummary, 5)
+    if (fromLlm.length > 0) return fromLlm
+  }
+
+  if (findings.length > 0) {
+    const critical = findings.filter((f) => f.severity === "critical").length
+    const high = findings.filter((f) => f.severity === "high").length
+    points.push(
+      `已对 ${prRef} 完成规则扫描：共 ${findings.length} 项发现（严重 ${critical} · 高 ${high}）。`,
+    )
+    for (const f of sortFindings(findings).slice(0, 3)) {
+      const loc = f.file ? `（${f.file}${f.line ? `:${f.line}` : ""}）` : ""
+      points.push(`[${TYPE_LABELS[f.type]}·${f.severity}] ${f.title}${loc}`)
+    }
+    return points.slice(0, 5)
+  }
+
+  if (latest?.summary?.trim()) {
+    const fromSummary = extractMarkdownBullets(latest.summary, 5)
+    if (fromSummary.length > 0) return fromSummary
+  }
+
+  return points
+}
+
 export interface BuildAiReviewerOpinionInput {
   findings: AnalysisFinding[]
   latest?: AnalysisSummary | null
   prTitle?: string
   repoLabel?: string
   prNumber?: number
-  fallbackScores?: {
-    riskScore?: number
-    securityScore?: number
-    performanceScore?: number
-    maintainabilityScore?: number
-  }
-  aiSummary?: string
+  generatedSummary?: string
   hasCompletedAnalysis?: boolean
 }
 
@@ -142,39 +183,18 @@ export function buildAiReviewerOpinion(input: BuildAiReviewerOpinionInput): AiRe
     prTitle,
     repoLabel,
     prNumber,
-    fallbackScores = {},
-    aiSummary,
+    generatedSummary,
     hasCompletedAnalysis = false,
   } = input
 
   const scores = {
-    riskScore: latest?.riskScore ?? fallbackScores.riskScore ?? 0,
-    securityScore: latest?.securityScore ?? fallbackScores.securityScore ?? 0,
-    performanceScore: latest?.performanceScore ?? fallbackScores.performanceScore ?? 0,
-    maintainabilityScore:
-      latest?.maintainabilityScore ?? fallbackScores.maintainabilityScore ?? 0,
+    riskScore: latest?.riskScore ?? 0,
+    securityScore: latest?.securityScore ?? 0,
+    performanceScore: latest?.performanceScore ?? 0,
+    maintainabilityScore: latest?.maintainabilityScore ?? 0,
   }
 
-  const analyzed = hasCompletedAnalysis || Boolean(latest) || findings.length > 0
-
-  let verdict: AiReviewerVerdict = "pending"
-  if (latest?.mergeRecommendation) {
-    verdict = latest.mergeRecommendation
-  } else if (findings.length > 0) {
-    verdict = deriveVerdictFromFindings(findings)
-  } else if (analyzed && scores.riskScore > 0) {
-    if (scores.riskScore >= 70) verdict = "block"
-    else if (scores.riskScore >= 40 || scores.securityScore < 60) verdict = "request_changes"
-    else verdict = "approve"
-  }
-
-  const summarySource = aiSummary?.trim() || latest?.summary?.trim() || ""
-  const fromReport = summarySource ? inferVerdictFromSummaryText(summarySource) : null
-  if (fromReport) {
-    verdict = fromReport
-  }
-
-  let { verdictLabel, suggestChanges } = applyVerdict(verdict, scores, findings)
+  const analyzed = hasCompletedAnalysis
 
   const prRef =
     repoLabel && prNumber != null
@@ -183,84 +203,30 @@ export function buildAiReviewerOpinion(input: BuildAiReviewerOpinionInput): AiRe
         ? `「${prTitle.slice(0, 48)}${prTitle.length > 48 ? "…" : ""}」`
         : "本次 PR"
 
-  const points: string[] = []
-
-  if (!analyzed && !aiSummary?.trim()) {
-    points.push("尚未对该 PR 运行代码分析，请先执行「分析」以生成基于改动的评审意见。")
+  if (!analyzed) {
     return {
-      ...applyVerdict("pending", scores, findings),
-      points,
+      ...applyVerdict("pending", findings),
+      points: ["请先点击「开始分析」生成基于改动的评审意见。"],
       scores,
       llmInsight: undefined,
     }
   }
 
-  if (!analyzed && aiSummary?.trim()) {
-    const reportVerdict = inferVerdictFromSummaryText(aiSummary) ?? "pending"
-    return {
-      ...applyVerdict(reportVerdict, scores, findings),
-      points: [],
-      scores,
-      llmInsight: stripMarkdown(aiSummary, 320),
-    }
+  let verdict: AiReviewerVerdict = "pending"
+  if (latest?.mergeRecommendation) {
+    verdict = latest.mergeRecommendation
+  } else if (findings.length > 0) {
+    verdict = deriveVerdictFromFindings(findings)
+  } else if (generatedSummary?.trim()) {
+    verdict = inferVerdictFromSummaryText(generatedSummary) ?? "pending"
   }
 
-  const critical = findings.filter((f) => f.severity === "critical")
-  const high = findings.filter((f) => f.severity === "high")
-  const byType = countByType(findings)
-
-  points.push(
-    `已对 ${prRef} 完成规则扫描：共 ${findings.length} 项发现（严重 ${critical.length} · 高 ${high.length}）。`,
-  )
-
-  if (verdict === "approve") {
-    points.push("综合风险评分与多维得分，当前改动未发现阻塞合并项。")
-  } else if (verdict === "block") {
-    points.push(
-      `风险评分 ${scores.riskScore} 达到阻断阈值，存在必须在合并前修复的问题。`,
-    )
-  } else if (verdict === "request_changes") {
-    points.push(
-      `风险评分 ${scores.riskScore}，建议在合并前处理下列高优先级项。`,
-    )
-  }
-
-  if (scores.securityScore < 60) {
-    const n = byType.security ?? 0
-    points.push(
-      n > 0
-        ? `安全评分 ${scores.securityScore}：检出 ${n} 项安全问题，需优先修复。`
-        : `安全评分 ${scores.securityScore} 偏低，请复核鉴权、输入校验与敏感数据处理。`,
-    )
-  }
-
-  if (scores.performanceScore < 70 && (byType.performance ?? 0) > 0) {
-    points.push(
-      `性能评分 ${scores.performanceScore}：存在 ${byType.performance} 项性能相关发现，关注热点路径与资源占用。`,
-    )
-  }
-
-  if (scores.maintainabilityScore < 70 && (byType.architecture ?? 0) + (byType.maintainability ?? 0) > 0) {
-    const archN = (byType.architecture ?? 0) + (byType.maintainability ?? 0)
-    points.push(
-      `架构/可维护性评分 ${scores.maintainabilityScore}：${archN} 项结构或复杂度问题，建议拆分或收敛依赖。`,
-    )
-  }
-
-  const topFindings = sortFindings(findings).slice(0, 3)
-  for (const f of topFindings) {
-    const loc = f.file ? `（${f.file}${f.line ? `:${f.line}` : ""}）` : ""
-    points.push(
-      `[${TYPE_LABELS[f.type]}·${f.severity}] ${f.title}${loc}`,
-    )
-  }
-
-  if (topFindings.length === 0 && findings.length === 0 && latest?.summary) {
-    const fromSummary = extractMarkdownBullets(latest.summary)
-    for (const line of fromSummary) {
-      if (line && !points.includes(line)) points.push(line)
-    }
-  }
+  const points = buildReasonPoints({
+    findings,
+    generatedSummary,
+    latest,
+    prRef,
+  })
 
   const engineBullets = latest?.summary ? extractMarkdownBullets(latest.summary, 2) : []
   const analysisExcerpt =
@@ -271,17 +237,15 @@ export function buildAiReviewerOpinion(input: BuildAiReviewerOpinionInput): AiRe
         : undefined
 
   const llmInsight =
-    aiSummary && aiSummary.trim().length > 40
-      ? stripMarkdown(aiSummary, 320)
+    generatedSummary && generatedSummary.trim().length > 40
+      ? stripMarkdown(generatedSummary, 320)
       : undefined
 
-  ;({ verdict, verdictLabel, suggestChanges } = applyVerdict(verdict, scores, findings))
+  const applied = applyVerdict(verdict, findings)
 
   return {
-    verdict,
-    verdictLabel,
-    suggestChanges,
-    points: points.slice(0, 8),
+    ...applied,
+    points: points.slice(0, 5),
     analysisExcerpt,
     llmInsight,
     scores,

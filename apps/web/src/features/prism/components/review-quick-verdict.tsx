@@ -53,8 +53,7 @@ export function ReviewQuickVerdict({
     prTitle,
     repoLabel,
     prNumber,
-    fallbackScores,
-    aiSummary,
+    generatedSummary: aiSummary,
     hasCompletedAnalysis,
   })
 

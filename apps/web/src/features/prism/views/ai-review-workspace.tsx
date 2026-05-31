@@ -4,10 +4,8 @@ import { useCallback, useEffect, useState } from "react"
 import { ArrowLeft, Menu } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { ExternalRepoOnboardDialog } from "@/features/prism/components/external-repo-onboard-dialog"
 import type { ReviewCenterTab } from "@/features/prism/components/review-center-nav"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
-import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { AIReviewView } from "@/features/prism/views/ai-review-view"
 import { ReviewCenterShell } from "@/features/prism/views/review-center/review-center-shell"
 import { useImportPrByUrl } from "@/hooks/use-import-pr-by-url"
@@ -29,7 +27,6 @@ export function AiReviewWorkspace({
   onMenuClick,
 }: AiReviewWorkspaceProps) {
   const { navigate, repoId: urlRepoId } = useNavigation()
-  const { refresh: refreshRepos } = useReposStore()
   const { data: currentPr } = usePullRequest(prId)
   const { toast } = useToast()
   const [importOpen, setImportOpen] = useState(false)
@@ -46,12 +43,7 @@ export function AiReviewWorkspace({
     setHistoryReloadToken((n) => n + 1)
   }, [])
 
-  const {
-    importing,
-    handleImportUrl,
-    pendingOnboardRepoId,
-    clearPendingOnboard,
-  } = useImportPrByUrl({
+  const { importing, handleImportUrl } = useImportPrByUrl({
     currentPrId: prId ?? undefined,
     onImportSuccess: () => {
       toast({ title: zh.aiReview.importSuccess })
@@ -106,42 +98,22 @@ export function AiReviewWorkspace({
 
   if (!prId) {
     return (
-      <>
-        <ExternalRepoOnboardDialog
-          repoId={pendingOnboardRepoId}
-          open={Boolean(pendingOnboardRepoId)}
-          onOpenChange={(open) => {
-            if (!open) clearPendingOnboard()
-          }}
-          onOnboarded={() => void refreshRepos()}
-        />
-        <ReviewCenterShell
-          activeTab={centerTab}
-          onTabChange={handleTabChange}
-          onMenuClick={onMenuClick}
-          onSelectPr={handleSelectPr}
-          importOpen={importOpen}
-          onImportOpenChange={setImportOpen}
-          importing={importing}
-          onImport={handleImport}
-          reloadToken={historyReloadToken}
-        />
-      </>
+      <ReviewCenterShell
+        activeTab={centerTab}
+        onTabChange={handleTabChange}
+        onMenuClick={onMenuClick}
+        onSelectPr={handleSelectPr}
+        importOpen={importOpen}
+        onImportOpenChange={setImportOpen}
+        importing={importing}
+        onImport={handleImport}
+        reloadToken={historyReloadToken}
+      />
     )
   }
 
   return (
     <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
-      <ExternalRepoOnboardDialog
-        repoId={pendingOnboardRepoId}
-        open={Boolean(pendingOnboardRepoId)}
-        onOpenChange={(open) => {
-          if (!open) clearPendingOnboard()
-        }}
-        repoLabel={currentPr?.repo}
-        onOnboarded={() => void refreshRepos()}
-      />
-
       <div className="flex items-center gap-2 px-4 sm:px-5 py-2.5 border-b border-border bg-panel/95 backdrop-blur-sm shrink-0">
         {onMenuClick ? (
           <button

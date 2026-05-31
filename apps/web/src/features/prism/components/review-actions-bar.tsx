@@ -195,8 +195,7 @@ export function ReviewActionsBar({
         prTitle,
         repoLabel,
         prNumber,
-        fallbackScores,
-        aiSummary,
+        generatedSummary: aiSummary,
         hasCompletedAnalysis,
       }),
     [
@@ -205,7 +204,6 @@ export function ReviewActionsBar({
       prTitle,
       repoLabel,
       prNumber,
-      fallbackScores,
       aiSummary,
       hasCompletedAnalysis,
     ],

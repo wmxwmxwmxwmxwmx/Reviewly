@@ -1,29 +1,32 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Loader2, Shield } from "lucide-react"
 
 import type { PullRequest, Repository } from "@reviewly/shared"
 
+import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { useRepositoryJobs } from "@/hooks/use-repository-jobs"
 import { adoptRepository } from "@/lib/api/repos"
 import { zh } from "@/lib/i18n/zh"
 import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
+import { adoptDismissKey } from "@/lib/repository-onboarding"
 import { cn } from "@/lib/utils"
-
-function dismissKey(repoId: string) {
-  return `prism:dismiss-adopt:${repoId}`
-}
 
 function isDismissed(repoId: string): boolean {
   if (typeof sessionStorage === "undefined") return false
-  return sessionStorage.getItem(dismissKey(repoId)) === "1"
+  return sessionStorage.getItem(adoptDismissKey(repoId)) === "1"
 }
 
-export function shouldShowAdoptBanner(pr: PullRequest | null | undefined): boolean {
+export function shouldShowAdoptBanner(
+  pr: PullRequest | null | undefined,
+  repoFromStore?: Repository | null,
+): boolean {
   if (!pr?.repoId) return false
   if (isDismissed(pr.repoId)) return false
-  return !isRepositoryManaged(pr)
+  if (isRepositoryManaged(pr)) return false
+  if (repoFromStore && isRepositoryManaged(repoFromStore)) return false
+  return true
 }
 
 interface AdoptRepoBannerProps {
@@ -32,11 +35,17 @@ interface AdoptRepoBannerProps {
 }
 
 export function AdoptRepoBanner({ pr, onAdopted }: AdoptRepoBannerProps) {
+  const { repos, refresh: refreshRepos } = useReposStore()
   const [hidden, setHidden] = useState(false)
   const [adopting, setAdopting] = useState(false)
   const [adoptError, setAdoptError] = useState<string | null>(null)
   const [adopted, setAdopted] = useState(false)
   const repoId = pr.repoId
+
+  const repoFromStore = useMemo(
+    () => (repoId ? repos.find((r) => r.id === repoId) : undefined),
+    [repos, repoId],
+  )
 
   const { latest, active, refresh } = useRepositoryJobs(
     adopted ? repoId : null,
@@ -48,7 +57,7 @@ export function AdoptRepoBanner({ pr, onAdopted }: AdoptRepoBannerProps) {
   }, [repoId])
 
   const handleDismiss = useCallback(() => {
-    if (repoId) sessionStorage.setItem(dismissKey(repoId), "1")
+    if (repoId) sessionStorage.setItem(adoptDismissKey(repoId), "1")
     setHidden(true)
   }, [repoId])
 
@@ -59,9 +68,10 @@ export function AdoptRepoBanner({ pr, onAdopted }: AdoptRepoBannerProps) {
     try {
       const result = await adoptRepository(repoId)
       if (typeof sessionStorage !== "undefined") {
-        sessionStorage.removeItem(dismissKey(repoId))
+        sessionStorage.removeItem(adoptDismissKey(repoId))
       }
       setAdopted(true)
+      await refreshRepos()
       onAdopted?.(result.repository)
       void refresh()
     } catch (e: unknown) {
@@ -69,14 +79,14 @@ export function AdoptRepoBanner({ pr, onAdopted }: AdoptRepoBannerProps) {
     } finally {
       setAdopting(false)
     }
-  }, [repoId, adopting, onAdopted, refresh])
+  }, [repoId, adopting, onAdopted, refresh, refreshRepos])
 
-  if (hidden || !shouldShowAdoptBanner(pr)) return null
+  if (hidden || !shouldShowAdoptBanner(pr, repoFromStore)) return null
 
   const repoLabel = pr.repo ?? pr.repoId
 
   return (
-    <div className="mx-5 mt-3 rounded-md border border-ai-blue/30 bg-ai-blue/5 px-4 py-3 text-sm">
+    <div className="rounded-md border border-ai-blue/30 bg-ai-blue/5 px-4 py-3 text-sm">
       <div className="flex items-start gap-3">
         <Shield className="mt-0.5 h-4 w-4 shrink-0 text-ai-blue" />
         <div className="min-w-0 flex-1 space-y-2">

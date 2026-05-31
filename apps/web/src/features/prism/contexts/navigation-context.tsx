@@ -65,6 +65,10 @@ export type NavParams = {
   reviewStatus?: string
   /** PR list preset filter: high-risk | my-created */
   prFilter?: string
+  /** View to return to from governance (e.g. ai-review). */
+  returnView?: NavView
+  /** PR id to restore when returning from governance. */
+  returnPrId?: string
 }
 
 interface NavigationContextValue {
@@ -76,6 +80,8 @@ interface NavigationContextValue {
   prFilter: string | null
   findingsTab: FindingsTab
   findingId: string | null
+  returnView: NavView | null
+  returnPrId: string | null
   navigate: (view: NavView, params?: NavParams) => void
 }
 
@@ -121,6 +127,8 @@ function buildQuery(
   if (params?.reviewTab) qs.set("reviewTab", params.reviewTab)
   if (params?.reviewStatus) qs.set("reviewStatus", params.reviewStatus)
   if (params?.prFilter) qs.set("prFilter", params.prFilter)
+  if (params?.returnView) qs.set("returnView", params.returnView)
+  if (params?.returnPrId) qs.set("returnPrId", params.returnPrId)
 
   return qs.toString()
 }
@@ -153,6 +161,11 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const reviewTab = searchParams.get("reviewTab")
   const reviewStatus = searchParams.get("reviewStatus")
   const prFilter = searchParams.get("prFilter")
+  const returnViewParam = searchParams.get("returnView")
+  const returnView = isNavView(returnViewParam) ? returnViewParam : null
+  const returnPrIdRaw = searchParams.get("returnPrId")
+  const returnPrId =
+    returnPrIdRaw && !isLegacyDemoPrId(returnPrIdRaw) ? returnPrIdRaw : null
 
   const prId =
     activeView === "ai-review" && urlPrId && !isLegacyDemoPrId(urlPrId) ? urlPrId : null
@@ -205,9 +218,23 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       prFilter,
       findingsTab,
       findingId,
+      returnView,
+      returnPrId,
       navigate,
     }),
-    [activeView, prId, repoId, reviewTab, reviewStatus, prFilter, findingsTab, findingId, navigate],
+    [
+      activeView,
+      prId,
+      repoId,
+      reviewTab,
+      reviewStatus,
+      prFilter,
+      findingsTab,
+      findingId,
+      returnView,
+      returnPrId,
+      navigate,
+    ],
   )
 
   return (

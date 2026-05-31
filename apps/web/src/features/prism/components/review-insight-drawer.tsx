@@ -5,8 +5,8 @@ import { ChevronDown, ChevronRight, X } from "lucide-react"
 import type { AnalysisFinding, AnalysisSummary, AiUsageMetrics, PullRequest } from "@reviewly/shared"
 
 import { AISummary } from "@/features/prism/components/ai-summary"
-import { ReviewQuickVerdict } from "@/features/prism/components/review-quick-verdict"
 import { ReviewTimeline } from "@/features/prism/components/review-timeline"
+import type { AiReviewerOpinion } from "@/lib/ai/ai-reviewer-opinion"
 import { cn } from "@/lib/utils"
 
 interface ReviewInsightDrawerProps {
@@ -14,16 +14,10 @@ interface ReviewInsightDrawerProps {
   onClose: () => void
   prId: string
   pr: PullRequest
+  opinion: AiReviewerOpinion
   findings: AnalysisFinding[]
   latest?: AnalysisSummary | null
   generatedSummary?: string
-  hasCompletedAnalysis?: boolean
-  fallbackScores?: {
-    riskScore?: number
-    securityScore?: number
-    performanceScore?: number
-    maintainabilityScore?: number
-  }
   scanning?: boolean
   streaming?: boolean
   model?: string
@@ -40,12 +34,8 @@ export function ReviewInsightDrawer({
   open,
   onClose,
   prId,
-  pr,
-  findings,
-  latest,
+  opinion,
   generatedSummary,
-  hasCompletedAnalysis,
-  fallbackScores,
   scanning,
   streaming,
   model,
@@ -62,12 +52,14 @@ export function ReviewInsightDrawer({
 
   if (!open) return null
 
+  const hasReport = Boolean(generatedSummary?.trim() || jobSummary?.trim())
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <button
         type="button"
         className="flex-1 bg-black/60"
-        aria-label="关闭评审洞察"
+        aria-label="关闭完整报告"
         onClick={onClose}
       />
       <aside
@@ -77,7 +69,17 @@ export function ReviewInsightDrawer({
         )}
       >
         <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-border">
-          <span className="text-sm font-semibold text-foreground">评审洞察</span>
+          <div>
+            <span className="text-sm font-semibold text-foreground">完整 AI 报告</span>
+            <p
+              className={cn(
+                "text-[11px] mt-0.5",
+                opinion.suggestChanges ? "text-risk-high" : "text-muted-foreground",
+              )}
+            >
+              {opinion.verdictLabel}
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -89,30 +91,24 @@ export function ReviewInsightDrawer({
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
-          <ReviewQuickVerdict
-            findings={findings}
-            latest={latest}
-            prTitle={pr.title}
-            repoLabel={pr.repo}
-            prNumber={pr.number}
-            aiSummary={generatedSummary}
-            hasCompletedAnalysis={hasCompletedAnalysis}
-            fallbackScores={fallbackScores}
-          />
-
-          <AISummary
-            variant="panel"
-            defaultDeepOpen
-            scanning={scanning}
-            streaming={streaming}
-            model={model}
-            generatedSummary={generatedSummary}
-            hasAnalysis={hasAnalysis}
-            restoring={restoring}
-            error={error}
-            usage={usage}
-            onGoToSettings={onGoToSettings}
-          />
+          {hasReport ? (
+            <AISummary
+              variant="panel"
+              defaultDeepOpen
+              scanning={scanning}
+              streaming={streaming}
+              model={model}
+              generatedSummary={generatedSummary}
+              jobSummary={jobSummary}
+              hasAnalysis={hasAnalysis}
+              restoring={restoring}
+              error={error}
+              usage={usage}
+              onGoToSettings={onGoToSettings}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground py-4">暂无 AI 分析报告，请先运行代码分析。</p>
+          )}
 
           {jobSummary && jobSummary !== generatedSummary ? (
             <div className="rounded-lg border border-border bg-card overflow-hidden">

@@ -2,14 +2,10 @@ import type { PullRequestListItem, ReviewStatus } from "@reviewly/shared"
 
 import type { PrioritySettings } from "@/features/prism/lib/governance-priority-settings"
 import type { ReviewTaskStoreSnapshot } from "@/features/prism/lib/review-task-store"
-import {
-  isDeferred,
-  isReturnedToInbox,
-} from "@/features/prism/lib/review-task-store"
+import { isDeferred, isReturnedToInbox } from "@/features/prism/lib/review-task-store"
 import {
   mapApiRiskToZh,
   type ReviewTask,
-  type ReviewTaskAction,
   type ReviewTaskQueue,
   type ReviewTaskSignals,
 } from "@/features/prism/types/review-task"
@@ -20,18 +16,14 @@ const CI_PATTERN = /\b(ci|build fail|check fail|pipeline fail|tests? fail)\b/i
 const TESTS_MISSING_PATTERN = /缺少测试|无测试|test coverage|missing test|no test/i
 const DOCS_PATTERN = /\b(docs?|readme|typo|format|chore\(deps\))\b/i
 
+export type PrMetrics = {
+  branch?: string
+  filesChanged?: number
+}
+
 function combinedText(pr: PullRequestListItem): string {
   const summary = pr.aiSummary?.content ?? ""
   return `${pr.title} ${summary}`.toLowerCase()
-}
-
-function estimateFilesChanged(pr: PullRequestListItem): number {
-  const score = pr.riskScore ?? 0
-  if (score >= 80) return 10
-  if (score >= 60) return 7
-  if (score >= 40) return 4
-  if (score >= 20) return 2
-  return 1
 }
 
 function estimateComplexity(pr: PullRequestListItem, filesChanged: number): number {
@@ -50,7 +42,7 @@ function estimateMinutes(
   else if (risk === "中") mins = 3
   if (signals.auth || signals.payment) mins += 2
   if (signals.ciFailed) mins += 2
-  if (filesChanged > 5) mins += 1
+  if (filesChanged > 0 && filesChanged > 5) mins += 1
   return Math.min(15, mins)
 }
 
@@ -58,7 +50,9 @@ function enhanceSignals(pr: PullRequestListItem, filesChanged: number): ReviewTa
   const text = combinedText(pr)
   const docsOnly = DOCS_PATTERN.test(pr.title) || DOCS_PATTERN.test(text)
   const smallChange =
-    filesChanged <= 2 && (pr.riskLevel === "low" || pr.riskLevel === "medium")
+    filesChanged > 0 &&
+    filesChanged <= 2 &&
+    (pr.riskLevel === "low" || pr.riskLevel === "medium")
   return {
     auth: AUTH_PATTERN.test(text),
     payment: PAYMENT_PATTERN.test(text),
@@ -70,38 +64,25 @@ function enhanceSignals(pr: PullRequestListItem, filesChanged: number): ReviewTa
   }
 }
 
-function buildPriorityReason(signals: ReviewTaskSignals, risk: ReviewTask["riskLevel"]): string {
-  const parts: string[] = []
-  if (signals.payment) parts.push("支付")
-  if (signals.auth) parts.push("auth")
-  if (signals.ciFailed) parts.push("CI失败")
-  if (signals.testsMissing) parts.push("测试缺失")
-  if (signals.hotFiles && risk !== "低") parts.push("热点文件")
-  if (signals.docsOnly) parts.push("文档类")
-  if (signals.smallChange) parts.push("小改动")
-  if (parts.length === 0) {
-    if (risk === "严重" || risk === "高") return `高风险（${risk}）`
-    return "常规评审"
-  }
-  return parts.join(" + ")
-}
-
 function calcScore(
   pr: PullRequestListItem,
   signals: ReviewTaskSignals,
   settings: PrioritySettings,
   store: ReviewTaskStoreSnapshot,
+  realFilesChanged: number | undefined,
 ): number {
   const risk = mapApiRiskToZh(pr.riskLevel)
-  const filesChanged = estimateFilesChanged(pr)
-  const complexity = estimateComplexity(pr, filesChanged)
+  const filesForComplexity = realFilesChanged ?? 0
+  const complexity = estimateComplexity(pr, filesForComplexity)
 
   let score = settings.riskWeights[risk]
   if (signals.ciFailed) score += settings.ciFailed
   if (signals.auth || signals.payment) score += settings.authPayment
   if (signals.testsMissing) score += settings.testsMissing
   score += complexity * settings.complexityFactor
-  score += filesChanged * settings.filesFactor
+  if (realFilesChanged !== undefined && realFilesChanged > 0) {
+    score += realFilesChanged * settings.filesFactor
+  }
   if (signals.docsOnly) score -= settings.docsOnlyPenalty
   if (signals.smallChange) score -= settings.smallChangePenalty
   if (isDeferred(store, pr.id)) score *= settings.deferredMultiplier
@@ -119,27 +100,6 @@ function assignQueue(
   return "inbox"
 }
 
-function addRecommendation(
-  pr: PullRequestListItem,
-  signals: ReviewTaskSignals,
-  risk: ReviewTask["riskLevel"],
-  store: ReviewTaskStoreSnapshot,
-): ReviewTaskAction {
-  if (isDeferred(store, pr.id)) return "延后"
-  if (pr.reviewStatus === "CHANGES_REQUESTED") return "要求修改"
-  if (
-    (risk === "严重" || risk === "高") &&
-    (signals.auth || signals.payment || signals.ciFailed)
-  ) {
-    return "需要审查"
-  }
-  if (risk === "低" && !signals.auth && !signals.payment && !signals.ciFailed) {
-    return "通过"
-  }
-  if (signals.ciFailed || signals.hotFiles) return "需要审查"
-  return "需要审查"
-}
-
 function matchesIgnoredPattern(title: string, patterns: string[]): boolean {
   const lower = title.toLowerCase()
   return patterns.some((p) => lower.includes(p.toLowerCase()))
@@ -155,27 +115,29 @@ function sortTasks(a: ReviewTask, b: ReviewTask, store: ReviewTaskStoreSnapshot)
 export type ComputePriorityOptions = {
   settings: PrioritySettings
   store: ReviewTaskStoreSnapshot
-  branchCache?: Map<string, string>
+  metricsCache?: Map<string, PrMetrics>
 }
 
+/** Ranker: score + signals + queue only. AI recommendation enriched separately. */
 export function computePriority(
   prs: PullRequestListItem[],
   options: ComputePriorityOptions,
 ): ReviewTask[] {
-  const { settings, store, branchCache } = options
+  const { settings, store, metricsCache } = options
 
   const tasks = prs
     .filter((pr) => !store.dismissed.includes(pr.id))
     .map((pr) => {
-      const filesChanged = estimateFilesChanged(pr)
-      const signals = enhanceSignals(pr, filesChanged)
+      const metrics = metricsCache?.get(pr.id)
+      const realFiles = metrics?.filesChanged
+      const hasRealFiles = realFiles !== undefined && realFiles > 0
+      const filesChanged = hasRealFiles ? realFiles : 0
+      const signals = enhanceSignals(pr, hasRealFiles ? filesChanged : 0)
       const riskLevel = mapApiRiskToZh(pr.riskLevel)
-      const priorityScore = calcScore(pr, signals, settings, store)
-      const priorityReason = buildPriorityReason(signals, riskLevel)
-      const recommendedAction = addRecommendation(pr, signals, riskLevel, store)
+      const priorityScore = calcScore(pr, signals, settings, store, realFiles)
       const queue = assignQueue(pr, store)
       const complexity = estimateComplexity(pr, filesChanged)
-      const branch = branchCache?.get(pr.id) ?? "—"
+      const branch = metrics?.branch ?? "—"
 
       return {
         prId: pr.id,
@@ -184,11 +146,13 @@ export function computePriority(
         branch,
         riskLevel,
         priorityScore,
-        priorityReason,
-        recommendedAction,
+        priorityReason: "",
+        recommendedAction: "需要审查",
         queue,
+        hasRealAi: false,
         aiSummary: pr.aiSummary?.content ?? "",
         filesChanged,
+        hasRealFiles,
         complexity,
         estimatedMinutes: estimateMinutes(riskLevel, signals, filesChanged),
         signals,

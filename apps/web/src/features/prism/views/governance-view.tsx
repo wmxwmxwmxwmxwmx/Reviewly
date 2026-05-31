@@ -2,10 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { GitBranch, CheckCircle2, AlertTriangle, Plus, Pencil, Trash2, RotateCcw } from "lucide-react"
+import {
+  ArrowLeft,
+  GitBranch,
+  CheckCircle2,
+  AlertTriangle,
+  Plus,
+  Pencil,
+  Trash2,
+  RotateCcw,
+} from "lucide-react"
 import type { GovernanceRule } from "@reviewly/shared"
 
 import { Button } from "@/components/ui/button"
+import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { GovernanceRuleDialog } from "@/features/prism/components/governance-rule-dialog"
 import { useGovernance } from "@/hooks/use-governance"
 import { useReviewTasks } from "@/hooks/use-review-tasks"
@@ -27,6 +37,7 @@ const matchTypeLabel: Record<string, string> = {
 }
 
 export function GovernanceView() {
+  const { navigate, returnView, returnPrId } = useNavigation()
   const { rules, loading, error, addRule, editRule, removeRule } = useGovernance({
     includeDisabled: true,
   })
@@ -77,8 +88,30 @@ export function GovernanceView() {
     restoreAllDone()
   }, [restoreAllDone])
 
+  const handleBack = () => {
+    const view = returnView ?? "ai-review"
+    if (view === "ai-review") {
+      navigate("ai-review", {
+        prId: returnPrId ?? undefined,
+        reviewTab: "inbox",
+      })
+      return
+    }
+    navigate(view)
+  }
+
   return (
     <div className="p-5 space-y-5">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <button
+          type="button"
+          onClick={handleBack}
+          className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          返回
+        </button>
+      </div>
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">工程治理</h1>

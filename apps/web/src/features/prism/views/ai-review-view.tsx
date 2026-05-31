@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react"
 import { Header } from "@/features/prism/components/header"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { useAIReviewSession } from "@/features/prism/contexts/ai-review-session-context"
-import { AISummary } from "@/features/prism/components/ai-summary"
+import { computePriority } from "@/features/prism/ai/priority-ranker"
 import { DiffViewer } from "@/features/prism/components/diff-viewer"
 import {
   bucketFindingsBySeverity,
@@ -15,8 +15,11 @@ import {
 import { ReviewInsightDrawer } from "@/features/prism/components/review-insight-drawer"
 import { ReviewDecisionBar } from "@/features/prism/components/review-decision-bar"
 import { ReviewPageSkeleton } from "@/features/prism/components/review-page-skeleton"
-import { ReviewQuickVerdict } from "@/features/prism/components/review-quick-verdict"
 import { enrichDiffFilesWithFindings, scrollTargetFromFinding } from "@/features/prism/lib/map-findings-to-diff"
+import { enrichTasksWithOpinion } from "@/features/prism/lib/review-task-verdict"
+import { readStore } from "@/features/prism/lib/review-task-store"
+import { readPrioritySettings } from "@/features/prism/lib/governance-priority-settings"
+import { buildAiReviewerOpinion, isPrAnalysisComplete } from "@/lib/ai/ai-reviewer-opinion"
 import { deriveAnalysisPhase, useReviewLayout } from "@/hooks/use-review-layout"
 import { estimateCostCnyFromUsage, useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { usePullRequest } from "@/hooks/use-pull-request"
@@ -36,10 +39,9 @@ import {
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import { formatPrismApiError, PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
-import { AdoptRepoBanner } from "@/features/prism/components/adopt-repo-banner"
+import { AdoptRepoBanner, shouldShowAdoptBanner } from "@/features/prism/components/adopt-repo-banner"
 import { ReviewCopilotPanel } from "@/features/prism/components/review-copilot-panel"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
-import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
 
 interface AIReviewViewProps {
   prId: string
@@ -48,7 +50,7 @@ interface AIReviewViewProps {
 
 export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps) {
   const { navigate } = useNavigation()
-  const { refresh: refreshRepos } = useReposStore()
+  const { refresh: refreshRepos, repos } = useReposStore()
   const { settings, hasApiKey, recordUsage } = useAISettings()
   const {
     getSession,
@@ -85,7 +87,7 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
   const [syncLabel, setSyncLabel] = useState(cached.syncLabel ?? zh.common.analyzeReady)
   const [chunkProgress, setChunkProgress] = useState({ current: 0, total: 1 })
   const [generatedSummary, setGeneratedSummary] = useState<string | undefined>(
-    cached.generatedSummary ?? aiSummary?.content,
+    cached.generatedSummary,
   )
   const [analysisError, setAnalysisError] = useState<string | null>(
     cached.analysisError ?? null,
@@ -121,19 +123,20 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
 
   useEffect(() => {
     if (loadingPersisted || analyzing) return
-    const hasPersistedAnalysis =
-      findings.length > 0 ||
-      Boolean(latest?.summary) ||
-      job?.status === "completed"
-    if (hasPersistedAnalysis && syncLabel === zh.common.analyzeReady) {
+    const complete = isPrAnalysisComplete({
+      findings,
+      generatedSummary,
+      latest,
+    })
+    if (complete && syncLabel === zh.common.analyzeReady) {
       setSyncLabel(zh.repos.aiAnalysisReady)
     }
   }, [
     loadingPersisted,
     analyzing,
-    findings.length,
-    latest?.summary,
-    job?.status,
+    findings,
+    generatedSummary,
+    latest,
     syncLabel,
   ])
 
@@ -188,11 +191,22 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
   )
 
   const hasFindings = findings.length > 0
-  const hasAnalysis =
-    hasFindings ||
-    Boolean(generatedSummary) ||
-    Boolean(latest?.summary) ||
-    sessionHasData
+  const restoring =
+    loadingPersisted &&
+    !sessionHasData &&
+    !generatedSummary &&
+    !latest?.mergeRecommendation &&
+    findings.length === 0
+
+  const analysisComplete = isPrAnalysisComplete({
+    findings,
+    generatedSummary,
+    latest,
+    analyzing,
+    restoring,
+  })
+
+  const hasAnalysis = analysisComplete
   const analysisPhase = deriveAnalysisPhase({
     scanning,
     summaryStreaming,
@@ -201,12 +215,6 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
   })
   const selectedFindingId =
     layout.scrollTarget?.findingId ?? layout.highlightTarget?.findingId ?? null
-  const restoring =
-    loadingPersisted &&
-    !sessionHasData &&
-    !generatedSummary &&
-    !latest?.summary &&
-    findings.length === 0
 
   const persistGeneratedSummary = useCallback(
     async (content: string, usage: AiUsageMetrics | undefined, signal?: AbortSignal) => {
@@ -508,18 +516,14 @@ ${diffContext || "（无 diff 内容）"}`,
 
   const handleAnalyze = hasFindings ? handleRegenerateSummary : handleRescan
 
-  const analysisScores = latest
-    ? {
-        riskScore: latest.riskScore,
-        securityScore: latest.securityScore,
-        performanceScore: latest.performanceScore,
-        maintainabilityScore: latest.maintainabilityScore,
-      }
-    : undefined
-
   const summaryError = analysisError ?? persistError
   const showPrSkeleton = prLoading && !sessionHasData && !pr
-  const showAdoptBanner = pr != null && !isRepositoryManaged(pr)
+  const showAdoptBanner =
+    pr != null &&
+    shouldShowAdoptBanner(
+      pr,
+      pr.repoId ? repos.find((r) => r.id === pr.repoId) : undefined,
+    )
 
   const handleRepoAdopted = useCallback(() => {
     patchLocal({
@@ -542,6 +546,37 @@ ${diffContext || "（无 diff 内容）"}`,
     if (top) layout.jumpToFinding(scrollTargetFromFinding(top))
   }, [findings, layout])
 
+  const opinion = useMemo(
+    () =>
+      buildAiReviewerOpinion({
+        findings,
+        latest: latest ?? null,
+        prTitle: pr?.displayName?.trim() || pr?.title,
+        repoLabel: pr?.repo,
+        prNumber: pr?.number,
+        generatedSummary,
+        hasCompletedAnalysis: analysisComplete,
+      }),
+    [findings, latest, pr, generatedSummary, analysisComplete],
+  )
+
+  const copilotTask = useMemo(() => {
+    if (!pr) return null
+    const metricsCache = new Map([
+      [
+        pr.id,
+        { branch: pr.sourceBranch, filesChanged: pr.filesChanged },
+      ],
+    ])
+    const ranked = computePriority([pr], {
+      settings: readPrioritySettings(),
+      store: readStore(),
+      metricsCache,
+    })
+    const enriched = enrichTasksWithOpinion(ranked, readStore())
+    return enriched[0] ?? null
+  }, [pr, generatedSummary, latest, findings])
+
   if ((prError || !pr) && !sessionHasData && !prLoading) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-risk-high px-4 text-center">
@@ -549,22 +584,6 @@ ${diffContext || "（无 diff 内容）"}`,
       </div>
     )
   }
-
-  const hasCompletedAnalysis =
-    findings.length > 0 ||
-    job?.status === "completed" ||
-    Boolean(latest?.summary) ||
-    Boolean(generatedSummary)
-
-  const fallbackScores = pr
-    ? {
-        riskScore: analysisScores?.riskScore ?? pr.riskScore,
-        securityScore: analysisScores?.securityScore ?? pr.securityScore,
-        performanceScore: analysisScores?.performanceScore ?? pr.performanceScore,
-        maintainabilityScore:
-          analysisScores?.maintainabilityScore ?? pr.maintainabilityScore,
-      }
-    : undefined
 
   const findingsBuckets = bucketFindingsBySeverity(findings)
   const findingsCounts = {
@@ -592,8 +611,6 @@ ${diffContext || "（无 diff 内容）"}`,
           prLoading={prLoading}
           analysisPhase={analysisPhase}
           findingsCounts={findingsCounts}
-          insightOpen={layout.insightOpen}
-          onOpenInsight={layout.openInsight}
         />
       ) : (
         <div className="flex items-center gap-2 min-h-[44px] px-4 py-2 border-b border-border text-sm text-muted-foreground shrink-0">
@@ -627,49 +644,22 @@ ${diffContext || "（无 diff 内容）"}`,
         </div>
 
         {pr ? (
-          <div className="shrink-0 border-t border-border grid grid-cols-1 md:grid-cols-2 gap-0 md:divide-x md:divide-border bg-panel/60">
-            <ReviewFindingsDock
-              findings={findings}
-              selectedFindingId={selectedFindingId}
-              expanded={layout.findingsExpanded}
-              onExpandedChange={layout.setFindingsExpanded}
-              onSelectFinding={layout.jumpToFinding}
-              hasAnalysis={hasAnalysis}
-              analyzing={analyzing}
-              onAnalyze={handleAnalyze}
-            />
-            <div className="px-3 py-2 border-t md:border-t-0 border-border min-w-0">
-              <AISummary
-                variant="teaser"
-                scanning={scanning}
-                streaming={summaryStreaming}
-                model={settings.model}
-                generatedSummary={generatedSummary}
-                jobSummary={latest?.summary}
-                hasAnalysis={hasAnalysis}
-                restoring={restoring}
-                error={summaryError}
-                onGoToSettings={() => navigate("settings")}
-                onOpenInsight={layout.openInsight}
-              />
-            </div>
-          </div>
+          <ReviewFindingsDock
+            findings={findings}
+            selectedFindingId={selectedFindingId}
+            expanded={layout.findingsExpanded}
+            onExpandedChange={layout.setFindingsExpanded}
+            onSelectFinding={layout.jumpToFinding}
+            hasAnalysis={hasAnalysis}
+            analyzing={analyzing}
+            onAnalyze={handleAnalyze}
+            onOpenFullReport={layout.openInsight}
+            className="shrink-0 border-t border-border bg-panel/60"
+          />
         ) : null}
 
         {pr ? (
-          <div className="group relative shrink-0 sticky bottom-0 z-40 border-t border-border bg-panel/95 backdrop-blur px-3 py-2.5 shadow-[0_-8px_24px_rgba(0,0,0,0.25)]">
-            <div className="hidden md:block pointer-events-none absolute bottom-full left-3 right-3 mb-2 opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200">
-              <ReviewQuickVerdict
-                findings={findings}
-                latest={latest}
-                prTitle={pr.title}
-                repoLabel={pr.repo}
-                prNumber={pr.number}
-                aiSummary={generatedSummary}
-                hasCompletedAnalysis={hasCompletedAnalysis}
-                fallbackScores={fallbackScores}
-              />
-            </div>
+          <div className="shrink-0 sticky bottom-0 z-40 border-t border-border bg-panel/95 backdrop-blur px-3 py-2.5 shadow-[0_-8px_24px_rgba(0,0,0,0.25)]">
             <ReviewDecisionBar
               prId={prId}
               reviewStatus={pr.reviewStatus ?? "OPEN"}
@@ -688,11 +678,14 @@ ${diffContext || "（无 diff 内容）"}`,
         ) : null}
         </div>
 
-        {pr ? (
+        {pr && copilotTask ? (
           <ReviewCopilotPanel
             pr={pr}
+            opinion={opinion}
             findings={findings}
-            aiSummary={generatedSummary}
+            taskForActions={copilotTask}
+            analysisComplete={analysisComplete}
+            onOpenFullReport={layout.openInsight}
             onStartReview={handleCopilotStartReview}
             onReviewStatusChanged={onReviewStatusChanged}
             reloadPr={reloadPr}
@@ -707,11 +700,10 @@ ${diffContext || "（无 diff 内容）"}`,
           onClose={layout.closeInsight}
           prId={prId}
           pr={pr}
+          opinion={opinion}
           findings={findings}
           latest={latest}
           generatedSummary={generatedSummary}
-          hasCompletedAnalysis={hasCompletedAnalysis}
-          fallbackScores={fallbackScores}
           scanning={scanning}
           streaming={summaryStreaming}
           model={settings.model}

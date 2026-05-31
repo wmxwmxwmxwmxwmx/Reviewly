@@ -1,5 +1,7 @@
 import type { PullRequestListItem } from "@reviewly/shared"
 
+import type { AiReviewerOpinion } from "@/lib/ai/ai-reviewer-opinion"
+
 export type ReviewTaskRisk = "低" | "中" | "高" | "严重"
 export type ReviewTaskAction = "通过" | "需要审查" | "要求修改" | "延后"
 export type ReviewTaskQueue = "inbox" | "processing" | "done"
@@ -27,9 +29,16 @@ export type ReviewTask = {
   recommendedAction: ReviewTaskAction
   queue: ReviewTaskQueue
 
+  /** True when recommendation comes from buildAiReviewerOpinion */
+  hasRealAi: boolean
+
+  opinion?: AiReviewerOpinion
+
   aiSummary: string
 
+  /** 0 = unknown; only show in UI when hasRealFiles */
   filesChanged: number
+  hasRealFiles: boolean
   complexity: number
   estimatedMinutes: number
 

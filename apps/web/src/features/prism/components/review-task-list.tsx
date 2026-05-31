@@ -7,6 +7,7 @@ import { OneClickActionBar } from "@/features/prism/components/one-click-action-
 import type { ReviewTask } from "@/features/prism/types/review-task"
 
 function signalLabels(task: ReviewTask): string[] {
+  if (!task.hasRealAi) return []
   const labels: string[] = []
   if (task.signals.auth) labels.push("auth 模块")
   if (task.signals.payment) labels.push("支付")
@@ -77,6 +78,10 @@ export function ReviewTaskList({
     <div className="divide-y divide-border rounded-lg border border-border max-h-[calc(100vh-220px)] overflow-y-auto">
       {tasks.map((task, index) => {
         const signals = signalLabels(task)
+        const showBranch = task.branch !== "—"
+        const showScore = task.priorityScore > 0
+        const showAiBlock = task.hasRealAi && Boolean(task.priorityReason || task.recommendedAction)
+
         return (
           <article
             key={task.prId}
@@ -95,7 +100,7 @@ export function ReviewTaskList({
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] font-semibold text-ai-blue">
-                    🔥 优先级 #{index + 1}
+                    优先级 #{index + 1}
                   </span>
                   <span
                     className={cn(
@@ -109,39 +114,49 @@ export function ReviewTaskList({
                   >
                     {task.riskLevel}
                   </span>
-                  <span className="text-[10px] text-muted-foreground font-mono">
-                    {task.priorityScore} 分
-                  </span>
-                </div>
-
-                <p className="text-[11px] text-muted-foreground truncate">
-                  仓库：{task.repo}
-                </p>
-                <p className="text-[13px] font-medium text-foreground truncate">{task.title}</p>
-                <p className="text-[11px] text-muted-foreground truncate">
-                  分支：{task.branch}
-                </p>
-
-                <div className="text-[11px] text-muted-foreground">
-                  <span>变更：{task.filesChanged} 个文件</span>
-                  {signals.length > 0 ? (
-                    <span> · {signals.join(" · ")}</span>
+                  <span className="text-[10px] text-muted-foreground">列表风险</span>
+                  {showScore ? (
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {task.priorityScore} 分
+                    </span>
                   ) : null}
                 </div>
 
-                <p className="text-[11px] text-muted-foreground">
-                  <span className="text-foreground/80">AI原因：</span>
-                  {task.priorityReason}
-                </p>
+                <p className="text-[11px] text-muted-foreground truncate">仓库：{task.repo}</p>
+                <p className="text-[13px] font-medium text-foreground truncate">{task.title}</p>
 
-                <p className="text-[11px] text-ai-blue">
-                  👉 推荐操作：{task.recommendedAction}（约 {task.estimatedMinutes} 分钟）
-                </p>
+                {showBranch ? (
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    分支：{task.branch}
+                  </p>
+                ) : null}
+
+                {task.hasRealFiles ? (
+                  <div className="text-[11px] text-muted-foreground">
+                    <span>变更：{task.filesChanged} 个文件</span>
+                    {signals.length > 0 ? <span> · {signals.join(" · ")}</span> : null}
+                  </div>
+                ) : null}
+
+                {showAiBlock && task.priorityReason ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    <span className="text-foreground/80">AI 结论：</span>
+                    {task.opinion?.verdictLabel ?? task.priorityReason}
+                  </p>
+                ) : null}
+
+                {showAiBlock && task.recommendedAction ? (
+                  <p className="text-[11px] text-ai-blue">
+                    推荐操作：{task.recommendedAction}
+                    {task.estimatedMinutes > 0 ? `（约 ${task.estimatedMinutes} 分钟）` : ""}
+                  </p>
+                ) : null}
               </div>
 
-              {!showReturnActions ? (
+              {!showReturnActions && task.hasRealAi ? (
                 <OneClickActionBar
                   task={task}
+                  suggestedLabel={task.opinion?.verdictLabel}
                   onApprove={onApprove}
                   onReview={onReview}
                   onDefer={onDefer}
@@ -149,7 +164,7 @@ export function ReviewTaskList({
                   layout="inline"
                   className="shrink-0 pt-1"
                 />
-              ) : (
+              ) : showReturnActions ? (
                 <div
                   className="flex flex-col gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={(e) => e.stopPropagation()}
@@ -160,7 +175,7 @@ export function ReviewTaskList({
                       onClick={() => onReturnToInbox(task)}
                       className="px-2.5 py-1 rounded text-[11px] font-medium bg-ai-blue/15 text-ai-blue hover:bg-ai-blue/25 whitespace-nowrap"
                     >
-                      ↩ 放回优先处理
+                      放回优先处理
                     </button>
                   ) : null}
                   {onRescore ? (
@@ -169,11 +184,11 @@ export function ReviewTaskList({
                       onClick={() => onRescore(task)}
                       className="px-2.5 py-1 rounded text-[11px] font-medium bg-surface-2 text-muted-foreground hover:text-foreground whitespace-nowrap"
                     >
-                      🔁 重新评估
+                      重新评估
                     </button>
                   ) : null}
                 </div>
-              )}
+              ) : null}
             </div>
           </article>
         )

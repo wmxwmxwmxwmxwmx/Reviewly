@@ -5,6 +5,8 @@ import type { ReviewTask } from "@/features/prism/types/review-task"
 
 type OneClickActionBarProps = {
   task: ReviewTask
+  /** AI verdict label from buildAiReviewerOpinion (panel mode) */
+  suggestedLabel?: string
   onApprove: (task: ReviewTask) => void
   onReview: (task: ReviewTask) => void
   onDefer: (task: ReviewTask) => void
@@ -15,6 +17,7 @@ type OneClickActionBarProps = {
 
 export function OneClickActionBar({
   task,
+  suggestedLabel,
   onApprove,
   onReview,
   onDefer,
@@ -36,7 +39,7 @@ export function OneClickActionBar({
     >
       {isPanel ? (
         <p className="text-[11px] text-muted-foreground mb-1">
-          👉 建议：<span className="text-foreground font-medium">{task.recommendedAction}</span>
+          👉 建议：<span className="text-foreground font-medium">{suggestedLabel ?? task.recommendedAction}</span>
         </p>
       ) : null}
       <div className={cn("flex flex-wrap gap-1.5", isPanel && "flex-col sm:flex-row")}>

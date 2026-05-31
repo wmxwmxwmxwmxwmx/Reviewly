@@ -54,6 +54,7 @@ interface ReviewFindingsDockProps {
   hasAnalysis?: boolean
   analyzing?: boolean
   onAnalyze?: () => void
+  onOpenFullReport?: () => void
   className?: string
 }
 
@@ -66,6 +67,7 @@ export function ReviewFindingsDock({
   hasAnalysis = false,
   analyzing = false,
   onAnalyze,
+  onOpenFullReport,
   className,
 }: ReviewFindingsDockProps) {
   const buckets = bucketFindingsBySeverity(findings)
@@ -118,6 +120,15 @@ export function ReviewFindingsDock({
         ) : null}
 
         <div className="ml-auto flex items-center gap-1 shrink-0">
+          {onOpenFullReport ? (
+            <button
+              type="button"
+              onClick={onOpenFullReport}
+              className="text-[11px] text-ai-blue hover:underline whitespace-nowrap"
+            >
+              完整 AI 报告
+            </button>
+          ) : null}
           {!hasAnalysis && onAnalyze && !analyzing ? (
             <button
               type="button"

@@ -8,7 +8,9 @@ import {
   filterTasksByQueue,
   getNextInboxTask,
   shouldShowInInbox,
+  type PrMetrics,
 } from "@/features/prism/ai/priority-ranker"
+import { enrichTasksWithOpinion } from "@/features/prism/lib/review-task-verdict"
 import {
   readPrioritySettings,
   type PrioritySettings,
@@ -38,7 +40,7 @@ export function useReviewTasks(options: UseReviewTasksOptions = {}) {
   const { queue, reloadToken = 0 } = options
   const [store, setStore] = useState<ReviewTaskStoreSnapshot>(() => readStore())
   const [settings, setSettings] = useState<PrioritySettings>(() => readPrioritySettings())
-  const [branchCache, setBranchCache] = useState<Map<string, string>>(() => new Map())
+  const [metricsCache, setMetricsCache] = useState<Map<string, PrMetrics>>(() => new Map())
   const [rescoreTick, setRescoreTick] = useState(0)
 
   const { items, loading, error, reload } = usePullRequests({
@@ -64,8 +66,9 @@ export function useReviewTasks(options: UseReviewTasksOptions = {}) {
 
   const allTasks = useMemo(() => {
     void rescoreTick
-    return computePriority(items, { settings, store, branchCache })
-  }, [items, settings, store, branchCache, rescoreTick])
+    const ranked = computePriority(items, { settings, store, metricsCache })
+    return enrichTasksWithOpinion(ranked, store)
+  }, [items, settings, store, metricsCache, rescoreTick])
 
   const tasks = useMemo(() => {
     if (!queue) return allTasks
@@ -112,17 +115,21 @@ export function useReviewTasks(options: UseReviewTasksOptions = {}) {
     [allTasks, store],
   )
 
-  const prefetchBranches = useCallback(async (taskList: ReviewTask[]) => {
-    const top = taskList.slice(0, 12).filter((t) => t.branch === "—")
-    if (top.length === 0) return
-    const results = await Promise.allSettled(
-      top.map((t) => fetchPullRequest(t.prId)),
-    )
-    setBranchCache((prev) => {
+  const prefetchMetrics = useCallback(async (taskList: ReviewTask[]) => {
+    const needFetch = taskList
+      .slice(0, 12)
+      .filter((t) => t.branch === "—" || !t.hasRealFiles)
+    if (needFetch.length === 0) return
+    const results = await Promise.allSettled(needFetch.map((t) => fetchPullRequest(t.prId)))
+    setMetricsCache((prev) => {
       const next = new Map(prev)
       results.forEach((result, i) => {
-        if (result.status === "fulfilled" && result.value.sourceBranch) {
-          next.set(top[i]!.prId, result.value.sourceBranch)
+        if (result.status === "fulfilled") {
+          const pr = result.value
+          next.set(needFetch[i]!.prId, {
+            branch: pr.sourceBranch,
+            filesChanged: pr.filesChanged,
+          })
         }
       })
       return next
@@ -130,8 +137,8 @@ export function useReviewTasks(options: UseReviewTasksOptions = {}) {
   }, [])
 
   useEffect(() => {
-    if (tasks.length > 0) void prefetchBranches(tasks)
-  }, [tasks, prefetchBranches])
+    if (tasks.length > 0) void prefetchMetrics(tasks)
+  }, [tasks, prefetchMetrics])
 
   return {
     tasks,
