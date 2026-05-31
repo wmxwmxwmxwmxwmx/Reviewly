@@ -2,8 +2,8 @@ import type { AuthLoginResponse, AuthStatusResponse, AuthUser, GithubAccountInfo
 
 import { apiFetch } from "./client"
 
-export function fetchAuthStatus(signal?: AbortSignal) {
-  return apiFetch<AuthStatusResponse>("/api/auth/status", { signal })
+export function fetchAuthStatus(options?: { signal?: AbortSignal; noRetry?: boolean }) {
+  return apiFetch<AuthStatusResponse>("/api/auth/status", options ?? {})
 }
 
 export function fetchGithubLoginUrl(options?: {

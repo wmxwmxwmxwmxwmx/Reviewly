@@ -45,10 +45,12 @@ if (-not $dbUrl) {
 Write-Host "Running database migrations..."
 & $python -m alembic upgrade head
 if ($LASTEXITCODE -ne 0) {
-    Write-Warning "Alembic migration failed."
-    Write-Warning "  PostgreSQL: npm run dev:db  (Docker Postgres prism/prism@localhost:5432)"
-    Write-Warning "  Force SQLite: set PRISM_DATABASE_MODE=sqlite in services/gateway/.env"
-    Write-Warning "  Force Postgres only: PRISM_DATABASE_MODE=postgres"
+    Write-Host ""
+    Write-Host "ERROR: Alembic migration failed; Gateway will not start." -ForegroundColor Red
+    Write-Host "  PostgreSQL: npm run dev:db  (Docker Postgres prism/prism@localhost:5432)"
+    Write-Host "  Force SQLite: set PRISM_DATABASE_MODE=sqlite in services/gateway/.env"
+    Write-Host "  Force Postgres only: PRISM_DATABASE_MODE=postgres"
+    Write-Host ""
     exit 1
 }
 
