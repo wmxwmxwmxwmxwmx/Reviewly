@@ -66,11 +66,47 @@ export function useGovernance(options?: { includeDisabled?: boolean }) {
   const editRule = useCallback(
     async (id: string, input: Partial<GovernanceRuleInput>) => {
       const updated = await updateGovernanceRule(id, input)
-      setRules((prev) => prev.map((r) => (r.id === id ? { ...r, ...updated } : r)))
+      setRules((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                ...updated,
+                enabled:
+                  updated.enabled ??
+                  (typeof input.enabled === "boolean" ? input.enabled : r.enabled),
+              }
+            : r,
+        ),
+      )
       void reloadRules().catch(() => {
         /* 保存已成功；后台刷新失败时保留乐观更新 */
       })
       return updated
+    },
+    [reloadRules],
+  )
+
+  const setRuleEnabled = useCallback(
+    async (id: string, enabled: boolean, previousEnabled: boolean) => {
+      setRules((prev) => prev.map((r) => (r.id === id ? { ...r, enabled } : r)))
+      try {
+        const updated = await updateGovernanceRule(id, { enabled })
+        setRules((prev) =>
+          prev.map((r) =>
+            r.id === id ? { ...r, ...updated, enabled: updated.enabled ?? enabled } : r,
+          ),
+        )
+        void reloadRules().catch(() => {
+          /* 保存已成功；后台刷新失败时保留乐观更新 */
+        })
+        return updated
+      } catch (e) {
+        setRules((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, enabled: previousEnabled } : r)),
+        )
+        throw e
+      }
     },
     [reloadRules],
   )
@@ -93,6 +129,7 @@ export function useGovernance(options?: { includeDisabled?: boolean }) {
     refetch: load,
     addRule,
     editRule,
+    setRuleEnabled,
     removeRule,
   }
 }
