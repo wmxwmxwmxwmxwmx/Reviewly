@@ -22,3 +22,20 @@ export function validateGitHubPrUrl(url: string): string | null {
   }
   return null
 }
+
+export function buildGitHubPrUrl(repo: string, number: number): string {
+  return `https://github.com/${repo}/pull/${number}`
+}
+
+export function getPullRequestGitHubUrl(
+  pr: { repo: string; number: number; url?: string },
+): string {
+  if (pr.url?.trim()) return pr.url.trim()
+  return buildGitHubPrUrl(pr.repo, pr.number)
+}
+
+export function openGitHubReview(
+  pr: { repo: string; number: number; url?: string },
+): void {
+  window.open(getPullRequestGitHubUrl(pr), "_blank", "noopener,noreferrer")
+}

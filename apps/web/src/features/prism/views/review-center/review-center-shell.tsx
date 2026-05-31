@@ -9,10 +9,12 @@ import {
   ReviewCenterNav,
   type ReviewCenterTab,
 } from "@/features/prism/components/review-center-nav"
-import { ReviewCenterDoneView } from "@/features/prism/views/review-center/review-center-done-view"
+import { ReviewCenterHistoryView } from "@/features/prism/views/review-center/review-center-history-view"
 import { ReviewCenterInboxView } from "@/features/prism/views/review-center/review-center-inbox-view"
-import { ReviewCenterProcessingView } from "@/features/prism/views/review-center/review-center-processing-view"
+import { useManagedRepoPrSyncLoop } from "@/hooks/use-managed-repo-pr-sync"
+import { useReviewAttentionCounts } from "@/hooks/use-managed-repo-pr-sync"
 import { zh } from "@/lib/i18n/zh"
+import { cn } from "@/lib/utils"
 
 interface ReviewCenterShellProps {
   activeTab: ReviewCenterTab
@@ -38,38 +40,22 @@ export function ReviewCenterShell({
   reloadToken,
 }: ReviewCenterShellProps) {
   const { navigate } = useNavigation()
+  const { badge, reload: reloadCounts } = useReviewAttentionCounts()
+  const { syncBadges } = useManagedRepoPrSyncLoop({
+    enabled: true,
+    onSynced: () => reloadCounts(),
+  })
 
-  const content = (() => {
-    switch (activeTab) {
-      case "inbox":
-        return (
-          <ReviewCenterInboxView
-            onSelectPr={onSelectPr}
-            reloadToken={reloadToken}
-            onImportOpenChange={onImportOpenChange}
-          />
-        )
-      case "processing":
-        return (
-          <ReviewCenterProcessingView
-            onSelectPr={onSelectPr}
-            reloadToken={reloadToken}
-          />
-        )
-      case "done":
-        return (
-          <ReviewCenterDoneView onSelectPr={onSelectPr} reloadToken={reloadToken} />
-        )
-      default:
-        return (
-          <ReviewCenterInboxView
-            onSelectPr={onSelectPr}
-            reloadToken={reloadToken}
-            onImportOpenChange={onImportOpenChange}
-          />
-        )
-    }
-  })()
+  const content =
+    activeTab === "history" ? (
+      <ReviewCenterHistoryView onSelectPr={onSelectPr} reloadToken={reloadToken} />
+    ) : (
+      <ReviewCenterInboxView
+        onSelectPr={onSelectPr}
+        reloadToken={reloadToken}
+        onImportOpenChange={onImportOpenChange}
+      />
+    )
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -92,10 +78,22 @@ export function ReviewCenterShell({
               <Menu className="w-5 h-5 text-foreground" />
             </button>
           ) : null}
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">AI PR Copilot</h1>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg font-semibold text-foreground">AI Review Inbox</h1>
+              {syncBadges.newPrCount > 0 ? (
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-ai-blue/15 text-ai-blue font-medium">
+                  {syncBadges.newPrCount} 个新 PR 待查看
+                </span>
+              ) : null}
+              {syncBadges.revisitCount > 0 ? (
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-risk-medium/15 text-risk-medium font-medium">
+                  {syncBadges.revisitCount} 个 PR 需要重新查看
+                </span>
+              ) : null}
+            </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              PR 优先队列 · 一键处理 · 可治理
+              纳管 PR · AI 辅助评审 · 决策在 GitHub
             </p>
           </div>
         </div>
@@ -126,9 +124,9 @@ export function ReviewCenterShell({
         </div>
       </div>
 
-      <ReviewCenterNav active={activeTab} onChange={onTabChange} />
+      <ReviewCenterNav active={activeTab} onChange={onTabChange} inboxBadge={badge} />
 
-      <div className="flex flex-1 min-w-0 overflow-hidden flex flex-col">{content}</div>
+      <div className={cn("flex flex-1 min-w-0 overflow-hidden flex flex-col")}>{content}</div>
     </div>
   )
 }

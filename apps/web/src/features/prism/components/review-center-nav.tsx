@@ -1,22 +1,26 @@
 "use client"
 
-import { CheckCircle2, Inbox, Loader2 } from "lucide-react"
+import { History, Inbox } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export type ReviewCenterTab = "inbox" | "processing" | "done"
+export type ReviewCenterTab = "inbox" | "history"
 
-const TABS: { key: ReviewCenterTab; label: string; icon: typeof Inbox }[] = [
-  { key: "inbox", label: "优先处理", icon: Inbox },
-  { key: "processing", label: "处理中", icon: Loader2 },
-  { key: "done", label: "已完成", icon: CheckCircle2 },
+const TABS: {
+  key: ReviewCenterTab
+  label: string
+  icon: typeof Inbox
+}[] = [
+  { key: "inbox", label: "收件箱", icon: Inbox },
+  { key: "history", label: "历史记录", icon: History },
 ]
 
 interface ReviewCenterNavProps {
   active: ReviewCenterTab
   onChange: (tab: ReviewCenterTab) => void
+  inboxBadge?: number
 }
 
-export function ReviewCenterNav({ active, onChange }: ReviewCenterNavProps) {
+export function ReviewCenterNav({ active, onChange, inboxBadge }: ReviewCenterNavProps) {
   return (
     <nav className="flex flex-wrap gap-1 px-4 sm:px-5 py-2 border-b border-border bg-panel/80 shrink-0 overflow-x-auto">
       {TABS.map((tab) => (
@@ -33,6 +37,11 @@ export function ReviewCenterNav({ active, onChange }: ReviewCenterNavProps) {
         >
           <tab.icon className="w-3.5 h-3.5 shrink-0" />
           {tab.label}
+          {tab.key === "inbox" && inboxBadge != null && inboxBadge > 0 ? (
+            <span className="ml-0.5 min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-ai-blue text-[10px] font-semibold text-primary-foreground inline-flex items-center justify-center">
+              {inboxBadge > 99 ? "99+" : inboxBadge}
+            </span>
+          ) : null}
         </button>
       ))}
     </nav>

@@ -18,14 +18,20 @@ import { Button } from "@/components/ui/button"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { GovernanceRuleDialog } from "@/features/prism/components/governance-rule-dialog"
 import { useGovernance } from "@/hooks/use-governance"
-import { useReviewTasks } from "@/hooks/use-review-tasks"
+import { useReviewInbox } from "@/hooks/use-review-inbox"
 import {
   DEFAULT_PRIORITY_SETTINGS,
   readPrioritySettings,
   writePrioritySettings,
   type PrioritySettings,
 } from "@/features/prism/lib/governance-priority-settings"
-import { readStore, setIgnoredPatterns } from "@/features/prism/lib/review-task-store"
+import {
+  clearDeferred,
+  dispatchRescore,
+  readStore,
+  setIgnoredPatterns,
+} from "@/features/prism/lib/review-task-store"
+import { belongsInHistory, belongsInInbox } from "@/features/prism/ai/review-attention-score"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
@@ -41,7 +47,7 @@ export function GovernanceView() {
   const { rules, loading, error, addRule, editRule, removeRule } = useGovernance({
     includeDisabled: true,
   })
-  const { clearDeferred, restoreAllDone, allTasks } = useReviewTasks()
+  const { allItems } = useReviewInbox()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<GovernanceRule | null>(null)
   const [settings, setSettings] = useState<PrioritySettings>(() => readPrioritySettings())
@@ -81,12 +87,14 @@ export function GovernanceView() {
 
   const handleRescoreAll = useCallback(() => {
     clearDeferred()
-  }, [clearDeferred])
+    dispatchRescore()
+  }, [])
 
   const handleRestoreAllDone = useCallback(() => {
-    if (!window.confirm("确定将所有已完成 PR 放回优先处理队列？")) return
-    restoreAllDone()
-  }, [restoreAllDone])
+    if (!window.confirm("确定清除所有延后标记并刷新收件箱排序？")) return
+    clearDeferred()
+    dispatchRescore()
+  }, [])
 
   const handleBack = () => {
     const view = returnView ?? "ai-review"
@@ -196,11 +204,12 @@ export function GovernanceView() {
               重新评估所有 PR
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={handleRestoreAllDone} className="gap-1.5">
-              ↩ 恢复所有已完成 PR
+              ↩ 清除延后标记
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            当前队列：{allTasks.filter((t) => t.queue === "done").length} 条已完成 · 默认权重见规范（严重
+            当前收件箱：{allItems.filter(belongsInInbox).length} 条 · 历史记录：
+            {allItems.filter(belongsInHistory).length} 条 · 默认权重见规范（严重
             {DEFAULT_PRIORITY_SETTINGS.riskWeights.严重} / CI +{DEFAULT_PRIORITY_SETTINGS.ciFailed}）
           </p>
         </div>

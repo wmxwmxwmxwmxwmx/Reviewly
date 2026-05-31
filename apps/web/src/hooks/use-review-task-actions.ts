@@ -2,96 +2,29 @@
 
 import { useCallback } from "react"
 
-import type { ReviewTask } from "@/features/prism/types/review-task"
-import { useToast } from "@/hooks/use-toast"
-import { patchReviewStatus } from "@/lib/api/review-center"
-import { PrismApiError } from "@/lib/api/client"
-
-type UseReviewTaskActionsOptions = {
+type UseOpenReviewOptions = {
   onSelectPr: (prId: string) => void
-  onApproved?: (nextPrId: string | null) => void
-  reload: () => void
-  defer: (prId: string) => void
-  getNextInbox: (currentPrId: string | null) => ReviewTask | null
 }
 
-export function useReviewTaskActions({
-  onSelectPr,
-  onApproved,
-  reload,
-  defer,
-  getNextInbox,
-}: UseReviewTaskActionsOptions) {
-  const { toast } = useToast()
-
-  const handleApprove = useCallback(
-    async (task: ReviewTask) => {
-      try {
-        await patchReviewStatus(task.prId, "APPROVED")
-        reload()
-        const next = getNextInbox(task.prId)
-        onApproved?.(next?.prId ?? null)
-        if (next) {
-          toast({ title: "已通过", description: `正在打开下一个：${next.title}` })
-          onSelectPr(next.prId)
-        } else {
-          toast({ title: "已通过", description: "队列已清空" })
-        }
-      } catch (e) {
-        toast({
-          title: "批准失败",
-          description: e instanceof PrismApiError ? e.message : undefined,
-          variant: "destructive",
-        })
-      }
+/** Opens PR detail only — no GitHub approval actions in Reviewly. */
+export function useOpenReview({ onSelectPr }: UseOpenReviewOptions) {
+  const handleOpenReview = useCallback(
+    (prId: string) => {
+      onSelectPr(prId)
     },
-    [getNextInbox, onApproved, onSelectPr, reload, toast],
+    [onSelectPr],
   )
 
-  const handleReview = useCallback(
-    async (task: ReviewTask) => {
-      try {
-        if (task.source.reviewStatus !== "IN_REVIEW") {
-          await patchReviewStatus(task.prId, "IN_REVIEW")
-          reload()
-        }
-      } catch {
-        /* 进入详情不阻断 */
-      }
-      onSelectPr(task.prId)
-    },
-    [onSelectPr, reload],
-  )
+  return { handleOpenReview }
+}
 
-  const handleDefer = useCallback(
-    (task: ReviewTask) => {
-      defer(task.prId)
-      toast({ title: "已延后", description: "该 PR 已移至队尾" })
-    },
-    [defer, toast],
-  )
-
-  const handleRequestChanges = useCallback(
-    async (task: ReviewTask) => {
-      try {
-        await patchReviewStatus(task.prId, "CHANGES_REQUESTED")
-        reload()
-        toast({ title: "已要求修改" })
-      } catch (e) {
-        toast({
-          title: "操作失败",
-          description: e instanceof PrismApiError ? e.message : undefined,
-          variant: "destructive",
-        })
-      }
-    },
-    [reload, toast],
-  )
-
+/** @deprecated Use useOpenReview */
+export function useReviewTaskActions(options: {
+  onSelectPr: (prId: string) => void
+}) {
+  const { handleOpenReview } = useOpenReview(options)
   return {
-    handleApprove,
-    handleReview,
-    handleDefer,
-    handleRequestChanges,
+    handleReview: (task: { prId: string }) => handleOpenReview(task.prId),
+    handleOpenReview,
   }
 }

@@ -344,6 +344,7 @@ export interface PullRequestListItem {
   note?: string
   favorite?: boolean
   aiSummary?: AiPersistedContent | null
+  headSha?: string | null
   sourceType?: RepositorySourceType
   repositoryType?: RepositoryType
   managed?: boolean

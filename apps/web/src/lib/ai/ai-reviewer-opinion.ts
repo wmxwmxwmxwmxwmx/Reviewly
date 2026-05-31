@@ -60,15 +60,36 @@ export function isPrAnalysisComplete(input: {
 export function inferVerdictFromSummaryText(text: string): AiReviewerVerdict | null {
   const normalized = text.trim()
   if (!normalized) return null
-  if (/不建议合并|阻止合并|不应合并|禁止合并|不可合并|block/i.test(normalized)) {
+  // Block / reject patterns first (must precede approve patterns)
+  if (
+    /❌\s*不建议合并|不建议合并|存在风险[，,]?\s*不建议合并|不通过|阻止合并|不应合并|禁止合并|不可合并|\bblock\b/i.test(
+      normalized,
+    )
+  ) {
     return "block"
   }
   if (/需要修改|要求修改|修改后再|有待改进|request\s*changes/i.test(normalized)) {
     return "request_changes"
   }
-  if (/建议合并|可以合并|准予合并|建议通过|approve/i.test(normalized)) {
+  if (/建议合并|可以合并|准予合并|建议通过|\bapprove\b/i.test(normalized)) {
     return "approve"
   }
+  return null
+}
+
+/** Parse verdict from the conclusion section of an LLM report (narrow slice). */
+export function inferVerdictFromConclusionSection(text: string): AiReviewerVerdict | null {
+  const sections = ["评审结论", "结论", "Review Conclusion", "Conclusion"]
+
+  for (const key of sections) {
+    const idx = text.indexOf(key)
+    if (idx === -1) continue
+
+    const slice = text.slice(idx, idx + 300)
+    const v = inferVerdictFromSummaryText(slice)
+    if (v) return v
+  }
+
   return null
 }
 
@@ -212,13 +233,21 @@ export function buildAiReviewerOpinion(input: BuildAiReviewerOpinionInput): AiRe
     }
   }
 
+  // RULE:
+  // If generatedSummary exists, it is the SINGLE source of truth.
+  // NEVER override it using mergeRecommendation or findings.
   let verdict: AiReviewerVerdict = "pending"
-  if (latest?.mergeRecommendation) {
+  const llmSummary = generatedSummary?.trim()
+
+  if (llmSummary) {
+    verdict =
+      inferVerdictFromSummaryText(llmSummary) ??
+      inferVerdictFromConclusionSection(llmSummary) ??
+      "pending"
+  } else if (latest?.mergeRecommendation) {
     verdict = latest.mergeRecommendation
   } else if (findings.length > 0) {
     verdict = deriveVerdictFromFindings(findings)
-  } else if (generatedSummary?.trim()) {
-    verdict = inferVerdictFromSummaryText(generatedSummary) ?? "pending"
   }
 
   const points = buildReasonPoints({
