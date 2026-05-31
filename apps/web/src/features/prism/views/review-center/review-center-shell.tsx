@@ -83,11 +83,7 @@ export function ReviewCenterShell({
             variant="outline"
             size="sm"
             className="gap-1.5 hidden sm:inline-flex"
-            onClick={() =>
-              navigate("governance", {
-                returnView: "ai-review",
-              })
-            }
+            onClick={() => navigate("governance")}
           >
             <Settings2 className="w-3.5 h-3.5" />
             {zh.nav.governance}

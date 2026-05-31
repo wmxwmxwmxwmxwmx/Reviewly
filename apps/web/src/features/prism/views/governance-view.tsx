@@ -1,9 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { ArrowLeft } from "lucide-react"
 import type { GovernanceRule } from "@reviewly/shared"
 
 import { Button } from "@/components/ui/button"
+import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +36,7 @@ import { formatPrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 
 export function GovernanceView() {
+  const { returnView, returnPrId, navigate } = useNavigation()
   const { toast } = useToast()
   const { rules, loading, error, addRule, editRule, setRuleEnabled, removeRule } = useGovernance({
     includeDisabled: true,
@@ -139,10 +142,44 @@ export function GovernanceView() {
     toast({ title: "已刷新", description: "延后标记已清除，收件箱排序已更新" })
   }, [toast])
 
+  const showBack = returnView != null
+
+  const backLabel = useMemo(() => {
+    if (!returnView) return zh.governance.backToPrevious
+    if (returnView === "ai-review") {
+      return returnPrId ? zh.governance.backToAiReview : zh.governance.backToReviewCenter
+    }
+    return zh.governance.backToPrevious
+  }, [returnView, returnPrId])
+
+  const handleBack = useCallback(() => {
+    if (!returnView) return
+    if (returnView === "ai-review") {
+      navigate(
+        "ai-review",
+        returnPrId ? { prId: returnPrId } : { aiReviewList: true },
+      )
+      return
+    }
+    navigate(returnView)
+  }, [navigate, returnView, returnPrId])
+
   return (
-    <div className="p-5 space-y-5 max-w-6xl mx-auto">
+    <div className="p-5 space-y-5 min-w-0 w-full">
       <div className="flex items-start justify-between gap-3 pb-1 border-b border-border">
-        <div>
+        <div className="min-w-0">
+          {showBack ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleBack}
+              className="text-muted-foreground hover:text-foreground -ml-2 mb-2 gap-1.5 h-8 px-2"
+            >
+              <ArrowLeft className="w-4 h-4 shrink-0" />
+              {backLabel}
+            </Button>
+          ) : null}
           <h1 className="text-lg font-semibold text-foreground">工程治理</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.governance}</p>
         </div>

@@ -26,6 +26,11 @@ export const zh = {
     settings: "配置 AI 模型与 API 密钥，查看本月 AI 用量（本地统计）",
     profile: "查看当前登录账号的基本信息与 GitHub 连接状态",
   },
+  governance: {
+    backToAiReview: "返回 AI 分析",
+    backToReviewCenter: "返回代码评审中心",
+    backToPrevious: "返回",
+  },
   severity: {
     critical: "严重",
     high: "高危",
