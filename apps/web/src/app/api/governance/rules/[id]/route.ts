@@ -11,7 +11,7 @@ export async function GET(request: Request, context: RouteContext) {
     return await proxyToGateway(`/api/governance/rules/${encodeURIComponent(id)}`, {
       method: "GET",
       headers: forwardGatewayHeaders(request, { contentType: null }),
-    })
+    }, { incomingSignal: request.signal })
   } catch (err) {
     serverApiError("governance rule GET", err)
     const detail = err instanceof Error ? err.message : String(err)
@@ -33,7 +33,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       method: "PATCH",
       headers: forwardGatewayHeaders(request),
       body,
-    })
+    }, { incomingSignal: request.signal })
   } catch (err) {
     serverApiError("governance rule PATCH", err)
     const detail = err instanceof Error ? err.message : String(err)
@@ -47,13 +47,13 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   const { id } = await context.params
   try {
     return await proxyToGateway(`/api/governance/rules/${encodeURIComponent(id)}`, {
       method: "DELETE",
-      headers: forwardGatewayHeaders(_request, { contentType: null }),
-    })
+      headers: forwardGatewayHeaders(request, { contentType: null }),
+    }, { incomingSignal: request.signal })
   } catch (err) {
     serverApiError("governance rule DELETE", err)
     const detail = err instanceof Error ? err.message : String(err)

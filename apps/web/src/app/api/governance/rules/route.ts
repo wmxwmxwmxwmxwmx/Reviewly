@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     return await proxyToGateway(`/api/governance/rules${url.search}`, {
       method: "GET",
       headers: forwardGatewayHeaders(request, { contentType: null }),
-    })
+    }, { incomingSignal: request.signal })
   } catch (err) {
     serverApiError("governance rules GET", err)
     throw err
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: forwardGatewayHeaders(request),
       body,
-    })
+    }, { incomingSignal: request.signal })
   } catch (err) {
     serverApiError("governance rules POST", err)
     throw err

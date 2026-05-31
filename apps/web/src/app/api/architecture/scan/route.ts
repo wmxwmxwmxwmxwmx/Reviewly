@@ -18,6 +18,6 @@ export async function POST(request: Request) {
       },
       body,
     },
-    { timeoutMs: SCAN_STREAM_TIMEOUT_MS },
+    { timeoutMs: SCAN_STREAM_TIMEOUT_MS, incomingSignal: request.signal },
   )
 }

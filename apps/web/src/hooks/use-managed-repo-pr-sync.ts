@@ -14,6 +14,7 @@ import { repoManagementDisplayOrder } from "@/lib/repos-utils"
 import { usePullRequests } from "@/hooks/use-pull-requests"
 
 const SYNC_INTERVAL_MS = 5 * 60 * 1000
+const SYNC_DEBOUNCE_MS = 2_000
 const FOCUS_DEBOUNCE_MS = 60 * 1000
 const KNOWN_PR_KEY = "prism:known-pr-ids"
 
@@ -82,6 +83,7 @@ export function useManagedRepoPrSyncLoop(options: {
     [managedRepos],
   )
   const syncingRef = useRef(false)
+  const syncAbortRef = useRef<AbortController | null>(null)
   const syncAllRef = useRef<() => Promise<void>>(async () => {})
   const lastFocusRef = useRef(0)
   const [syncBadges, setSyncBadges] = useState<SyncBadgeState>({
@@ -113,14 +115,21 @@ export function useManagedRepoPrSyncLoop(options: {
   }, [items])
 
   const syncAll = useCallback(async () => {
-    if (!enabled || syncingRef.current || managedRepos.length === 0) return
+    if (!enabled || managedRepos.length === 0) return
+    syncAbortRef.current?.abort()
+    const ac = new AbortController()
+    syncAbortRef.current = ac
     syncingRef.current = true
     try {
-      await syncManagedReposPullRequests(managedRepos)
-      reload()
-      onSynced?.()
+      await syncManagedReposPullRequests(managedRepos, ac.signal)
+      if (!ac.signal.aborted) {
+        reload()
+        onSynced?.()
+      }
     } finally {
-      syncingRef.current = false
+      if (syncAbortRef.current === ac) {
+        syncingRef.current = false
+      }
     }
   }, [enabled, managedRepos, onSynced, reload])
 
@@ -128,7 +137,11 @@ export function useManagedRepoPrSyncLoop(options: {
 
   useEffect(() => {
     if (!enabled || !managedRepoIdsKey) return
-    void syncAllRef.current()
+    const timer = window.setTimeout(() => void syncAllRef.current(), SYNC_DEBOUNCE_MS)
+    return () => {
+      window.clearTimeout(timer)
+      syncAbortRef.current?.abort()
+    }
   }, [enabled, managedRepoIdsKey])
 
   useEffect(() => {
@@ -152,6 +165,10 @@ export function useManagedRepoPrSyncLoop(options: {
   useEffect(() => {
     detectBadges()
   }, [detectBadges, items])
+
+  useEffect(() => {
+    return () => syncAbortRef.current?.abort()
+  }, [])
 
   return { syncBadges, syncAll }
 }

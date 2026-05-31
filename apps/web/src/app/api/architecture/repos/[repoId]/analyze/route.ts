@@ -16,5 +16,5 @@ export async function POST(
       ...(authorization ? { Authorization: authorization } : {}),
     },
     body,
-  })
+  }, { incomingSignal: request.signal })
 }

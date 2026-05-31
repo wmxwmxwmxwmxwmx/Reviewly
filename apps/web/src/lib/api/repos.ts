@@ -45,7 +45,7 @@ export function syncMyRepositories(signal?: AbortSignal) {
 export function syncRepoPullRequests(repoId: string, signal?: AbortSignal) {
   return apiFetch<{ synced: number; created: number; updated: number }>(
     `/api/repos/${repoId}/sync-prs`,
-    { method: "POST", signal },
+    { method: "POST", signal, noRetry: true },
   )
 }
 

@@ -15,9 +15,28 @@ export const SCAN_STREAM_TIMEOUT_MS = null as number | null
 /** Legacy cap for non-stream requests (unused by scan SSE). */
 const SCAN_TIMEOUT_MS = 900_000
 
+type ProxyOptions = {
+  timeoutMs?: number
+  debug?: boolean
+  /** Browser/route abort — propagate to upstream Gateway fetch. */
+  incomingSignal?: AbortSignal
+}
+
 function gatewayUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`
   return `${GATEWAY_ORIGIN}${normalized}`
+}
+
+/** Merge abort signals; browser disconnect aborts upstream fetch. */
+export function mergeAbortSignals(
+  ...signals: (AbortSignal | undefined | null)[]
+): AbortSignal | undefined {
+  const active = signals.filter(
+    (s): s is AbortSignal => s instanceof AbortSignal && !s.aborted,
+  )
+  if (active.length === 0) return undefined
+  if (active.length === 1) return active[0]
+  return AbortSignal.any(active)
 }
 
 function gatewayUnreachableMessage(cause: unknown): string {
@@ -26,7 +45,7 @@ function gatewayUnreachableMessage(cause: unknown): string {
   }
   const detail = cause instanceof Error ? cause.message : String(cause)
   if (/ECONNREFUSED|fetch failed|socket hang up|ECONNRESET/i.test(detail)) {
-    return "无法连接后端 Gateway（请确认已在 127.0.0.1:3001 运行，且仅启动一个实例）。"
+    return "无法连接后端 Gateway（请确认已在 127.0.0.1:3001 运行，且仅有一个实例）。"
   }
   if (/aborted|timeout|ETIMEDOUT/i.test(detail)) {
     return "架构扫描超时：首次克隆大仓库可能较慢。请稍后再次点击「重新扫描」，或刷新页面查看是否已在后台完成。"
@@ -37,10 +56,15 @@ function gatewayUnreachableMessage(cause: unknown): string {
 export async function proxyToGateway(
   path: string,
   init: RequestInit,
-  options?: { timeoutMs?: number; debug?: boolean },
+  options?: ProxyOptions,
 ): Promise<Response> {
   const url = gatewayUrl(path)
   const debug = options?.debug ?? isServerApiDebugEnabled()
+  const signal = mergeAbortSignals(
+    init.signal ?? undefined,
+    options?.incomingSignal,
+    AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+  )
 
   if (debug) {
     serverApiLog("Next Route Handler outgoing request", {
@@ -54,7 +78,7 @@ export async function proxyToGateway(
   try {
     res = await fetch(url, {
       ...init,
-      signal: init.signal ?? AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+      signal,
     })
   } catch (cause) {
     serverApiError("Next Route Handler gateway fetch", cause)
@@ -94,15 +118,19 @@ export async function proxyToGateway(
 export async function proxyToGatewayStream(
   path: string,
   init: RequestInit,
-  options?: { timeoutMs?: number | null },
+  options?: { timeoutMs?: number | null; incomingSignal?: AbortSignal },
 ): Promise<Response> {
   const url = gatewayUrl(path)
   const timeoutMs = options?.timeoutMs
-  const signal =
-    init.signal ??
-    (timeoutMs === null
+  const timeoutSignal =
+    timeoutMs === null
       ? undefined
-      : AbortSignal.timeout(timeoutMs ?? DEFAULT_TIMEOUT_MS))
+      : AbortSignal.timeout(timeoutMs ?? DEFAULT_TIMEOUT_MS)
+  const signal = mergeAbortSignals(
+    init.signal ?? undefined,
+    options?.incomingSignal,
+    timeoutSignal,
+  )
 
   try {
     const res = await fetch(url, {

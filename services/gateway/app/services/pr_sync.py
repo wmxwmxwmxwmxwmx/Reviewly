@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
@@ -14,7 +14,14 @@ from app.repositories import auth_users as auth_users_repo
 from app.services.activity_log import record_activity
 from app.services.analysis_cache import extract_shas_from_github_pr
 
+if TYPE_CHECKING:
+    from starlette.requests import Request
+
 logger = logging.getLogger(__name__)
+
+
+async def _client_disconnected(request: Request | None) -> bool:
+    return request is not None and await request.is_disconnected()
 
 
 async def _persist_pr_with_token(
@@ -26,6 +33,7 @@ async def _persist_pr_with_token(
     name: str,
     token: str,
     owner_user_id: str | None = None,
+    request: Request | None = None,
 ) -> tuple[str, bool]:
     pr_id = f"pr-{gh_pr['id']}"
     existing_row = session.get(PullRequest, pr_id)
@@ -39,6 +47,8 @@ async def _persist_pr_with_token(
         and head_sha
         and existing_row.head_sha == head_sha
     ):
+        if await _client_disconnected(request):
+            return pr_id, False
         _, pr_payload = _map_pr(gh_pr, repo_id, full_name)
         pr_repo.upsert_pull_request(
             session,
@@ -56,7 +66,14 @@ async def _persist_pr_with_token(
         session.commit()
         return pr_id, False
 
+    if await _client_disconnected(request):
+        return pr_id, created
+
     patch = await fetch_pull_request_diff(owner, name, gh_pr["number"], token)
+
+    if await _client_disconnected(request):
+        return pr_id, created
+
     await _persist_pull_request(
         session,
         gh_pr=gh_pr,
@@ -77,6 +94,7 @@ async def sync_repository_pull_requests(
     token: str,
     actor: str = "system",
     enqueue_analysis: bool = True,
+    request: Request | None = None,
 ) -> dict[str, int]:
     owner = repo_row.owner or ""
     name = repo_row.name or ""
@@ -86,7 +104,14 @@ async def sync_repository_pull_requests(
     if not owner or not name:
         return {"synced": 0, "created": 0, "updated": 0}
 
+    if await _client_disconnected(request):
+        return {"synced": 0, "created": 0, "updated": 0}
+
     gh_prs = await fetch_repo_pull_requests(owner, name, token, state="open")
+
+    if await _client_disconnected(request):
+        return {"synced": 0, "created": 0, "updated": 0}
+
     gh_repo = {
         "id": int(repo_row.github_id) if repo_row.github_id else 0,
         "full_name": repo_row.full_name,
@@ -99,6 +124,8 @@ async def sync_repository_pull_requests(
     new_pr_ids: list[str] = []
 
     for gh_pr in gh_prs:
+        if await _client_disconnected(request):
+            break
         pr_id, was_created = await _persist_pr_with_token(
             session,
             gh_repo=gh_repo,
@@ -107,6 +134,7 @@ async def sync_repository_pull_requests(
             name=name,
             token=token,
             owner_user_id=repo_row.owner_user_id,
+            request=request,
         )
         synced += 1
         if was_created:
@@ -114,6 +142,9 @@ async def sync_repository_pull_requests(
             new_pr_ids.append(pr_id)
         else:
             updated += 1
+
+    if synced == 0:
+        return {"synced": 0, "created": 0, "updated": 0}
 
     repo_row.open_prs = synced
     session.flush()
@@ -128,7 +159,7 @@ async def sync_repository_pull_requests(
     )
     session.commit()
 
-    if enqueue_analysis and new_pr_ids:
+    if enqueue_analysis and new_pr_ids and not await _client_disconnected(request):
         from app.services.analysis_orchestrator import enqueue_analysis_for_pr_ids
 
         enqueue_analysis_for_pr_ids(new_pr_ids)
@@ -147,6 +178,8 @@ async def sync_repository_pull_requests_for_user(
     session: Session,
     repo_row: Repository,
     user: AuthUser,
+    *,
+    request: Request | None = None,
 ) -> dict[str, int]:
     token = auth_users_repo.decrypt_token(user.access_token_encrypted)
     if not token:
@@ -159,6 +192,7 @@ async def sync_repository_pull_requests_for_user(
         token=token,
         actor=user.username,
         enqueue_analysis=True,
+        request=request,
     )
 
 

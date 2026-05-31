@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -88,6 +88,7 @@ async def remove_repository(
 @router.post("/{repo_id}/sync-prs")
 async def sync_repo_pull_requests(
     repo_id: str,
+    request: Request,
     user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -99,4 +100,4 @@ async def sync_repo_pull_requests(
         raise api_error("Repository not found", 404)
     from app.services.pr_sync import sync_repository_pull_requests_for_user
 
-    return await sync_repository_pull_requests_for_user(db, row, user)
+    return await sync_repository_pull_requests_for_user(db, row, user, request=request)

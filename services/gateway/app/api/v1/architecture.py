@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -37,12 +37,14 @@ class AnalyzeBody(BaseModel):
 
 
 @router.post("/scan")
-async def scan_repository(body: ScanBody, db: Session = Depends(get_db)):
+async def scan_repository(body: ScanBody, request: Request, db: Session = Depends(get_db)):
     if body.stream:
 
         async def event_stream():
             try:
                 async for event in architecture_scan_service.stream_run_scan(db, body.repo_id):
+                    if await request.is_disconnected():
+                        break
                     payload = json.dumps(event, ensure_ascii=False)
                     yield f"data: {payload}\n\n"
                 yield "data: [DONE]\n\n"
@@ -69,6 +71,7 @@ def architecture_graph(repo_id: str, db: Session = Depends(get_db)) -> dict:
 @router.post("/repos/{repo_id}/analyze")
 async def architecture_analyze(
     repo_id: str,
+    request: Request,
     body: AnalyzeBody | None = None,
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
@@ -79,6 +82,8 @@ async def architecture_analyze(
             async for delta in architecture_analyze_service.stream_architecture_analysis(
                 db, repo_id
             ):
+                if await request.is_disconnected():
+                    break
                 payload = json.dumps({"delta": delta}, ensure_ascii=False)
                 yield f"data: {payload}\n\n"
             yield "data: [DONE]\n\n"

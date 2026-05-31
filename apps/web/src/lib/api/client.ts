@@ -24,6 +24,8 @@ type RequestOptions = RequestInit & {
   signal?: AbortSignal
   /** Caller handles these HTTP statuses; skip debug error logging. */
   silentStatuses?: number[]
+  /** Skip retry loop (e.g. analysis job polling). */
+  noRetry?: boolean
 }
 
 function buildHeaders(options: RequestOptions, token: string | null): HeadersInit {
@@ -274,6 +276,10 @@ async function apiFetchOnce<T>(
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  if (options.noRetry) {
+    return apiFetchOnce<T>(path, options)
+  }
+
   const method = options.method ?? "GET"
   let lastError: unknown
   for (let attempt = 1; attempt <= API_FETCH_MAX_ATTEMPTS; attempt++) {

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -23,6 +23,7 @@ class OptimizeBody(BaseModel):
 @router.post("/{finding_id}/optimize")
 async def optimize_finding(
     finding_id: str,
+    request: Request,
     body: OptimizeBody | None = None,
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
@@ -37,6 +38,8 @@ async def optimize_finding(
     async def event_stream():
         try:
             async for delta in performance_optimize.stream_finding_optimization(db, finding_id):
+                if await request.is_disconnected():
+                    break
                 payload = json.dumps({"delta": delta}, ensure_ascii=False)
                 yield f"data: {payload}\n\n"
             yield "data: [DONE]\n\n"

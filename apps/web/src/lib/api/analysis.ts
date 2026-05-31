@@ -17,7 +17,7 @@ export function startAnalysis(prId: string, options?: { force?: boolean }) {
 }
 
 export function fetchAnalysisJob(jobId: string, signal?: AbortSignal) {
-  return apiFetch<AnalysisJob>(`/api/analysis/jobs/${jobId}`, { signal })
+  return apiFetch<AnalysisJob>(`/api/analysis/jobs/${jobId}`, { signal, noRetry: true })
 }
 
 export function fetchLatestAnalysis(prId: string, signal?: AbortSignal) {
@@ -45,7 +45,8 @@ export function fetchFindings(prId: string, signal?: AbortSignal) {
   return apiFetch<AnalysisFinding[]>(`/api/pull-requests/${prId}/findings`, { signal })
 }
 
-const POLL_INTERVAL_MS = 600
+const POLL_INTERVAL_MS = 1500
+const POLL_MAX_INTERVAL_MS = 3000
 
 function sleep(ms: number, signal?: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
@@ -66,6 +67,7 @@ export async function pollAnalysisJob(
   onProgress?: (job: AnalysisJob) => void,
   signal?: AbortSignal,
 ): Promise<AnalysisJob> {
+  let interval = POLL_INTERVAL_MS
   for (;;) {
     const job = await fetchAnalysisJob(jobId, signal)
     onProgress?.(job)
@@ -77,7 +79,8 @@ export async function pollAnalysisJob(
       throw new PrismApiError(job.error ?? "分析任务失败", 500)
     }
 
-    await sleep(POLL_INTERVAL_MS, signal)
+    await sleep(interval, signal)
+    interval = Math.min(Math.round(interval * 1.5), POLL_MAX_INTERVAL_MS)
   }
 }
 

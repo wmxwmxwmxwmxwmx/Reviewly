@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -22,6 +22,7 @@ class ExplainBody(BaseModel):
 @router.post("/{finding_id}/explain")
 async def explain_finding(
     finding_id: str,
+    request: Request,
     body: ExplainBody | None = None,
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
@@ -38,6 +39,8 @@ async def explain_finding(
     async def event_stream():
         try:
             async for delta in security_explain.stream_finding_explanation(db, finding_id):
+                if await request.is_disconnected():
+                    break
                 payload = json.dumps({"delta": delta}, ensure_ascii=False)
                 yield f"data: {payload}\n\n"
             yield "data: [DONE]\n\n"

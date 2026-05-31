@@ -1,7 +1,7 @@
 import json
 import time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -85,7 +85,7 @@ async def _stream_chat(
 
 
 @router.post("/chat")
-async def chat(body: ChatRequestBody, db: Session = Depends(get_db)):
+async def chat(body: ChatRequestBody, request: Request, db: Session = Depends(get_db)):
     if not body.messages:
         raise api_error("缺少待发送的消息内容")
 
@@ -107,6 +107,8 @@ async def chat(body: ChatRequestBody, db: Session = Depends(get_db)):
                     messages=messages,
                     temperature=temperature,
                 ):
+                    if await request.is_disconnected():
+                        break
                     if isinstance(chunk, str):
                         payload = json.dumps({"delta": chunk}, ensure_ascii=False)
                         yield f"data: {payload}\n\n"
