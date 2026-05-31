@@ -11,11 +11,17 @@ prism_parse_deploy_args "$@"
 COMPOSE=(docker compose -f deploy/docker-compose.yml --env-file deploy/.env)
 
 prism_step() {
-  prism_color yellow "$1"
+  if [ "${PRISM_DEPLOY_YES:-0}" = "1" ]; then
+    echo "$1"
+  else
+    prism_color yellow "$1"
+  fi
 }
 
 prism_step "[1/7] 检查运行环境..."
 prism_check_docker
+prism_ensure_docker_session || true
+prism_stop_existing_stack
 prism_check_port 5432 "PostgreSQL" || exit 1
 prism_check_port 3001 "Gateway" || exit 1
 prism_check_port 3000 "Web" || exit 1

@@ -5,6 +5,25 @@
 PRISM_DEPLOY_YES="${PRISM_DEPLOY_YES:-0}"
 PRISM_DEPLOY_STUB_ENGINE="${PRISM_DEPLOY_STUB_ENGINE:-}"
 
+prism_is_yes_mode() {
+  [ "$PRISM_DEPLOY_YES" = "1" ]
+}
+
+prism_log_step() {
+  prism_is_yes_mode && return 0
+  prism_color yellow "$1"
+}
+
+prism_log_ok() {
+  prism_is_yes_mode && return 0
+  prism_color green "$1"
+}
+
+prism_log_warn() {
+  prism_is_yes_mode && return 0
+  prism_color yellow "$1"
+}
+
 prism_color() {
   local c="$1" msg="$2"
   case "$c" in
@@ -90,17 +109,17 @@ prism_autofill_deploy_env() {
   [ -f "$f" ] || return 0
   if grep -q '^JWT_SECRET=<generate>' "$f" || grep -q '^JWT_SECRET=$' "$f"; then
     prism_set_env_key "$f" "JWT_SECRET" "$(prism_rand_hex 32)"
-    prism_color yellow "  已自动生成 JWT_SECRET"
+    prism_log_warn "  已自动生成 JWT_SECRET"
   fi
   if grep -q '^SETTINGS_ENCRYPTION_KEY=<generate>' "$f" || grep -q '^SETTINGS_ENCRYPTION_KEY=$' "$f"; then
     prism_set_env_key "$f" "SETTINGS_ENCRYPTION_KEY" "$(prism_rand_hex 32)"
-    prism_color yellow "  已自动生成 SETTINGS_ENCRYPTION_KEY"
+    prism_log_warn "  已自动生成 SETTINGS_ENCRYPTION_KEY"
   fi
   if [ -n "$PRISM_DEPLOY_STUB_ENGINE" ]; then
     prism_set_env_key "$f" "PRISM_STUB_ENGINE" "$PRISM_DEPLOY_STUB_ENGINE"
   elif grep -q '^PRISM_STUB_ENGINE=0' "$f" && [ "${PRISM_FIRST_DEPLOY:-0}" = "1" ]; then
     prism_set_env_key "$f" "PRISM_STUB_ENGINE" "1"
-    prism_color yellow "  首次部署已设 PRISM_STUB_ENGINE=1（跳过 C++ 编译，稳定后可改回 0）"
+    prism_log_warn "  首次部署已设 PRISM_STUB_ENGINE=1（跳过 C++ 编译，稳定后可改回 0）"
   fi
 }
 
@@ -196,7 +215,7 @@ prism_ensure_github_oauth() {
   prism_sanitize_placeholders
 
   if prism_oauth_is_configured; then
-    prism_color green "  GitHub OAuth 已就绪（来自 deploy/.env 或 services/gateway/.env）"
+    prism_log_ok "  GitHub OAuth 已就绪（来自 deploy/.env 或 services/gateway/.env）"
     return 0
   fi
 
@@ -205,7 +224,14 @@ prism_ensure_github_oauth() {
     prism_set_env_key "$f" "GITHUB_OAUTH_CLIENT_ID" "$GITHUB_OAUTH_CLIENT_ID"
     prism_set_env_key "$f" "GITHUB_OAUTH_CLIENT_SECRET" "$GITHUB_OAUTH_CLIENT_SECRET"
     prism_set_env_key "$f" "PRISM_AUTH_BYPASS" "0"
-    prism_color green "  已从环境变量写入 GitHub OAuth"
+    prism_log_ok "  已从环境变量写入 GitHub OAuth"
+    return 0
+  fi
+
+  if prism_is_yes_mode; then
+    prism_apply_public_urls "${PRISM_PUBLIC_URL:-http://localhost:3000}"
+    prism_set_env_key "$f" "PRISM_AUTH_BYPASS" "1"
+    prism_log_warn "  一键模式：未检测到 OAuth，已启用 PRISM_AUTH_BYPASS=1"
     return 0
   fi
 
@@ -224,6 +250,12 @@ prism_ensure_github_oauth() {
     esac
     prism_color red "  未配置 GitHub OAuth，部署已取消。"
     return 1
+  fi
+
+  if prism_is_yes_mode; then
+    prism_apply_public_urls "${PRISM_PUBLIC_URL:-http://localhost:3000}"
+    prism_set_env_key "$f" "PRISM_AUTH_BYPASS" "1"
+    return 0
   fi
 
   prism_warn_oauth
@@ -271,7 +303,7 @@ prism_setup_deploy_env() {
     prism_fix_docker_deploy_env
     prism_sanitize_placeholders
     prism_autofill_deploy_env
-    prism_color yellow "  已创建 deploy/.env"
+    prism_log_warn "  已创建 deploy/.env"
   else
     prism_sanitize_placeholders
     prism_autofill_deploy_env
@@ -327,6 +359,31 @@ prism_check_docker() {
     return 1
   fi
   return 0
+}
+
+prism_stop_existing_stack() {
+  if ! command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+  if [ -f "$ROOT/deploy/docker-compose.yml" ]; then
+    docker compose -f "$ROOT/deploy/docker-compose.yml" down --remove-orphans >/dev/null 2>&1 || true
+  fi
+  if [ -f "$ROOT/docker-compose.yml" ]; then
+    docker compose -f "$ROOT/docker-compose.yml" down --remove-orphans >/dev/null 2>&1 || true
+  fi
+}
+
+prism_ensure_docker_session() {
+  if docker info >/dev/null 2>&1; then
+    return 0
+  fi
+  if command -v sudo >/dev/null 2>&1 && sudo docker info >/dev/null 2>&1; then
+    # shellcheck disable=SC2329
+    docker() { sudo docker "$@"; }
+    export -f docker
+    return 0
+  fi
+  return 1
 }
 
 prism_check_port() {

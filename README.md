@@ -23,9 +23,9 @@
 
 ```bash
 git clone <仓库地址> Reviewly && cd Reviewly
-# Windows: 双击 deploy.bat
-# Linux:   bash deploy/bootstrap.sh
-# 或:      npm run deploy
+# Windows: 双击 deploy.bat 或 install.bat（全程无交互）
+# Linux:   bash install.sh
+# 或:      npm run install
 ```
 
 启动后打开 http://localhost:3000 → **使用 GitHub 登录**。
@@ -66,27 +66,27 @@ git clone <仓库地址> Reviewly && cd Reviewly
 # 1. 克隆项目
 git clone <仓库地址> Reviewly && cd Reviewly
 
-# 2. 一条命令：检查环境 → 可选安装 Docker → 自动部署
-bash deploy/bootstrap.sh
+# 2. 一条命令：检查环境 → 自动安装 Docker（Linux）→ 静默部署
+bash install.sh
 ```
 
-- 若**没有 Docker**：脚本会询问是否自动安装（调用 `deploy/install-docker.sh`，需 sudo），装完后**注销重新登录**，再执行一次 `bash deploy/bootstrap.sh`。
-- 若**已有 Docker**：直接构建并启动，全程无需按 Enter（自动生成 `deploy/.env` 与 JWT 密钥）。
+- 若**没有 Docker**（仅 Linux）：自动安装 Docker（需 sudo），装完后尽量继续部署；若仍无权限则提示重新登录后再执行 `bash install.sh`。
+- 若**已有 Docker**：直接构建并启动，**全程无交互**（使用仓库内 `deploy/.env`，无需手填 OAuth）。
 - **首次默认跳过 C++ 引擎**（`PRISM_STUB_ENGINE=1`），避免新机编译失败；功能完整可用，稳定后可在 `deploy/.env` 改 `PRISM_STUB_ENGINE=0` 重新部署。
 
 等价命令：
 
 ```bash
-bash bootstrap.sh                    # 根目录快捷入口
-bash deploy/deploy.sh -y --stub-engine # 已有 Docker，静默部署
+bash install.sh                        # 推荐：一键安装
+bash deploy/bootstrap.sh -y --stub-engine
 ```
 
 ### Windows 新机
 
 1. 安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/) 并启动（或 `winget install Docker.DockerDesktop`）。
-2. 克隆仓库后，**双击 `deploy.bat`**（内部调用 `deploy/bootstrap.ps1`）。
+2. 克隆仓库后，**双击 `install.bat` 或 `deploy.bat`**（静默部署，无弹窗确认）。
 
-无需安装 Node。若未装 Docker，脚本会提示下载地址。
+无需安装 Node。须先安装并启动 Docker Desktop。
 
 ### macOS 新机
 

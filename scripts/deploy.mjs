@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * 跨平台一键部署入口：npm run deploy
- * 前置条件：已安装并启动 Docker Desktop / Docker Engine
+ * 跨平台一键安装/部署：npm run deploy
+ * 前置条件（Windows/macOS）：已安装并启动 Docker Desktop
  */
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -18,11 +18,11 @@ const result = isWin
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        path.join(root, "deploy", "deploy.ps1"),
+        path.join(root, "deploy", "bootstrap.ps1"),
       ],
       { stdio: "inherit", cwd: root },
     )
-  : spawnSync("bash", [path.join(root, "deploy", "deploy.sh")], {
+  : spawnSync("bash", [path.join(root, "deploy", "bootstrap.sh"), "-y", "--stub-engine"], {
       stdio: "inherit",
       cwd: root,
     });

@@ -2,6 +2,14 @@
 # 在 Linux 上安装 Docker Engine + Compose 插件（官方 convenience script）
 set -euo pipefail
 
+PRISM_DEPLOY_YES="${PRISM_DEPLOY_YES:-0}"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -y|--yes) PRISM_DEPLOY_YES=1; shift ;;
+    *) shift ;;
+  esac
+done
+
 if [ "$(uname -s)" != "Linux" ]; then
   echo "install-docker.sh 仅适用于 Linux。"
   echo "其他系统请安装 Docker Desktop: https://www.docker.com/products/docker-desktop/"
@@ -13,12 +21,14 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   exit 0
 fi
 
-echo "将使用 https://get.docker.com 安装 Docker（需要 sudo）。"
-read -r -p "继续? [y/N] " ans
-case "${ans:-N}" in
-  y|Y|yes|YES) ;;
-  *) echo "已取消"; exit 0 ;;
-esac
+if [ "$PRISM_DEPLOY_YES" != "1" ]; then
+  echo "将使用 https://get.docker.com 安装 Docker（需要 sudo）。"
+  read -r -p "继续? [y/N] " ans
+  case "${ans:-N}" in
+    y|Y|yes|YES) ;;
+    *) echo "已取消"; exit 0 ;;
+  esac
+fi
 
 if ! command -v curl >/dev/null 2>&1; then
   echo "安装 curl..."

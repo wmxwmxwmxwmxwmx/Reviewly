@@ -27,7 +27,10 @@ $EnvFile = Join-Path $Root "deploy\.env"
 $EnvExample = Join-Path $Root "deploy\.env.example"
 $GatewayEnv = Join-Path $Root "services\gateway\.env"
 
-function Write-Step([string]$Message) { Write-Host $Message -ForegroundColor Yellow }
+function Write-Step([string]$Message) {
+    if ($Yes) { Write-Host $Message }
+    else { Write-Host $Message -ForegroundColor Yellow }
+}
 function Write-Ok([string]$Message) { Write-Host $Message -ForegroundColor Green }
 function Write-Err([string]$Message) { Write-Host $Message -ForegroundColor Red }
 
@@ -111,6 +114,17 @@ function Set-PublicUrls([string]$FrontendUrl) {
     return $callback
 }
 
+function Stop-ExistingStack {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return }
+    if (Test-Path $ComposeFile) {
+        docker compose -f $ComposeFile down --remove-orphans 2>$null | Out-Null
+    }
+    $devCompose = Join-Path $Root "docker-compose.yml"
+    if (Test-Path $devCompose) {
+        docker compose -f $devCompose down --remove-orphans 2>$null | Out-Null
+    }
+}
+
 function Ensure-GithubOAuth {
     if (-not (Test-Path $EnvFile)) {
         Copy-Item $EnvExample $EnvFile
@@ -120,18 +134,24 @@ function Ensure-GithubOAuth {
     Clear-PlaceholderEnvKeys
 
     if (Test-OAuthConfigured) {
-        Write-Host "  GitHub OAuth 已就绪" -ForegroundColor Green
+        if (-not $Yes) { Write-Host "  GitHub OAuth 已就绪" -ForegroundColor Green }
         return $true
     }
 
     $envCid = $env:GITHUB_OAUTH_CLIENT_ID
     $envSec = $env:GITHUB_OAUTH_CLIENT_SECRET
     if ($envCid -and $envSec) {
-        $cb = Set-PublicUrls -FrontendUrl $env:PRISM_PUBLIC_URL
+        $null = Set-PublicUrls -FrontendUrl $env:PRISM_PUBLIC_URL
         Set-EnvKey $EnvFile "GITHUB_OAUTH_CLIENT_ID" $envCid.Trim()
         Set-EnvKey $EnvFile "GITHUB_OAUTH_CLIENT_SECRET" $envSec.Trim()
         Set-EnvKey $EnvFile "PRISM_AUTH_BYPASS" "0"
-        Write-Host "  已从环境变量写入 GitHub OAuth" -ForegroundColor Green
+        if (-not $Yes) { Write-Host "  已从环境变量写入 GitHub OAuth" -ForegroundColor Green }
+        return $true
+    }
+
+    if ($Yes) {
+        $null = Set-PublicUrls -FrontendUrl "http://localhost:3000"
+        Set-EnvKey $EnvFile "PRISM_AUTH_BYPASS" "1"
         return $true
     }
 
@@ -182,7 +202,9 @@ function Initialize-DeployEnv {
         Set-EnvKey $EnvFile "PRISM_STUB_ENGINE" "0"
     } elseif ($FirstDeploy -and -not $WithEngine) {
         Set-EnvKey $EnvFile "PRISM_STUB_ENGINE" "1"
-        Write-Host "  首次部署已设 PRISM_STUB_ENGINE=1（跳过 C++ 编译）" -ForegroundColor Yellow
+        if (-not $Yes) {
+            Write-Host "  首次部署已设 PRISM_STUB_ENGINE=1（跳过 C++ 编译）" -ForegroundColor Yellow
+        }
     }
     if (-not $Yes) {
         Write-Host "  配置已保存。按 Enter 开始构建镜像，Ctrl+C 取消" -ForegroundColor Yellow
@@ -191,6 +213,13 @@ function Initialize-DeployEnv {
 }
 
 function Require-GithubOAuthOrExit {
+    if ($Yes) {
+        if (-not (Ensure-GithubOAuth)) {
+            $null = Set-PublicUrls -FrontendUrl "http://localhost:3000"
+            Set-EnvKey $EnvFile "PRISM_AUTH_BYPASS" "1"
+        }
+        return
+    }
     if (Ensure-GithubOAuth) { return }
     $skip = Read-Host "跳过 GitHub 配置并启用开发模式? [y/N]"
     if ($skip -match '^[yY]') {
@@ -237,6 +266,7 @@ function Test-PortInUse([int]$Port, [string]$Name) {
 
 Write-Step "[1/7] 检查运行环境..."
 Test-Docker
+Stop-ExistingStack
 try {
     Test-PortInUse -Port 5432 -Name "PostgreSQL"
     Test-PortInUse -Port 3001 -Name "Gateway"

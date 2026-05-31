@@ -1,5 +1,5 @@
 @echo off
-REM PRism 新机一键部署（仅需 Docker Desktop，无需 Node/Python）
+REM Reviewly 一键安装（仅需 Docker Desktop）
 cd /d "%~dp0"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0deploy\bootstrap.ps1"
-if errorlevel 1 pause
+exit /b %ERRORLEVEL%
