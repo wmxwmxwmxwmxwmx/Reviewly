@@ -25,6 +25,7 @@ import {
   useAISettings,
 } from "@/features/prism/contexts/ai-settings-context"
 import { useAuth } from "@/features/prism/contexts/auth-context"
+import { LocalUninstallDangerZone } from "@/features/prism/components/local-uninstall-danger-zone"
 import { ProfileDialog } from "@/features/prism/components/profile-dialog"
 import { useSecuritySettings } from "@/features/prism/contexts/security-settings-context"
 import { TwoFactorPinDialog } from "@/features/prism/components/two-factor-pin-dialog"
@@ -666,6 +667,8 @@ export function SettingsView() {
           </Button>
         </div>
       </div>
+
+      <LocalUninstallDangerZone />
 
       <TwoFactorPinDialog
         open={pinDialogOpen}

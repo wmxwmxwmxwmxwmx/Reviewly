@@ -21,7 +21,9 @@
     "clean": "node scripts/clean.mjs",
     "start:app": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start.ps1",
     "deploy": "node scripts/deploy.mjs",
-    "stop": "node scripts/stop.mjs"
+    "stop": "node scripts/stop.mjs",
+    "uninstall": "node scripts/uninstall.mjs",
+    "uninstall:purge": "node scripts/uninstall.mjs --purge"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

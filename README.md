@@ -128,6 +128,22 @@ bash deploy/bootstrap.sh
 bash deploy/deploy.sh -y --with-engine
 ```
 
+### 卸载
+
+仅删除 **Reviewly / PRism** 创建的 Docker 容器、网络、命名卷与本地 `data/repo-cache`、`logs`、`tmp`。默认**保留** `deploy/.env` 以便重新部署。
+
+| 系统 | 标准卸载 | 彻底卸载（含配置与依赖） |
+|------|----------|--------------------------|
+| Linux / macOS | `bash deploy/uninstall.sh` | `bash deploy/uninstall.sh --purge` |
+| Windows (PS 7+) | `.\deploy\uninstall.ps1` | `.\deploy\uninstall.ps1 -Purge` |
+| 跨平台（需 Node） | `npm run uninstall` | `npm run uninstall:purge` |
+
+**安全约束：** 不执行 `docker system prune` / `docker volume prune`；不删除非白名单容器、卷或网络。
+
+Purge 模式会在终端二次确认 `[y/N]`，并额外删除 `.env`、`node_modules`、`.next`、Python `.venv` 等。
+
+开发时可在 **系统设置 → Danger Zone** 查看本地资源统计并复制卸载命令。
+
 ### 验证
 
 | 用途 | 地址 |
@@ -414,6 +430,8 @@ Reviewly/
 ├── deploy/                   # 生产 Docker 全栈
 │   ├── bootstrap.sh          # 新机引导（装 Docker + 部署）
 │   ├── deploy.sh / deploy.ps1
+│   ├── uninstall.sh / uninstall.ps1  # 安全卸载（仅 Reviewly 资源）
+│   ├── cleanup.sh / cleanup.ps1      # 卸载共享函数
 │   └── install-docker.sh     # Linux Docker 安装助手
 ├── bootstrap.sh              # → deploy/bootstrap.sh
 ├── deploy.bat / deploy.cmd / deploy.sh
@@ -433,6 +451,10 @@ Reviewly/
 | `npm run dev:engine` | 仅 C++ 引擎 |
 | `npm run deploy` | Docker 全栈（需 Node；等价于 deploy 脚本） |
 | `npm run stop` | 一键停止 Docker 栈与本地 3000/3001 |
+| `npm run uninstall` | 卸载 Reviewly 容器/卷/缓存（保留 `.env`） |
+| `npm run uninstall:purge` | 彻底卸载（含配置与 `node_modules`，需确认） |
+| `bash deploy/uninstall.sh` | Linux/macOS 卸载（同上） |
+| `.\deploy\uninstall.ps1` | Windows 卸载（PowerShell 7+） |
 | `bash deploy/bootstrap.sh` | **新机推荐**：引导装 Docker + 部署 |
 | `npm run build` | 构建 shared + web |
 | `npm run lint` | ESLint + TypeScript 检查 |
