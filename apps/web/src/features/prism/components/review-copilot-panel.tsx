@@ -19,6 +19,11 @@ const SEVERITY_ORDER: Record<string, number> = {
   low: 3,
 }
 
+const SECTION_FALLBACK = "未发现明显问题"
+
+const BODY_SECTION_MARKERS =
+  /问题[：:]|原因[：:]|影响[：:]|建议[：:]|Review Comment[：:]|风险传播链[：:]|Reviewer思考过程[：:]/i
+
 type ReviewCopilotPanelProps = {
   pr: PullRequest
   panelState: AnalysisPanelState
@@ -42,6 +47,73 @@ function buildRiskPoints(findings: AnalysisFinding[]): string[] {
     .slice(0, 3)
     .map((f) => f.title || f.description || f.file)
     .filter(Boolean)
+}
+
+function prefersBodyView(items: string[], forceBody = false): boolean {
+  if (forceBody) return true
+  if (items.length === 1 && BODY_SECTION_MARKERS.test(items[0] ?? "")) return true
+  return items.some((item) => BODY_SECTION_MARKERS.test(item))
+}
+
+function SectionList({
+  title,
+  items,
+  fallback = SECTION_FALLBACK,
+}: {
+  title: string
+  items: string[]
+  fallback?: string
+}) {
+  const list = items.length > 0 ? items : [fallback]
+  return (
+    <div>
+      <p className="text-muted-foreground mb-1.5">{title}</p>
+      <ul className="space-y-1 list-disc list-inside text-foreground/90">
+        {list.map((p, i) => (
+          <li key={`${title}-${i}`}>{p}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function SectionBody({
+  title,
+  items,
+  fallback = SECTION_FALLBACK,
+}: {
+  title: string
+  items: string[]
+  fallback?: string
+}) {
+  const list = items.length > 0 ? items : [fallback]
+  return (
+    <div>
+      <p className="text-muted-foreground mb-1.5">{title}</p>
+      <div className="space-y-2 text-foreground/90">
+        {list.map((p, i) => (
+          <p key={`${title}-body-${i}`} className="whitespace-pre-wrap text-[11px] leading-relaxed">
+            {p}
+          </p>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ReviewSection({
+  title,
+  items,
+  forceBody = false,
+}: {
+  title: string
+  items: string[]
+  forceBody?: boolean
+}) {
+  if (prefersBodyView(items, forceBody)) {
+    return <SectionBody title={title} items={items} />
+  }
+  return <SectionList title={title} items={items} />
 }
 
 function PanelSkeleton() {
@@ -71,9 +143,28 @@ export function ReviewCopilotPanel({
 
   const parsed = opinion.parsedSections
   const riskLevel = parsed?.riskLevel ?? taskForActions.riskLevel
+  const findingPoints = buildRiskPoints(findings)
+  const parsedFindings = parsed?.keyFindings ?? []
+  const parsedFindingsPlaceholder =
+    parsedFindings.length === 1 &&
+    (parsedFindings[0] === "未发现显著风险" || parsedFindings[0] === SECTION_FALLBACK)
   const keyFindings =
-    parsed?.keyFindings.length ? parsed.keyFindings : buildRiskPoints(findings)
-  const reviewSuggestions = parsed?.reviewSuggestions ?? []
+    parsedFindings.length > 0 && !parsedFindingsPlaceholder
+      ? parsedFindings
+      : findingPoints.length > 0
+        ? findingPoints
+        : parsedFindings.length > 0
+          ? parsedFindings
+          : [SECTION_FALLBACK]
+
+  const logicReview = parsed?.logicReview ?? [SECTION_FALLBACK]
+  const businessReview = parsed?.businessReview ?? [SECTION_FALLBACK]
+  const codeQualityReview = parsed?.codeQualityReview ?? [SECTION_FALLBACK]
+  const styleReview = parsed?.styleReview ?? [SECTION_FALLBACK]
+  const riskPropagation = parsed?.riskPropagation ?? [SECTION_FALLBACK]
+  const reviewComments = parsed?.reviewComments ?? [SECTION_FALLBACK]
+  const reviewerChecks = parsed?.reviewerChecks ?? [SECTION_FALLBACK]
+  const reviewSuggestions = parsed?.reviewSuggestions ?? [SECTION_FALLBACK]
 
   return (
     <aside
@@ -132,35 +223,31 @@ export function ReviewCopilotPanel({
 
             <div>
               <p className="text-muted-foreground mb-1">风险等级</p>
-              <p className="font-medium text-foreground">{riskLevel}</p>
+              <p className="font-medium text-foreground">{riskLevel ?? "—"}</p>
             </div>
 
-            {keyFindings.length > 0 ? (
-              <div>
-                <p className="text-muted-foreground mb-1.5">关键发现</p>
-                <ul className="space-y-1 list-disc list-inside text-foreground/90">
-                  {keyFindings.map((p, i) => (
-                    <li key={`${p}-${i}`}>{p}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+            <ReviewSection title="关键发现" items={keyFindings} />
+
+            <ReviewSection title="逻辑审查" items={logicReview} />
+
+            <ReviewSection title="业务逻辑审查" items={businessReview} />
+
+            <ReviewSection title="代码质量审查" items={codeQualityReview} />
+
+            <ReviewSection title="工程规范审查" items={styleReview} />
+
+            <ReviewSection title="风险传播分析" items={riskPropagation} forceBody />
+
+            <ReviewSection title="建议 Review Comment" items={reviewComments} forceBody />
 
             <GovernanceRuleResults
               rules={governanceRules}
               loading={governanceLoading}
             />
 
-            {reviewSuggestions.length > 0 ? (
-              <div>
-                <p className="text-muted-foreground mb-1.5">Review 建议</p>
-                <ul className="space-y-1 list-disc list-inside text-foreground/90">
-                  {reviewSuggestions.map((p, i) => (
-                    <li key={`${p}-${i}`}>{p}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+            <ReviewSection title="Reviewer 重点确认项" items={reviewerChecks} />
+
+            <ReviewSection title="Review 建议" items={reviewSuggestions} />
 
             {onOpenFullReport ? (
               <Button

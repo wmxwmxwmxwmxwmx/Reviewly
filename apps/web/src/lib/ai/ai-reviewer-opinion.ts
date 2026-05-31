@@ -11,6 +11,14 @@ export type MergeRecommendationLabel =
 export interface ParsedSummarySections {
   riskLevel?: string
   keyFindings: string[]
+  logicReview: string[]
+  businessReview: string[]
+  codeQualityReview: string[]
+  styleReview: string[]
+  riskPropagation: string[]
+  reviewerChecks: string[]
+  reviewComments: string[]
+  governanceCheck: string[]
   reviewSuggestions: string[]
   reason?: string
 }
@@ -58,6 +66,11 @@ const MERGE_RECOMMENDATION_PATTERN =
 
 const PLACEHOLDER_BULLET =
   /^(严重|高|中|低|总计)[：:]\s*0\s*$|共\s*0\s*项发现|未发现阻塞合并项|未发现显著风险/i
+
+const STRUCTURED_SECTION_MARKERS =
+  /问题[：:]|原因[：:]|影响[：:]|建议[：:]|Review Comment[：:]|风险传播链[：:]|Reviewer思考过程[：:]/i
+
+const SECTION_PLACEHOLDER = "未发现明显问题"
 
 const GOVERNANCE_SEVERITY_RANK: Record<string, number> = {
   critical: 4,
@@ -119,9 +132,53 @@ function extractReasonFromConclusion(section: string | undefined): string | unde
   return undefined
 }
 
+/** Preserves root-cause / Review Comment / propagation blocks as full paragraphs. */
+export function sectionToDisplayItems(
+  section: string | undefined,
+  max: number,
+  emptyFallback: string = SECTION_PLACEHOLDER,
+): string[] {
+  if (!section?.trim()) {
+    return [emptyFallback]
+  }
+
+  const body = section.trim()
+
+  if (STRUCTURED_SECTION_MARKERS.test(body)) {
+    const parts = body
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+    if (parts.length === 0) {
+      return [emptyFallback]
+    }
+    return parts.slice(0, max)
+  }
+
+  const bullets = extractBullets(body, max)
+  if (bullets.length > 0) {
+    return bullets
+  }
+
+  const firstLine = body.split("\n")[0]?.trim()
+  if (firstLine && /未发现明显问题|未发现显著风险|未发现需要在 PR 中单独留言的问题/i.test(firstLine)) {
+    return [firstLine]
+  }
+
+  return [body]
+}
+
 export function parseSummarySections(summary: string): ParsedSummarySections {
   const riskSection = extractSection(summary, "风险等级")
   const findingsSection = extractSection(summary, "关键发现")
+  const logicSection = extractSection(summary, "逻辑审查")
+  const businessSection = extractSection(summary, "业务逻辑审查")
+  const qualitySection = extractSection(summary, "代码质量审查")
+  const styleSection = extractSection(summary, "工程规范审查")
+  const propagationSection = extractSection(summary, "风险传播分析")
+  const reviewerSection = extractSection(summary, "Reviewer重点确认项")
+  const reviewCommentsSection = extractSection(summary, "建议Review Comment")
+  const governanceSection = extractSection(summary, "工程治理检查")
   const reviewSection = extractSection(summary, "Review建议")
   const conclusionSection = extractSection(summary, "评审结论")
 
@@ -132,13 +189,26 @@ export function parseSummarySections(summary: string): ParsedSummarySections {
     reviewSuggestions = reviewSection
       .split("\n")
       .map((l) => l.trim())
-      .filter((l) => l && !l.startsWith("Reviewer"))
+      .filter((l) => l && !l.startsWith("Reviewer") && !/^建议确认[：:]\s*$/.test(l))
       .slice(0, 5)
   }
+  if (reviewSuggestions.length === 0) {
+    reviewSuggestions = [SECTION_PLACEHOLDER]
+  }
+
+  const keyFindings = sectionToDisplayItems(findingsSection, 5, "未发现显著风险")
 
   return {
     riskLevel: riskLevel || undefined,
-    keyFindings: extractBullets(findingsSection, 5),
+    keyFindings,
+    logicReview: sectionToDisplayItems(logicSection, 5),
+    businessReview: sectionToDisplayItems(businessSection, 5),
+    codeQualityReview: sectionToDisplayItems(qualitySection, 5),
+    styleReview: sectionToDisplayItems(styleSection, 5),
+    riskPropagation: sectionToDisplayItems(propagationSection, 5),
+    reviewerChecks: sectionToDisplayItems(reviewerSection, 5),
+    reviewComments: sectionToDisplayItems(reviewCommentsSection, 3),
+    governanceCheck: sectionToDisplayItems(governanceSection, 8),
     reviewSuggestions,
     reason: extractReasonFromConclusion(conclusionSection),
   }
