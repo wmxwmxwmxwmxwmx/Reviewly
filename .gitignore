@@ -24,6 +24,12 @@ venv/
 .cache/
 *.tsbuildinfo
 
+# Agent / Cursor / local dot tooling (do not commit)
+.agent/
+.agents/
+.cursor/
+AGENTS.md
+
 # Environment（deploy/.env、services/gateway/.env 为评委演示配置，已提交仓库）
 .env
 .env.*
