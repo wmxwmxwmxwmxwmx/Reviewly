@@ -53,6 +53,9 @@ prism_set_env_key() {
   fi
 }
 
+# 本地 services/gateway/.env 用于 npm run dev；以下键仅 deploy/.env 保留 Docker 内网地址
+_PRISM_DEPLOY_ONLY_KEYS="DATABASE_URL ENGINE_GRPC_ADDR API_URL PRISM_REPO_CACHE_DIR"
+
 prism_merge_gateway_env() {
   local gateway_env="$ROOT/services/gateway/.env"
   local deploy_env="$ROOT/deploy/.env"
@@ -65,8 +68,21 @@ prism_merge_gateway_env() {
     local key="${line%%=*}"
     local value="${line#*=}"
     key="$(echo "$key" | xargs)"
+    for skip in $_PRISM_DEPLOY_ONLY_KEYS; do
+      if [ "$key" = "$skip" ]; then
+        continue 2
+      fi
+    done
     prism_set_env_key "$deploy_env" "$key" "$value"
   done <"$gateway_env"
+}
+
+prism_fix_docker_deploy_env() {
+  local f="$ROOT/deploy/.env"
+  [ -f "$f" ] || return 0
+  prism_set_env_key "$f" "DATABASE_URL" "postgresql+psycopg://prism:prism@postgres:5432/prism"
+  prism_set_env_key "$f" "ENGINE_GRPC_ADDR" "engine:50051"
+  prism_set_env_key "$f" "API_URL" "http://gateway:3001"
 }
 
 prism_autofill_deploy_env() {
@@ -176,6 +192,7 @@ prism_ensure_github_oauth() {
   [ -f "$f" ] || cp "$ROOT/deploy/.env.example" "$f"
 
   prism_merge_gateway_env
+  prism_fix_docker_deploy_env
   prism_sanitize_placeholders
 
   if prism_oauth_is_configured; then
@@ -251,12 +268,14 @@ prism_setup_deploy_env() {
     PRISM_FIRST_DEPLOY=1
     created=1
     prism_merge_gateway_env
+    prism_fix_docker_deploy_env
     prism_sanitize_placeholders
     prism_autofill_deploy_env
     prism_color yellow "  已创建 deploy/.env"
   else
     prism_sanitize_placeholders
     prism_autofill_deploy_env
+    prism_fix_docker_deploy_env
   fi
 
   if ! prism_ensure_github_oauth; then

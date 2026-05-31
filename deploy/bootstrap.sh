@@ -51,6 +51,7 @@ if [ ! -f "$ROOT/deploy/.env" ]; then
   cp "$ROOT/deploy/.env.example" "$ROOT/deploy/.env"
   PRISM_FIRST_DEPLOY=1
   prism_merge_gateway_env
+  prism_fix_docker_deploy_env
   prism_sanitize_placeholders
   prism_autofill_deploy_env
 fi

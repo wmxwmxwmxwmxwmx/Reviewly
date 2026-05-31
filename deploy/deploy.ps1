@@ -51,6 +51,8 @@ function Set-EnvKey([string]$Path, [string]$Key, [string]$Value) {
     $lines | Set-Content $Path -Encoding UTF8
 }
 
+$DeployOnlyKeys = @("DATABASE_URL", "ENGINE_GRPC_ADDR", "API_URL", "PRISM_REPO_CACHE_DIR")
+
 function Merge-GatewayEnv {
     if (-not (Test-Path $GatewayEnv)) { return }
     $lines = Get-Content $GatewayEnv -Encoding UTF8
@@ -59,9 +61,16 @@ function Merge-GatewayEnv {
         if (-not $trimmed -or $trimmed.StartsWith("#")) { continue }
         if ($trimmed -notmatch "=") { continue }
         $key = $trimmed.Split("=", 2)[0].Trim()
+        if ($DeployOnlyKeys -contains $key) { continue }
         $value = $trimmed.Split("=", 2)[1]
         Set-EnvKey $EnvFile $key $value
     }
+}
+
+function Fix-DockerDeployEnv {
+    Set-EnvKey $EnvFile "DATABASE_URL" "postgresql+psycopg://prism:prism@postgres:5432/prism"
+    Set-EnvKey $EnvFile "ENGINE_GRPC_ADDR" "engine:50051"
+    Set-EnvKey $EnvFile "API_URL" "http://gateway:3001"
 }
 
 function Clear-PlaceholderEnvKeys {
@@ -107,6 +116,7 @@ function Ensure-GithubOAuth {
         Copy-Item $EnvExample $EnvFile
     }
     Merge-GatewayEnv
+    Fix-DockerDeployEnv
     Clear-PlaceholderEnvKeys
 
     if (Test-OAuthConfigured) {
@@ -156,6 +166,7 @@ function Initialize-DeployEnv {
         Write-Host "  已创建 deploy/.env" -ForegroundColor Yellow
     }
     Clear-PlaceholderEnvKeys
+    Fix-DockerDeployEnv
     $content = Get-Content $EnvFile -Raw -Encoding UTF8
     if ($content -match 'JWT_SECRET=<generate>|JWT_SECRET=\s*$') {
         Set-EnvKey $EnvFile "JWT_SECRET" (New-RandomHex 32)
