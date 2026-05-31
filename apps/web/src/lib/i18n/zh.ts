@@ -28,13 +28,25 @@ export const zh = {
   },
   login: {
     otherAccount: "使用其他 GitHub 账号登录",
-    otherAccountHint: "将先退出 GitHub.com 当前会话，再进入授权页",
+    otherAccountHint: "进入账号选择页，可保留当前 GitHub 会话或换号登录",
     usernameHint: "GitHub 用户名（可选）",
     gatewayUnreachableTitle: "无法连接后端 Gateway（127.0.0.1:3001）",
     gatewayUnreachableHint:
       "Gateway 未启动或数据库迁移失败。若使用 PostgreSQL，请先在仓库根目录执行 docker compose up -d；或在 services/gateway/.env 将 DATABASE_URL 改为 sqlite:///./prism.db 后重新 npm run dev。",
     gatewayHealthCheck: "健康检查：curl http://127.0.0.1:3001/health",
     retry: "重试",
+    continueOAuth: "继续 GitHub 授权",
+    continueOAuthHint: "若已在 GitHub 退出账号，可跳过再次退出，直接完成 OAuth",
+    goToSwitch: "选择登录账号",
+    switch: {
+      title: "选择 GitHub 账号",
+      description:
+        "建议优先使用「当前 GitHub 账号」重新授权。换号时才走 GitHub 退出页；请点单个账号旁的 Sign out，勿点 Sign out from all accounts。",
+      currentAccount: "使用当前 GitHub 账号",
+      otherAccount: "使用其他 GitHub 账号",
+      otherAccountHint: "将先退出 GitHub.com 当前会话，再进入 OAuth 授权页",
+      cancel: "取消",
+    },
   },
   governance: {
     backToAiReview: "返回 AI 分析",

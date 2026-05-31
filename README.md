@@ -249,16 +249,18 @@ docker compose -f deploy/docker-compose.yml restart gateway
 | 方式 | 入口 | 行为 |
 |------|------|------|
 | 快速登录 | 登录页主按钮「使用 GitHub 登录」 | 复用浏览器已登录 GitHub，一键授权 |
-| 其他账号 | 登录页「使用其他 GitHub 账号登录」（可选填用户名） | 先退出 GitHub.com，再进入 OAuth 授权页选号 |
+| 其他账号 | 登录页「使用其他 GitHub 账号登录」 | 进入 `/login/switch` 分流页后选择 |
 | 切换账号 | 右上角账户菜单 → 切换账号 | 同上 |
 | 重新授权 | GitHub 账号对话框 → 重新授权 GitHub | 同上 |
 
-换号时 Gateway 调用 `GET /api/auth/github/login?force_reauth=1`，返回 `https://github.com/logout?return_to=<oauth_authorize_url>`；OAuth callback 与 JWT 逻辑不变。
+分流页提供「当前 GitHub 账号」（直达 OAuth authorize）与「其他账号」（`github_logout=1` 时经 `github.com/logout` 再授权）。OAuth `state` 携带 `return_path`，回调后进入 `FRONTEND_URL/auth/callback?token=…&next=…` 再跳转项目首页。
 
 **限制与排错：**
 
 - OAuth App 为 **Development** 模式时，目标用户须在 GitHub OAuth App 的 allowlist 中（与会话无关）
-- 若 logout 跳转后仍无法换号，可手动打开 https://github.com/logout 后回到登录页重试
+- GitHub 退出页请点**单个账号**旁的 Sign out，勿点 **Sign out from all accounts**（易落到 GitHub 首页）
+- 若中断在 GitHub 首页，回到 PRism 登录页点「继续 GitHub 授权」
+- 确认 `FRONTEND_URL` 与浏览器访问地址一致（如 `http://localhost:3000`）
 
 **内网试用、暂不想配 OAuth**：在 `deploy/.env` 设 `PRISM_AUTH_BYPASS=1` 后重启 gateway（**禁止用于公网生产**）。
 

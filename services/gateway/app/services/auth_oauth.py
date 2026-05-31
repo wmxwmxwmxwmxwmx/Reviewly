@@ -1,6 +1,8 @@
 """GitHub OAuth login flow."""
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import secrets
 from urllib.parse import quote, urlencode
@@ -53,11 +55,44 @@ def is_oauth_configured() -> bool:
     return _oauth_configured()
 
 
+def normalize_return_path(return_path: str | None) -> str:
+    """Allow only same-site relative paths for post-login redirect."""
+    path = (return_path or "/").strip()
+    if not path.startswith("/") or path.startswith("//"):
+        return "/"
+    if "://" in path:
+        return "/"
+    return path
+
+
+def encode_oauth_state(return_path: str = "/") -> str:
+    safe_path = normalize_return_path(return_path)
+    payload = {"n": secrets.token_urlsafe(16), "r": safe_path}
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def parse_oauth_state(state: str | None) -> str:
+    if not state:
+        return "/"
+    try:
+        pad = "=" * (-len(state) % 4)
+        raw = base64.urlsafe_b64decode(state + pad)
+        payload = json.loads(raw)
+        if isinstance(payload, dict) and "r" in payload:
+            return normalize_return_path(str(payload["r"]))
+    except (ValueError, json.JSONDecodeError, TypeError):
+        pass
+    return "/"
+
+
 def build_github_login_url(
     *,
     state: str | None = None,
-    force_reauth: bool = False,
+    force_reauth: bool = False,  # noqa: ARG001 — API compat, no longer triggers logout
+    github_logout: bool = False,
     login: str | None = None,
+    return_path: str = "/",
 ) -> str:
     if not _oauth_configured():
         raise api_error(
@@ -66,7 +101,7 @@ def build_github_login_url(
             "详见 README「GitHub OAuth 登录配置」。",
             501,
         )
-    oauth_state = state or secrets.token_urlsafe(16)
+    oauth_state = state or encode_oauth_state(return_path)
     params = {
         "client_id": settings.github_oauth_client_id,
         "redirect_uri": settings.oauth_callback_url,
@@ -77,7 +112,8 @@ def build_github_login_url(
     if login_hint:
         params["login"] = login_hint
     authorize_url = f"{_OAUTH_AUTHORIZE}?{urlencode(params)}"
-    if force_reauth:
+    # force_reauth query kept for API compat; GitHub logout only when github_logout=True.
+    if github_logout:
         return f"{_GITHUB_LOGOUT}?return_to={quote(authorize_url, safe='')}"
     return authorize_url
 

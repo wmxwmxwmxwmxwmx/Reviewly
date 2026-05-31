@@ -8,6 +8,7 @@ import type { AuthStatusResponse } from "@reviewly/shared"
 import { useAuth } from "@/features/prism/contexts/auth-context"
 import { fetchAuthStatus } from "@/lib/api/auth"
 import { PrismApiError } from "@/lib/api/client"
+import { clearOAuthPending, isOAuthPending } from "@/lib/auth/oauth-pending"
 import { zh } from "@/lib/i18n/zh"
 
 function OAuthSetupGuide({ status }: { status: AuthStatusResponse }) {
@@ -56,6 +57,7 @@ function LoginContent() {
   const [authStatus, setAuthStatus] = useState<AuthStatusResponse | null>(null)
   const [statusLoading, setStatusLoading] = useState(true)
   const [gatewayUnreachable, setGatewayUnreachable] = useState(false)
+  const [oauthPending, setOauthPending] = useState(false)
 
   const loadStatus = useCallback(async () => {
     setStatusLoading(true)
@@ -75,6 +77,10 @@ function LoginContent() {
   useEffect(() => {
     void loadStatus()
   }, [loadStatus])
+
+  useEffect(() => {
+    setOauthPending(isOAuthPending())
+  }, [])
 
   useEffect(() => {
     const oauthError = searchParams.get("error")
@@ -124,7 +130,28 @@ function LoginContent() {
     setSubmitting(true)
     setError(null)
     try {
-      await loginWithOtherAccount(otherAccountHint.trim() || undefined)
+      const hint = otherAccountHint.trim()
+      if (hint && typeof window !== "undefined") {
+        sessionStorage.setItem("prism_login_hint", hint)
+      }
+      await loginWithOtherAccount()
+    } catch (e: unknown) {
+      setError(e instanceof PrismApiError ? e.message : "无法启动 GitHub 登录")
+      setSubmitting(false)
+    }
+  }
+
+  const handleContinueOAuth = async () => {
+    if (authStatus && !authStatus.githubOAuthConfigured) {
+      setError("GitHub OAuth 尚未配置，请管理员按下方说明完成配置。")
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    clearOAuthPending()
+    setOauthPending(false)
+    try {
+      await login("/")
     } catch (e: unknown) {
       setError(e instanceof PrismApiError ? e.message : "无法启动 GitHub 登录")
       setSubmitting(false)
@@ -145,6 +172,25 @@ function LoginContent() {
         <div className="mb-4 flex gap-2 rounded-md border border-risk-high/30 bg-risk-high/10 px-3 py-2 text-sm text-risk-high">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {oauthPending && !statusLoading && (
+        <div className="mb-4 rounded-md border border-ai-blue/30 bg-ai-blue/10 px-3 py-3 text-sm">
+          <p className="mb-2 text-foreground">{zh.login.continueOAuthHint}</p>
+          <button
+            type="button"
+            onClick={() => void handleContinueOAuth()}
+            disabled={submitting || loading || gatewayUnreachable}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-ai-blue px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Github className="h-4 w-4" />
+            )}
+            {zh.login.continueOAuth}
+          </button>
         </div>
       )}
 
@@ -224,19 +270,28 @@ function LoginContent() {
               <code className="mb-3 block break-all rounded bg-background px-2 py-1.5 text-[11px] text-ai-blue">
                 {zh.login.gatewayHealthCheck}
               </code>
-              <button
-                type="button"
-                onClick={() => void loadStatus()}
-                disabled={statusLoading}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-foreground transition-opacity hover:bg-surface-3 disabled:opacity-50"
-              >
-                {statusLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                {zh.login.retry}
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => void loadStatus()}
+                  disabled={statusLoading}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-foreground transition-opacity hover:bg-surface-3 disabled:opacity-50"
+                >
+                  {statusLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  {zh.login.retry}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/login/switch")}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-foreground transition-opacity hover:bg-surface-3"
+                >
+                  {zh.login.goToSwitch}
+                </button>
+              </div>
             </div>
           ) : (
             !bypassEnabled && authStatus && <OAuthSetupGuide status={authStatus} />

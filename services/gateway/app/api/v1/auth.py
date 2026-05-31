@@ -1,6 +1,8 @@
 """Authentication — GitHub OAuth + JWT session."""
 from __future__ import annotations
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -29,9 +31,16 @@ def auth_status() -> dict:
 @router.get("/github/login")
 def github_login(
     force_reauth: bool = Query(default=False),
+    github_logout: bool = Query(default=False),
     login: str | None = Query(default=None),
+    return_to: str | None = Query(default=None),
 ) -> dict:
-    url = auth_oauth.build_github_login_url(force_reauth=force_reauth, login=login)
+    url = auth_oauth.build_github_login_url(
+        force_reauth=force_reauth,
+        github_logout=github_logout,
+        login=login,
+        return_path=return_to or "/",
+    )
     return {"url": url}
 
 
@@ -39,6 +48,7 @@ def github_login(
 async def github_callback(
     code: str | None = Query(default=None),
     error: str | None = Query(default=None),
+    state: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
     if error:
@@ -53,8 +63,10 @@ async def github_callback(
         )
     result = await auth_oauth.handle_oauth_callback(db, code)
     token = result["token"]
+    return_path = auth_oauth.parse_oauth_state(state)
+    next_qs = quote(return_path, safe="")
     return RedirectResponse(
-        f"{settings.frontend_url}/auth/callback?token={token}",
+        f"{settings.frontend_url}/auth/callback?token={token}&next={next_qs}",
         status_code=302,
     )
 

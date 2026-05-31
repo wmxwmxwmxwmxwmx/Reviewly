@@ -14,6 +14,7 @@ import type { AuthUser } from "@reviewly/shared"
 
 import { fetchAuthMe, fetchAuthStatus, fetchGithubLoginUrl, logoutAuth } from "@/lib/api/auth"
 import { PrismApiError } from "@/lib/api/client"
+import { markOAuthPending } from "@/lib/auth/oauth-pending"
 import {
   clearAuthSession,
   clearAuthToken,
@@ -27,8 +28,9 @@ interface AuthContextValue {
   token: string | null
   loading: boolean
   isAuthenticated: boolean
-  login: () => Promise<void>
-  loginWithOtherAccount: (loginHint?: string) => Promise<void>
+  login: (returnTo?: string) => Promise<void>
+  loginWithOtherAccount: () => Promise<void>
+  startOtherAccountOAuth: (loginHint?: string) => Promise<void>
   logout: () => Promise<void>
   switchAccount: () => Promise<void>
   setTokenFromCallback: (token: string) => Promise<void>
@@ -94,18 +96,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshUser])
 
-  const login = useCallback(async () => {
-    const { url } = await fetchGithubLoginUrl()
+  const login = useCallback(async (returnTo = "/") => {
+    const { url } = await fetchGithubLoginUrl({ returnTo })
     window.location.href = url
   }, [])
 
-  const loginWithOtherAccount = useCallback(async (loginHint?: string) => {
+  const loginWithOtherAccount = useCallback(async () => {
+    clearAuthSession()
+    setToken(null)
+    setUser(null)
+    window.location.href = "/login/switch"
+  }, [])
+
+  const startOtherAccountOAuth = useCallback(async (loginHint?: string) => {
+    markOAuthPending()
     clearAuthSession()
     setToken(null)
     setUser(null)
     const { url } = await fetchGithubLoginUrl({
-      forceReauth: true,
+      githubLogout: true,
       login: loginHint,
+      returnTo: "/",
     })
     window.location.href = url
   }, [])
@@ -122,8 +133,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const switchAccount = useCallback(async () => {
-    await loginWithOtherAccount()
-  }, [loginWithOtherAccount])
+    clearAuthSession()
+    setToken(null)
+    setUser(null)
+    window.location.href = "/login/switch"
+  }, [])
 
   const setTokenFromCallback = useCallback(
     async (newToken: string) => {
@@ -144,12 +158,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       login,
       loginWithOtherAccount,
+      startOtherAccountOAuth,
       logout,
       switchAccount,
       setTokenFromCallback,
       refreshUser,
     }),
-    [user, token, loading, isAuthenticated, login, loginWithOtherAccount, logout, switchAccount, setTokenFromCallback, refreshUser],
+    [
+      user,
+      token,
+      loading,
+      isAuthenticated,
+      login,
+      loginWithOtherAccount,
+      startOtherAccountOAuth,
+      logout,
+      switchAccount,
+      setTokenFromCallback,
+      refreshUser,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

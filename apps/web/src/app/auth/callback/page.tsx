@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2 } from "lucide-react"
 
 import { useAuth } from "@/features/prism/contexts/auth-context"
+import { clearOAuthPending } from "@/lib/auth/oauth-pending"
+import { safeNextPath } from "@/lib/auth/safe-next-path"
 import { syncMyRepositories } from "@/lib/api/repos"
 
 function AuthCallbackContent() {
@@ -20,9 +22,12 @@ function AuthCallbackContent() {
       return
     }
 
+    const next = safeNextPath(searchParams.get("next"))
+
     let cancelled = false
     ;(async () => {
       try {
+        clearOAuthPending()
         await setTokenFromCallback(token)
         if (cancelled) return
         setMessage("正在同步 GitHub 仓库…")
@@ -31,7 +36,7 @@ function AuthCallbackContent() {
         } catch {
           /* sync is best-effort after login */
         }
-        if (!cancelled) router.replace("/")
+        if (!cancelled) router.replace(next)
       } catch {
         if (!cancelled) router.replace("/login?error=callback_failed")
       }

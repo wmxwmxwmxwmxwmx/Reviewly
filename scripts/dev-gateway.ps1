@@ -1,4 +1,6 @@
 $ErrorActionPreference = "Stop"
+# PS 7+: avoid treating native stderr (e.g. Python info logs) as terminating errors.
+$PSNativeCommandUseErrorActionPreference = $false
 $Root = Split-Path -Parent $PSScriptRoot
 $Gateway = Join-Path $Root "services\gateway"
 
@@ -28,8 +30,15 @@ if (Test-Path $envFile) {
 $resolveScript = Join-Path $Gateway "scripts\resolve_dev_database.py"
 Write-Host "Resolving database (Postgres / SQLite auto)..."
 $resolveErr = Join-Path $env:TEMP "prism-db-resolve.err"
-$dbUrl = & $python $resolveScript 2> $resolveErr
-if ($LASTEXITCODE -ne 0) {
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+    $dbUrl = & $python $resolveScript 2> $resolveErr
+    $resolveExitCode = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $prevEap
+}
+if ($resolveExitCode -ne 0) {
     if (Test-Path $resolveErr) { Get-Content $resolveErr | Write-Host }
     exit 1
 }
@@ -43,8 +52,15 @@ if (-not $dbUrl) {
 [System.Environment]::SetEnvironmentVariable("DATABASE_URL", $dbUrl, "Process")
 
 Write-Host "Running database migrations..."
-& $python -m alembic upgrade head
-if ($LASTEXITCODE -ne 0) {
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+    & $python -m alembic upgrade head
+    $alembicExitCode = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $prevEap
+}
+if ($alembicExitCode -ne 0) {
     Write-Host ""
     Write-Host "ERROR: Alembic migration failed; Gateway will not start." -ForegroundColor Red
     Write-Host "  PostgreSQL: npm run dev:db  (Docker Postgres prism/prism@localhost:5432)"
@@ -82,8 +98,14 @@ if ($listeners.Count -gt 0) {
 
 Write-Host "Starting gateway at http://127.0.0.1:3001"
 # Single process + watchfiles reload avoids orphaned multiprocessing workers on Windows.
-& $python -m uvicorn app.main:app --host 127.0.0.1 --port 3001 --reload `
-  --reload-dir app `
-  --reload-delay 2 `
-  --reload-exclude "data/*" `
-  --workers 1
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+    & $python -m uvicorn app.main:app --host 127.0.0.1 --port 3001 --reload `
+      --reload-dir app `
+      --reload-delay 2 `
+      --reload-exclude "data/*" `
+      --workers 1
+} finally {
+    $ErrorActionPreference = $prevEap
+}
