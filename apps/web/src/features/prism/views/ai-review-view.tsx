@@ -24,21 +24,19 @@ import {
 import { readPrioritySettings } from "@/features/prism/lib/governance-priority-settings"
 import { buildAiReviewerOpinion, isPrAnalysisComplete } from "@/lib/ai/ai-reviewer-opinion"
 import { deriveAnalysisPhase, useReviewLayout } from "@/hooks/use-review-layout"
-import { estimateCostCnyFromUsage, useAISettings } from "@/features/prism/contexts/ai-settings-context"
+import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { usePullRequest } from "@/hooks/use-pull-request"
 import { usePullRequestDiff } from "@/hooks/use-pull-request-diff"
 import { usePrAnalysis } from "@/hooks/use-pr-analysis"
-import {
-  chatCompletionStream,
-  patchPrAiSummary,
-} from "@/lib/api/ai-chat"
+import { patchPrAiSummary } from "@/lib/api/ai-chat"
 import { PENDING_AUTO_ANALYZE_KEY } from "@/hooks/use-import-pr-by-url"
 import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
+import { buildBoundedDiffContext, PROMPT_BUDGET } from "@/lib/ai/prompt-budget"
+import { isAiSummaryStale } from "@/lib/ai/ai-review-consistency"
 import {
-  buildBoundedDiffContext,
-  buildFindingsContext,
-  PROMPT_BUDGET,
-} from "@/lib/ai/prompt-budget"
+  buildAiSummaryPersistPayload,
+  generateAiReviewSummary,
+} from "@/lib/ai/ai-review-summary"
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import { formatPrismApiError, PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
@@ -46,11 +44,6 @@ import { AdoptRepoBanner, shouldShowAdoptBanner } from "@/features/prism/compone
 import { ReviewCopilotPanel } from "@/features/prism/components/review-copilot-panel"
 import { usePullRequestGovernance } from "@/hooks/use-pull-request-governance"
 import { fetchPullRequestGovernance } from "@/lib/api/governance"
-import { buildGovernancePromptContext } from "@/lib/ai/governance-prompt-context"
-import {
-  buildAiReviewSystemPrompt,
-  buildAiReviewUserPrompt,
-} from "@/lib/ai/ai-review-prompt"
 import {
   resolveAnalysisPanelState,
   resolveRunningLabel,
@@ -127,18 +120,21 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
   useEffect(() => {
     abortLoad()
     const controller = new AbortController()
-    void loadPersisted(controller.signal).then((result) => {
-      if (result?.aiSummary?.content) {
-        setGeneratedSummary(result.aiSummary.content)
-      }
-      if (result?.aiSummary?.usage) {
-        setRunUsage(result.aiSummary.usage)
-      }
-    }).catch(() => {
+    void loadPersisted(controller.signal).catch(() => {
       /* persistError 已由 hook 记录 */
     })
     return () => controller.abort()
   }, [prId, loadPersisted, abortLoad])
+
+  useEffect(() => {
+    if (loadingPersisted || !aiSummary?.content) return
+    const version = pr?.analysisVersion ?? job?.analysisVersion ?? null
+    if (isAiSummaryStale(aiSummary, version)) return
+    setGeneratedSummary((current) => current ?? aiSummary.content)
+    if (aiSummary.usage) {
+      setRunUsage(aiSummary.usage)
+    }
+  }, [aiSummary, pr?.analysisVersion, job?.analysisVersion, loadingPersisted])
 
   useEffect(() => {
     if (loadingPersisted || analyzing) return
@@ -243,20 +239,27 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
 
   const persistGeneratedSummary = useCallback(
     async (content: string, usage: AiUsageMetrics | undefined, signal?: AbortSignal) => {
-      const payload = {
+      const payload = buildAiSummaryPersistPayload({
         content,
-        analyzedAt: new Date().toISOString(),
         model: settings.model,
         provider: settings.provider,
-        ...(usage ? { usage } : {}),
-      }
+        usage,
+        analysisVersion: pr?.analysisVersion ?? job?.analysisVersion ?? null,
+      })
       const saved = await patchPrAiSummary(prId, payload, signal)
       setAiSummary(saved)
       if (saved.usage) {
         setRunUsage(saved.usage)
       }
     },
-    [prId, settings.model, settings.provider, setAiSummary],
+    [
+      prId,
+      pr?.analysisVersion,
+      job?.analysisVersion,
+      settings.model,
+      settings.provider,
+      setAiSummary,
+    ],
   )
 
   const generateSummary = useCallback(
@@ -264,6 +267,7 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
       activeFindings: AnalysisFinding[],
       jobSummary: string | undefined,
       governanceContext: GovernanceRule[],
+      analysisVersion: string | null | undefined,
       signal: AbortSignal,
     ) => {
       if (!hasApiKey || !pr) return
@@ -271,101 +275,45 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
       setSummaryStreaming(true)
       setGeneratedSummary(undefined)
 
-      const diffContext = diffBudget.context
-      const findingsContext = buildFindingsContext(activeFindings)
-      const governanceText = buildGovernancePromptContext(governanceContext)
-
-      const messages = [
-        {
-          role: "system" as const,
-          content: buildAiReviewSystemPrompt(),
-        },
-        {
-          role: "user" as const,
-          content: buildAiReviewUserPrompt({
-            title: pr.title,
-            repo: pr.repo,
-            sourceBranch: pr.sourceBranch,
-            targetBranch: pr.targetBranch,
-            filesChanged: pr.filesChanged,
-            additions: pr.additions,
-            deletions: pr.deletions,
-            diffTruncated: diffBudget.truncated,
-            governanceText,
-            findingsContext,
-            diffContext,
-          }),
-        },
-      ]
-
-      let accumulated = ""
-      let promptTokens = 0
-      let completionTokens = 0
-      let totalTokens = 0
-      let latencyMs = 0
-
       try {
-        await chatCompletionStream(
-          {
-            provider: settings.provider,
-            model: settings.model,
-            apiKey: settings.apiKey.trim() || undefined,
-            messages,
-          },
-          {
-            signal,
-            onDelta: (delta) => {
-              accumulated += delta
-              setGeneratedSummary(accumulated)
-            },
-            onUsage: (meta) => {
-              if (meta.usage) {
-                promptTokens = meta.usage.promptTokens
-                completionTokens = meta.usage.completionTokens
-                totalTokens = meta.usage.totalTokens
-              }
-              if (typeof meta.latencyMs === "number") {
-                latencyMs = meta.latencyMs
-              }
-            },
-            onError: (msg) => {
-              throw new Error(msg)
-            },
-          },
-        )
+        const result = await generateAiReviewSummary({
+          pr,
+          findings: activeFindings,
+          governanceRules: governanceContext,
+          diffContext: diffBudget.context,
+          diffTruncated: diffBudget.truncated,
+          jobSummary,
+          analysisVersion,
+          provider: settings.provider,
+          model: settings.model,
+          apiKey: settings.apiKey,
+          baseUrl: settings.baseUrl,
+          signal,
+          onDelta: setGeneratedSummary,
+        })
 
-        const finalSummary = accumulated.trim() || jobSummary || "模型未返回内容。"
-        setGeneratedSummary(finalSummary)
+        setGeneratedSummary(result.content)
+        setRunUsage(result.usage)
 
-        const resolvedTotal = totalTokens || promptTokens + completionTokens
-        const costCny = estimateCostCnyFromUsage(
-          settings.provider,
-          settings.model,
-          promptTokens,
-          completionTokens,
-        )
-        const usage: AiUsageMetrics = {
-          promptTokens,
-          completionTokens,
-          totalTokens: resolvedTotal,
-          costCny,
-          latencyMs,
+        if (result.validationWarnings.length > 0) {
+          setAnalysisError(
+            `报告格式未完全通过校验（${result.validationWarnings.join("；")}），已展示最佳可用版本。`,
+          )
         }
-        setRunUsage(usage)
 
-        if (!signal.aborted && finalSummary) {
-          await persistGeneratedSummary(finalSummary, usage, signal)
+        if (!signal.aborted && result.content) {
+          await persistGeneratedSummary(result.content, result.usage, signal)
         }
 
         recordUsage({
           prId,
           provider: settings.provider,
           model: settings.model,
-          promptTokens,
-          completionTokens,
-          totalTokens: resolvedTotal,
-          costCny,
-          latencyMs,
+          promptTokens: result.usage.promptTokens,
+          completionTokens: result.usage.completionTokens,
+          totalTokens: result.usage.totalTokens,
+          costCny: result.usage.costCny,
+          latencyMs: result.usage.latencyMs ?? 0,
         })
       } catch (error) {
         if (isAbortError(error)) {
@@ -390,6 +338,7 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
       settings.provider,
       settings.model,
       settings.apiKey,
+      settings.baseUrl,
       persistGeneratedSummary,
       recordUsage,
       prId,
@@ -436,10 +385,14 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
 
       if (result.cacheHit) {
         setSyncLabel(zh.analysis.cacheLoaded)
+        const analysisVersion = result.analysisVersion ?? pr.analysisVersion ?? null
         if (result.latest?.summary) {
           setGeneratedSummary(result.latest.summary)
         }
-        if (aiSummary?.content) {
+        if (
+          aiSummary?.content &&
+          !isAiSummaryStale(aiSummary, analysisVersion)
+        ) {
           setGeneratedSummary(aiSummary.content)
           return
         }
@@ -447,7 +400,7 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
           setAnalysisError("规则扫描与治理检查已完成。填写 API 密钥后可生成 AI 摘要。")
           return
         }
-        if (result.latest?.summary) {
+        if (result.latest?.summary && !analysisVersion) {
           return
         }
       }
@@ -462,7 +415,13 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
 
       try {
         const governanceData = await fetchPullRequestGovernance(pr.id, ac.signal)
-        await generateSummary(result.findings, result.latest?.summary, governanceData, ac.signal)
+        await generateSummary(
+          result.findings,
+          result.latest?.summary,
+          governanceData,
+          result.analysisVersion ?? pr.analysisVersion ?? null,
+          ac.signal,
+        )
       } catch (error) {
         if (!isAbortError(error)) {
           errors.push(error instanceof Error ? error.message : "AI 摘要生成失败")
@@ -525,7 +484,13 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
 
     try {
       const governanceData = await fetchPullRequestGovernance(pr.id, ac.signal)
-      await generateSummary(findings, latest?.summary, governanceData, ac.signal)
+      await generateSummary(
+        findings,
+        latest?.summary,
+        governanceData,
+        pr.analysisVersion ?? job?.analysisVersion ?? null,
+        ac.signal,
+      )
     } catch (error) {
       if (!isAbortError(error)) {
         setAnalysisError(error instanceof Error ? error.message : "AI 摘要生成失败")
@@ -542,6 +507,8 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
     abortLoad,
     findings,
     generateSummary,
+    pr?.analysisVersion,
+    job?.analysisVersion,
   ])
 
   const handleAnalyze = hasFindings ? handleRegenerateSummary : handleRescan

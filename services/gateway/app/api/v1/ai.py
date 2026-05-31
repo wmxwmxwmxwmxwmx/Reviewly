@@ -27,6 +27,7 @@ class ChatRequestBody(BaseModel):
     api_key: str = Field(default="", validation_alias="apiKey")
     messages: list[ChatMessage]
     temperature: float | None = None
+    max_tokens: int | None = Field(default=None, validation_alias="maxTokens")
     custom_endpoint: str | None = Field(default=None, validation_alias="customEndpoint")
     stream: bool = False
 
@@ -61,6 +62,7 @@ async def _stream_chat(
     custom_endpoint: str | None,
     messages: list[dict],
     temperature: float,
+    max_tokens: int | None = None,
 ):
     if provider == "anthropic":
         stream = stream_anthropic(
@@ -68,6 +70,7 @@ async def _stream_chat(
             api_key=api_key,
             messages=messages,
             temperature=temperature,
+            max_tokens=max_tokens,
         )
     else:
         endpoint = get_endpoint(provider, custom_endpoint)
@@ -92,6 +95,7 @@ async def chat(body: ChatRequestBody, db: Session = Depends(get_db)):
     provider, model, api_key, custom_endpoint = _resolve_chat_config(db, body)
     messages = [m.model_dump() for m in body.messages]
     temperature = body.temperature if body.temperature is not None else 0.2
+    max_tokens = body.max_tokens
 
     if body.stream:
 
@@ -106,6 +110,7 @@ async def chat(body: ChatRequestBody, db: Session = Depends(get_db)):
                     custom_endpoint=custom_endpoint,
                     messages=messages,
                     temperature=temperature,
+                    max_tokens=max_tokens,
                 ):
                     if isinstance(chunk, str):
                         payload = json.dumps({"delta": chunk}, ensure_ascii=False)
@@ -139,6 +144,7 @@ async def chat(body: ChatRequestBody, db: Session = Depends(get_db)):
                 api_key=api_key,
                 messages=messages,
                 temperature=temperature,
+                max_tokens=max_tokens,
             )
         else:
             endpoint = get_endpoint(provider, custom_endpoint)

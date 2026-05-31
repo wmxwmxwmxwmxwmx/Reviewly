@@ -220,6 +220,16 @@ def get_findings(session: Session, pull_request_id: str) -> list[dict]:
         rows = session.scalars(
             select(AnalysisFinding).where(AnalysisFinding.job_id == job.id)
         ).all()
+        severity_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        rows = sorted(
+            rows,
+            key=lambda row: (
+                severity_rank.get(str(row.severity), 9),
+                row.file or "",
+                row.line or 0,
+                row.id,
+            ),
+        )
         return [_finding_to_api(r) for r in rows]
 
     return []

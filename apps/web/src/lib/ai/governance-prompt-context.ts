@@ -1,5 +1,7 @@
 import type { GovernanceRule } from "@reviewly/shared"
 
+import { sortGovernanceRulesForPrompt } from "@/lib/ai/ai-review-consistency"
+
 const SEVERITY_LABEL: Record<string, string> = {
   critical: "critical",
   high: "high",
@@ -12,7 +14,7 @@ export function buildGovernancePromptContext(rules: GovernanceRule[]): string {
     return "（暂无工程治理规则或未执行治理检查）"
   }
 
-  return rules
+  return sortGovernanceRulesForPrompt(rules)
     .map((rule) => {
       const evaluated = rule.evaluatedAt != null || rule.violated !== undefined
       const status = !evaluated
