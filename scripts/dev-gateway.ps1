@@ -51,8 +51,20 @@ function Stop-ListenersOnPort([int]$Port) {
 
 Stop-ListenersOnPort 3001
 
+$listeners = @(
+    Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique
+) | Where-Object { $_ }
+if ($listeners.Count -gt 0) {
+    Write-Warning "Port 3001 still has $($listeners.Count) listener(s): $($listeners -join ', ')"
+    Write-Warning "Run 'npm run kill:gateway' or close other dev terminals, then retry."
+    exit 1
+}
+
 Write-Host "Starting gateway at http://127.0.0.1:3001"
+# Single process + watchfiles reload avoids orphaned multiprocessing workers on Windows.
 & $python -m uvicorn app.main:app --host 127.0.0.1 --port 3001 --reload `
   --reload-dir app `
   --reload-delay 2 `
-  --reload-exclude "data/*"
+  --reload-exclude "data/*" `
+  --workers 1

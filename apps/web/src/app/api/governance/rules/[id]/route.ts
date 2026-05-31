@@ -14,7 +14,14 @@ export async function GET(request: Request, context: RouteContext) {
     })
   } catch (err) {
     serverApiError("governance rule GET", err)
-    throw err
+    const detail = err instanceof Error ? err.message : String(err)
+    return new Response(
+      JSON.stringify({
+        error: "治理规则读取代理失败，请确认 Gateway 已在 127.0.0.1:3001 运行",
+        ...(process.env.NODE_ENV === "development" ? { exception: detail } : {}),
+      }),
+      { status: 502, headers: { "Content-Type": "application/json" } },
+    )
   }
 }
 
@@ -29,7 +36,14 @@ export async function PATCH(request: Request, context: RouteContext) {
     })
   } catch (err) {
     serverApiError("governance rule PATCH", err)
-    throw err
+    const detail = err instanceof Error ? err.message : String(err)
+    return new Response(
+      JSON.stringify({
+        error: "治理规则更新代理失败，请确认 Gateway 已在 127.0.0.1:3001 运行",
+        ...(process.env.NODE_ENV === "development" ? { exception: detail } : {}),
+      }),
+      { status: 502, headers: { "Content-Type": "application/json" } },
+    )
   }
 }
 
@@ -42,6 +56,13 @@ export async function DELETE(_request: Request, context: RouteContext) {
     })
   } catch (err) {
     serverApiError("governance rule DELETE", err)
-    throw err
+    const detail = err instanceof Error ? err.message : String(err)
+    return new Response(
+      JSON.stringify({
+        error: "治理规则删除代理失败，请确认 Gateway 已在 127.0.0.1:3001 运行",
+        ...(process.env.NODE_ENV === "development" ? { exception: detail } : {}),
+      }),
+      { status: 502, headers: { "Content-Type": "application/json" } },
+    )
   }
 }

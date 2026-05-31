@@ -1,11 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import {
-  Database,
-  MoreHorizontal,
-  RotateCcw,
-} from "lucide-react"
 import type { GovernanceRule } from "@reviewly/shared"
 
 import { Button } from "@/components/ui/button"
@@ -13,7 +8,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -146,37 +140,28 @@ export function GovernanceView() {
   }, [toast])
 
   return (
-    <div className="p-5 space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-start justify-between gap-3">
+    <div className="p-5 space-y-5 max-w-6xl mx-auto">
+      <div className="flex items-start justify-between gap-3 pb-1 border-b border-border">
         <div>
           <h1 className="text-lg font-semibold text-foreground">工程治理</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{zh.pageSubtitle.governance}</p>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" size="sm" variant="outline" className="gap-1.5 shrink-0">
-              <MoreHorizontal className="w-3.5 h-3.5" />
+            <Button type="button" size="sm" variant="outline" className="shrink-0">
               更多操作
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
-            <DropdownMenuLabel>批量操作</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleRescoreAll} className="gap-2">
-              <RotateCcw className="w-3.5 h-3.5" />
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={handleRescoreAll}>
               重新评估所有 PR
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleRebuildIndex} className="gap-2">
-              <Database className="w-3.5 h-3.5" />
+            <DropdownMenuItem onClick={handleRebuildIndex}>
               重建治理索引
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="destructive"
-              onClick={handleClearDeferred}
-              className="gap-2"
-            >
-              ↩ 清除延后标记
+            <DropdownMenuItem variant="destructive" onClick={handleClearDeferred}>
+              清除延后标记
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

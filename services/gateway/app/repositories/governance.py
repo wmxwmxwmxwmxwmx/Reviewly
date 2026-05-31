@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import uuid
 from copy import deepcopy
 from typing import Any
 
 from sqlalchemy import inspect as sa_inspect, not_, select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.db.models import AuditLog, GovernanceRule, GovernanceViolation, PullRequest, Repository
 from app.repositories.seed_filter import (
@@ -27,18 +29,47 @@ def ensure_governance_schema(session: Session) -> None:
     )
 
 
+def _payload_from_row(raw: Any) -> dict[str, Any]:
+    """Normalize governance_rules.payload from JSONB / legacy corrupt values."""
+    if raw is None:
+        return {}
+    if isinstance(raw, (bytes, bytearray, memoryview)):
+        try:
+            raw = json.loads(bytes(raw).decode("utf-8", errors="replace"))
+        except json.JSONDecodeError:
+            return {}
+    elif isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+    if not isinstance(raw, dict):
+        return {}
+    return _json_safe(deepcopy(raw))
+
+
+def _apply_definition_to_row(row: GovernanceRule, definition: dict[str, Any]) -> None:
+    """Write a JSON-safe definition back to ORM columns + JSONB payload."""
+    safe = _json_safe(definition)
+    row.rule = _coerce_text(safe.get("rule", row.rule))
+    row.severity = _coerce_text(safe.get("severity", row.severity))
+    row.enabled = bool(safe.get("enabled", row.enabled))
+    row.payload = _json_safe({k: v for k, v in safe.items() if k != "id"})
+    flag_modified(row, "payload")
+
+
 def _row_to_definition(row: GovernanceRule) -> dict[str, Any]:
-    payload = deepcopy(row.payload) if row.payload else {}
+    payload = _payload_from_row(row.payload)
     payload["id"] = row.id
-    payload["rule"] = row.rule
-    payload["severity"] = row.severity
+    payload["rule"] = _coerce_text(row.rule)
+    payload["severity"] = _coerce_text(row.severity)
     payload["enabled"] = row.enabled
     payload.setdefault("matchType", payload.get("matchType", "keyword"))
     payload.setdefault("keywords", payload.get("keywords", []))
     payload.setdefault("filePatterns", payload.get("filePatterns", []))
     payload.setdefault("findingTypes", payload.get("findingTypes", []))
     payload.setdefault("findingSeverities", payload.get("findingSeverities", []))
-    return payload
+    return _json_safe(payload)
 
 
 def ensure_builtin_rules(session: Session) -> None:
@@ -101,6 +132,22 @@ def list_enabled_rule_definitions(session: Session) -> list[dict[str, Any]]:
     return [_row_to_definition(r) for r in rows]
 
 
+def _repair_row_payload_if_needed(session: Session, row: GovernanceRule) -> bool:
+    """Persist sanitized payload when legacy rows contain non-JSON-safe values."""
+    definition = _row_to_definition(row)
+    clean_stored = _json_safe({k: v for k, v in definition.items() if k != "id"})
+    current_stored = _json_safe(row.payload or {})
+    needs_repair = (
+        clean_stored != current_stored
+        or _coerce_text(row.rule) != row.rule
+        or _coerce_text(row.severity) != row.severity
+    )
+    if not needs_repair:
+        return False
+    _apply_definition_to_row(row, definition)
+    return True
+
+
 def list_rule_definitions(
     session: Session,
     *,
@@ -113,6 +160,16 @@ def list_rule_definitions(
     rows = session.scalars(query).all()
     if not rows:
         return []
+    repaired = False
+    for row in rows:
+        if _repair_row_payload_if_needed(session, row):
+            repaired = True
+    if repaired:
+        try:
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
     return [_row_to_definition(r) for r in rows]
 
 
@@ -157,19 +214,71 @@ def _pick_field(payload: dict[str, Any], camel: str, snake: str, default: Any = 
     return default
 
 
+def _coerce_text(value: Any) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace").strip()
+    if isinstance(value, bytearray):
+        return bytes(value).decode("utf-8", errors="replace").strip()
+    if isinstance(value, memoryview):
+        return bytes(value).decode("utf-8", errors="replace").strip()
+    return str(value).strip()
+
+
+def _json_safe(value: Any) -> Any:
+    """Recursively coerce values so JSON/JSONB persistence never sees bytes."""
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return _coerce_text(value)
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, tuple):
+        return [_json_safe(v) for v in value]
+    return value
+
+
 def _normalize_string_list(value: Any) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
         return [x.strip() for x in value.split(",") if x.strip()]
     if isinstance(value, list):
-        return [str(x).strip() for x in value if str(x).strip()]
+        return [text for x in value if (text := _coerce_text(x))]
     return []
 
 
+def _resolved_enabled(payload: dict[str, Any], *, default: bool = True) -> bool:
+    if "enabled" in payload:
+        return bool(payload["enabled"])
+    return default
+
+
+def _is_enabled_only_patch(body: dict[str, Any]) -> bool:
+    return set(body.keys()) == {"enabled"}
+
+
+def set_rule_enabled(session: Session, rule_id: str, enabled: bool) -> dict | None:
+    """Toggle rule on/off without re-normalizing the full rule body."""
+    ensure_governance_schema(session)
+    row = session.get(GovernanceRule, rule_id)
+    if row is None:
+        return None
+    _repair_row_payload_if_needed(session, row)
+    definition = _row_to_definition(row)
+    definition["enabled"] = enabled
+    _apply_definition_to_row(row, definition)
+    try:
+        session.commit()
+        session.refresh(row)
+    except Exception:
+        session.rollback()
+        raise
+    return _row_to_definition(row)
+
+
 def _normalize_rule_body(body: dict[str, Any]) -> dict[str, Any]:
-    payload = deepcopy(body)
-    rule_text = str(payload.get("rule", "")).strip()
+    payload = _json_safe(deepcopy(body))
+    rule_text = _coerce_text(payload.get("rule", ""))
     if not rule_text:
         raise ValueError("规则描述不能为空")
     severity = str(payload.get("severity", "medium")).lower()
@@ -189,7 +298,7 @@ def _normalize_rule_body(body: dict[str, Any]) -> dict[str, Any]:
     normalized: dict[str, Any] = {
         "rule": rule_text,
         "severity": severity,
-        "enabled": bool(payload.get("enabled", True)),
+        "enabled": _resolved_enabled(payload),
         "matchType": match_type,
         "keywords": _normalize_string_list(payload.get("keywords")),
         "filePatterns": _normalize_string_list(
@@ -203,8 +312,8 @@ def _normalize_rule_body(body: dict[str, Any]) -> dict[str, Any]:
         ),
     }
     if description is not None:
-        normalized["description"] = str(description).strip()
-    return normalized
+        normalized["description"] = _coerce_text(description)
+    return _json_safe(normalized)
 
 
 def update_rule(session: Session, rule_id: str, body: dict[str, Any]) -> dict | None:
@@ -212,13 +321,15 @@ def update_rule(session: Session, rule_id: str, body: dict[str, Any]) -> dict | 
     row = session.get(GovernanceRule, rule_id)
     if row is None:
         return None
+
+    if _is_enabled_only_patch(body):
+        return set_rule_enabled(session, rule_id, _resolved_enabled(body))
+
     current = _row_to_definition(row)
-    current.update(body)
-    payload = _normalize_rule_body(current)
-    row.rule = payload["rule"]
-    row.severity = payload["severity"]
-    row.enabled = payload["enabled"]
-    row.payload = payload
+    current.update(_json_safe(body))
+    definition = _normalize_rule_body(current)
+    definition["id"] = row.id
+    _apply_definition_to_row(row, definition)
     try:
         session.commit()
         session.refresh(row)

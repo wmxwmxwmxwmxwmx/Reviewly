@@ -165,6 +165,9 @@ def _map_governance_db_error(exc: Exception) -> None:
         raise exc
     if isinstance(exc, ValueError):
         raise api_error(str(exc), 400) from exc
+    if isinstance(exc, TypeError) and "JSON serializable" in str(exc):
+        logger.exception("Governance rule payload is not JSON-serializable")
+        raise api_error("治理规则数据格式异常，请重新编辑并保存该规则", 400, code="GOVERNANCE_PAYLOAD_INVALID") from exc
     if isinstance(exc, (OperationalError, ProgrammingError)):
         logger.exception("Database schema error during governance rule operation")
         raise api_error(SCHEMA_OUTDATED_MESSAGE, 503, code="SCHEMA_OUTDATED") from exc

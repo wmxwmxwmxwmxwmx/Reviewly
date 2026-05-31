@@ -66,6 +66,61 @@ def test_governance_rules_crud(client: TestClient) -> None:
     assert client.delete(f"/api/governance/rules/{rid}").status_code == 200
 
 
+def test_governance_rule_patch_enabled_only(client: TestClient) -> None:
+    """Switch toggle sends PATCH with only { enabled } — must not 500."""
+    created = client.post(
+        "/api/governance/rules",
+        json={
+            "rule": "enabled-only patch",
+            "severity": "medium",
+            "enabled": True,
+            "matchType": "keyword",
+            "keywords": ["env"],
+        },
+    )
+    assert created.status_code == 200
+    rid = created.json()["id"]
+
+    off = client.patch(f"/api/governance/rules/{rid}", json={"enabled": False})
+    assert off.status_code == 200, off.text
+    assert off.json()["enabled"] is False
+
+    on = client.patch(f"/api/governance/rules/{rid}", json={"enabled": True})
+    assert on.status_code == 200, on.text
+    assert on.json()["enabled"] is True
+
+    assert client.delete(f"/api/governance/rules/{rid}").status_code == 200
+
+
+def test_governance_rule_patch_repairs_bytes_payload(db) -> None:
+    """In-memory corrupt payload (bytes in keywords) must not 500 on toggle."""
+    from app.db.models import GovernanceRule
+    from app.repositories import governance as governance_repo
+
+    created = governance_repo.create_rule(
+        db,
+        {
+            "rule": "bytes payload repair",
+            "severity": "medium",
+            "enabled": True,
+            "matchType": "keyword",
+            "keywords": ["env"],
+        },
+    )
+    rid = created["id"]
+    row = db.get(GovernanceRule, rid)
+    assert row is not None
+    row.payload = {**(row.payload or {}), "keywords": [b"token", "password"]}
+
+    result = governance_repo.set_rule_enabled(db, rid, False)
+    assert result["enabled"] is False
+    assert result["keywords"] == ["token", "password"]
+
+    refreshed = db.get(GovernanceRule, rid)
+    assert refreshed is not None
+    assert refreshed.payload["keywords"] == ["token", "password"]
+
+
 def test_governance_rules_create_ui_payload(client: TestClient) -> None:
     """Matches GovernanceRuleDialog → createGovernanceRule request body."""
     created = client.post(

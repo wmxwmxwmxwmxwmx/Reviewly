@@ -97,9 +97,6 @@ export function useGovernance(options?: { includeDisabled?: boolean }) {
             r.id === id ? { ...r, ...updated, enabled: updated.enabled ?? enabled } : r,
           ),
         )
-        void reloadRules().catch(() => {
-          /* 保存已成功；后台刷新失败时保留乐观更新 */
-        })
         return updated
       } catch (e) {
         setRules((prev) =>
@@ -108,7 +105,7 @@ export function useGovernance(options?: { includeDisabled?: boolean }) {
         throw e
       }
     },
-    [reloadRules],
+    [],
   )
 
   const removeRule = useCallback(

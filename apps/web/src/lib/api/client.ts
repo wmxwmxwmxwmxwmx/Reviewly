@@ -63,8 +63,14 @@ const SCHEMA_OUTDATED_HINT =
   "数据库 schema 未更新。请在 services/gateway 目录执行 alembic upgrade head 后重启 Gateway。"
 
 /** Map API errors to user-facing analysis messages. */
+const GATEWAY_UNREACHABLE_HINT =
+  "无法连接后端 Gateway（请确认已在 127.0.0.1:3001 运行，且仅启动一个实例；可执行 npm run dev:clean 后重试）"
+
 export function formatPrismApiError(error: unknown, fallback = "请求失败"): string {
   if (error instanceof PrismApiError) {
+    if (/^internal server error$/i.test(error.message.trim())) {
+      return GATEWAY_UNREACHABLE_HINT
+    }
     if (error.code === "SCHEMA_OUTDATED") {
       return SCHEMA_OUTDATED_HINT
     }
@@ -76,6 +82,9 @@ export function formatPrismApiError(error: unknown, fallback = "请求失败"): 
     }
     if (error.code === "GOVERNANCE_ERROR") {
       return error.message || "治理规则操作失败，请稍后重试"
+    }
+    if (error.code === "GOVERNANCE_PAYLOAD_INVALID") {
+      return error.message || "治理规则数据异常，请编辑该规则后重新保存"
     }
     return error.message || fallback
   }
