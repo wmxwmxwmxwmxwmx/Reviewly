@@ -31,7 +31,6 @@ import {
   readStore,
   setIgnoredPatterns,
 } from "@/features/prism/lib/review-task-store"
-import { belongsInHistory, belongsInInbox } from "@/features/prism/ai/review-attention-score"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
@@ -208,8 +207,8 @@ export function GovernanceView() {
             </Button>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            当前收件箱：{allItems.filter(belongsInInbox).length} 条 · 历史记录：
-            {allItems.filter(belongsInHistory).length} 条 · 默认权重见规范（严重
+            纳管 PR：{allItems.length} 条 · 未查阅：
+            {allItems.filter((i) => i.attentionState === "unread").length} 条 · 默认权重见规范（严重
             {DEFAULT_PRIORITY_SETTINGS.riskWeights.严重} / CI +{DEFAULT_PRIORITY_SETTINGS.ciFailed}）
           </p>
         </div>

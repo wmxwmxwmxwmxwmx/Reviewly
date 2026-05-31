@@ -50,10 +50,54 @@ _TEST_PATH_MARKERS = (
     ".spec.",
 )
 
+_TEST_BASENAMES = frozenset(
+    {
+        "test.c",
+        "test.cc",
+        "test.cpp",
+        "test.cxx",
+        "test.h",
+        "test.hh",
+        "test.hpp",
+        "test.java",
+        "test.kt",
+        "test.kts",
+        "test.rs",
+        "test.py",
+        "test.js",
+        "test.ts",
+        "test.m",
+        "test.mm",
+        "test.swift",
+    }
+)
+
+_TEST_SUFFIXES = (
+    "_test.go",
+    "_test.c",
+    "_test.cc",
+    "_test.cpp",
+    "_test.cxx",
+    "_test.py",
+    "_test.js",
+    "_test.ts",
+    "_test.java",
+    "_test.kt",
+    "_tests.py",
+    "_tests.js",
+    "_tests.ts",
+    "_tests.cpp",
+)
+
 
 def _is_test_path(path: str) -> bool:
     normalized = path.replace("\\", "/").lower()
-    if normalized.startswith("test/") or normalized.endswith("_test.go"):
+    if normalized.startswith("test/"):
+        return True
+    basename = normalized.rsplit("/", 1)[-1]
+    if basename in _TEST_BASENAMES:
+        return True
+    if any(basename.endswith(suffix) for suffix in _TEST_SUFFIXES):
         return True
     return any(marker in normalized for marker in _TEST_PATH_MARKERS)
 

@@ -26,7 +26,7 @@ export function verdictToAdvisoryAction(
     case "block":
       return "建议重点检查"
     case "request_changes":
-      return "建议要求修改"
+      return "建议重点检查"
     default:
       return "立即 Review"
   }

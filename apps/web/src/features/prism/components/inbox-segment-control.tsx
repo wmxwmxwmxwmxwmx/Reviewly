@@ -5,8 +5,7 @@ import { cn } from "@/lib/utils"
 
 const SEGMENTS: { key: InboxSegment; label: string }[] = [
   { key: "unread", label: "未查阅" },
-  { key: "high_risk", label: "高风险" },
-  { key: "needs_revisit", label: "需要复查" },
+  { key: "read", label: "已查阅" },
   { key: "all", label: "全部" },
 ]
 

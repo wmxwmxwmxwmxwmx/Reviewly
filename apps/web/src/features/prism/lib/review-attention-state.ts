@@ -146,5 +146,5 @@ export function countAttentionStates(
     if (state === "unread") unread += 1
     if (state === "needs_revisit") needsRevisit += 1
   }
-  return { unread, needsRevisit, badge: unread + needsRevisit }
+  return { unread, needsRevisit, badge: unread }
 }

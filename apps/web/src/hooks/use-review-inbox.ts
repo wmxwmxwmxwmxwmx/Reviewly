@@ -5,7 +5,6 @@ import type { PullRequestListItem } from "@reviewly/shared"
 
 import {
   computeInboxItems,
-  filterHistoryItems,
   filterInboxItems,
   type PrMetrics,
 } from "@/features/prism/ai/review-attention-score"
@@ -16,24 +15,19 @@ import {
   type PrioritySettings,
 } from "@/features/prism/lib/governance-priority-settings"
 import { dispatchRescore, RESCORE_EVENT } from "@/features/prism/lib/review-task-store"
-import type {
-  InboxSegment,
-  ReviewCenterListMode,
-  ReviewInboxItem,
-} from "@/features/prism/types/review-task"
+import type { InboxSegment, ReviewInboxItem } from "@/features/prism/types/review-task"
 import { usePullRequests } from "@/hooks/use-pull-requests"
 import { fetchPullRequest } from "@/lib/api/pull-requests"
 
 export type { InboxSegment }
 
 type UseReviewInboxOptions = {
-  mode?: ReviewCenterListMode
   segment?: InboxSegment
   reloadToken?: number
 }
 
 export function useReviewInbox(options: UseReviewInboxOptions = {}) {
-  const { mode = "inbox", segment = "unread", reloadToken = 0 } = options
+  const { segment = "unread", reloadToken = 0 } = options
   const [settings, setSettings] = useState<PrioritySettings>(() => readPrioritySettings())
   const [metricsCache, setMetricsCache] = useState<Map<string, PrMetrics>>(() => new Map())
   const [attentionTick, setAttentionTick] = useState(0)
@@ -67,10 +61,10 @@ export function useReviewInbox(options: UseReviewInboxOptions = {}) {
     return enrichTasksWithOpinion(ranked)
   }, [items, settings, metricsCache, attentionTick])
 
-  const tasks = useMemo(() => {
-    if (mode === "history") return filterHistoryItems(allItems)
-    return filterInboxItems(allItems, segment)
-  }, [allItems, mode, segment])
+  const tasks = useMemo(
+    () => filterInboxItems(allItems, segment),
+    [allItems, segment],
+  )
 
   const prefetchMetrics = useCallback(async (taskList: ReviewInboxItem[]) => {
     const needFetch = taskList
@@ -110,13 +104,8 @@ export function useReviewInbox(options: UseReviewInboxOptions = {}) {
 }
 
 /** @deprecated Use useReviewInbox */
-export function useReviewTasks(options: {
-  queue?: string
-  reloadToken?: number
-} = {}) {
-  const mode =
-    options.queue === "done" || options.queue === "history" ? "history" : "inbox"
-  return useReviewInbox({ mode, segment: "all", reloadToken: options.reloadToken })
+export function useReviewTasks(options: { reloadToken?: number } = {}) {
+  return useReviewInbox({ segment: "all", reloadToken: options.reloadToken })
 }
 
 export type { PullRequestListItem, ReviewInboxItem }

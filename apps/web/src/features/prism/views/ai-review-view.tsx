@@ -1,7 +1,7 @@
 ﻿"use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { AnalysisFinding, AiUsageMetrics } from "@reviewly/shared"
+import type { AnalysisFinding, AiUsageMetrics, GovernanceRule } from "@reviewly/shared"
 import { Loader2 } from "lucide-react"
 import { Header } from "@/features/prism/components/header"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
@@ -44,6 +44,17 @@ import { formatPrismApiError, PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { AdoptRepoBanner, shouldShowAdoptBanner } from "@/features/prism/components/adopt-repo-banner"
 import { ReviewCopilotPanel } from "@/features/prism/components/review-copilot-panel"
+import { usePullRequestGovernance } from "@/hooks/use-pull-request-governance"
+import { fetchPullRequestGovernance } from "@/lib/api/governance"
+import { buildGovernancePromptContext } from "@/lib/ai/governance-prompt-context"
+import {
+  buildAiReviewSystemPrompt,
+  buildAiReviewUserPrompt,
+} from "@/lib/ai/ai-review-prompt"
+import {
+  resolveAnalysisPanelState,
+  resolveRunningLabel,
+} from "@/features/prism/lib/analysis-panel-state"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 
 interface AIReviewViewProps {
@@ -214,6 +225,12 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
     restoring,
   })
 
+  const {
+    rules: governanceRules,
+    loading: governanceLoading,
+    reload: reloadGovernance,
+  } = usePullRequestGovernance(prId, analysisComplete)
+
   const hasAnalysis = analysisComplete
   const analysisPhase = deriveAnalysisPhase({
     scanning,
@@ -246,6 +263,7 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
     async (
       activeFindings: AnalysisFinding[],
       jobSummary: string | undefined,
+      governanceContext: GovernanceRule[],
       signal: AbortSignal,
     ) => {
       if (!hasApiKey || !pr) return
@@ -255,28 +273,28 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
 
       const diffContext = diffBudget.context
       const findingsContext = buildFindingsContext(activeFindings)
+      const governanceText = buildGovernancePromptContext(governanceContext)
 
       const messages = [
         {
           role: "system" as const,
-          content:
-            "你是 PRism 的资深代码评审 AI。请用中文输出结构化 PR 评审摘要（Markdown），重点关注安全、性能、架构、破坏性变更和是否建议合并。必须仅基于用户提供的 Diff 与 findings，禁止编造未出现的文件或问题。",
+          content: buildAiReviewSystemPrompt(),
         },
         {
           role: "user" as const,
-          content: `请评审这个合并请求。
-
-PR 标题：${pr.title}
-仓库：${pr.repo}
-分支：${pr.sourceBranch} -> ${pr.targetBranch}
-变更规模：${pr.filesChanged} 文件，+${pr.additions} -${pr.deletions}
-${diffBudget.truncated ? "\n（Diff 已按上下文预算截断，请基于可见部分评审）\n" : ""}
-
-规则扫描 findings：
-${findingsContext}
-
-Diff 摘要：
-${diffContext || "（无 diff 内容）"}`,
+          content: buildAiReviewUserPrompt({
+            title: pr.title,
+            repo: pr.repo,
+            sourceBranch: pr.sourceBranch,
+            targetBranch: pr.targetBranch,
+            filesChanged: pr.filesChanged,
+            additions: pr.additions,
+            deletions: pr.deletions,
+            diffTruncated: diffBudget.truncated,
+            governanceText,
+            findingsContext,
+            diffContext,
+          }),
         },
       ]
 
@@ -443,7 +461,8 @@ ${diffContext || "（无 diff 内容）"}`,
       }
 
       try {
-        await generateSummary(result.findings, result.latest?.summary, ac.signal)
+        const governanceData = await fetchPullRequestGovernance(pr.id, ac.signal)
+        await generateSummary(result.findings, result.latest?.summary, governanceData, ac.signal)
       } catch (error) {
         if (!isAbortError(error)) {
           errors.push(error instanceof Error ? error.message : "AI 摘要生成失败")
@@ -458,6 +477,7 @@ ${diffContext || "（无 diff 内容）"}`,
       if (shouldApplyResult(ac.signal)) {
         setScanning(false)
         setSummaryStreaming(false)
+        void reloadGovernance()
         if (errors.length > 0) {
           setAnalysisError(errors.join("；"))
         }
@@ -475,6 +495,7 @@ ${diffContext || "（无 diff 内容）"}`,
     hasApiKey,
     generateSummary,
     aiSummary?.content,
+    reloadGovernance,
   ])
 
   handleRescanRef.current = handleRescan
@@ -503,7 +524,8 @@ ${diffContext || "（无 diff 内容）"}`,
     setGeneratedSummary(undefined)
 
     try {
-      await generateSummary(findings, latest?.summary, ac.signal)
+      const governanceData = await fetchPullRequestGovernance(pr.id, ac.signal)
+      await generateSummary(findings, latest?.summary, governanceData, ac.signal)
     } catch (error) {
       if (!isAbortError(error)) {
         setAnalysisError(error instanceof Error ? error.message : "AI 摘要生成失败")
@@ -544,6 +566,16 @@ ${diffContext || "（无 diff 内容）"}`,
     onReviewStatusChanged?.()
   }, [patchLocal, reloadPr, refreshRepos, onReviewStatusChanged])
 
+  const analysisJobRunning =
+    scanning || summaryStreaming || job?.status === "running"
+
+  const panelState = resolveAnalysisPanelState({
+    analysisComplete,
+    analysisJobRunning,
+  })
+
+  const runningLabel = resolveRunningLabel({ scanning, summaryStreaming })
+
   const opinion = useMemo(
     () =>
       buildAiReviewerOpinion({
@@ -554,8 +586,9 @@ ${diffContext || "（无 diff 内容）"}`,
         prNumber: pr?.number,
         generatedSummary,
         hasCompletedAnalysis: analysisComplete,
+        governanceRules,
       }),
-    [findings, latest, pr, generatedSummary, analysisComplete],
+    [findings, latest, pr, generatedSummary, analysisComplete, governanceRules],
   )
 
   const copilotTask = useMemo(() => {
@@ -654,12 +687,7 @@ ${diffContext || "（无 diff 内容）"}`,
 
         {pr && analysisComplete ? (
           <div className="shrink-0 sticky bottom-0 z-40 border-t border-border bg-panel/95 backdrop-blur px-3 py-2.5 shadow-[0_-8px_24px_rgba(0,0,0,0.25)] md:hidden">
-            <ReviewCompletionBanner
-              pr={pr}
-              highRiskCount={
-                findingsBuckets.critical.length + findingsBuckets.warning.length
-              }
-            />
+            <ReviewCompletionBanner pr={pr} />
           </div>
         ) : null}
         </div>
@@ -667,10 +695,13 @@ ${diffContext || "（无 diff 内容）"}`,
         {pr && copilotTask ? (
           <ReviewCopilotPanel
             pr={pr}
+            panelState={panelState}
+            runningLabel={runningLabel}
             opinion={opinion}
             findings={findings}
             taskForActions={copilotTask}
-            analysisComplete={analysisComplete}
+            governanceRules={governanceRules}
+            governanceLoading={governanceLoading}
             onOpenFullReport={layout.openInsight}
             className="hidden md:flex"
           />

@@ -41,6 +41,53 @@ def test_file_pattern_match() -> None:
     assert result.file == "internal/payment/processor.go"
 
 
+def test_missing_tests_passes_for_test_cpp_only() -> None:
+    rule = {
+        "id": "g-missing-tests",
+        "rule": "业务代码变更应包含测试文件",
+        "matchType": "missing_tests",
+    }
+    result = evaluate_rule(
+        rule,
+        patch="",
+        file_paths=["opencv/test.cpp"],
+        findings=[],
+    )
+    assert result.violated is False
+    assert result.feedback
+    assert "测试" in (result.feedback or "")
+
+
+def test_missing_tests_passes_for_underscore_test_go() -> None:
+    rule = {
+        "id": "g-missing-tests",
+        "rule": "业务代码变更应包含测试文件",
+        "matchType": "missing_tests",
+    }
+    result = evaluate_rule(
+        rule,
+        patch="",
+        file_paths=["internal/payment/processor_test.go"],
+        findings=[],
+    )
+    assert result.violated is False
+
+
+def test_missing_tests_violates_for_business_code_only() -> None:
+    rule = {
+        "id": "g-missing-tests",
+        "rule": "业务代码变更应包含测试文件",
+        "matchType": "missing_tests",
+    }
+    result = evaluate_rule(
+        rule,
+        patch="",
+        file_paths=["internal/payment/processor.go"],
+        findings=[],
+    )
+    assert result.violated is True
+
+
 def test_finding_match() -> None:
     rule = {
         "id": "g-find",

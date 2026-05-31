@@ -5,11 +5,6 @@ import { Menu, Plus, Settings2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { ImportPRDialog } from "@/features/prism/components/import-pr-dialog"
-import {
-  ReviewCenterNav,
-  type ReviewCenterTab,
-} from "@/features/prism/components/review-center-nav"
-import { ReviewCenterHistoryView } from "@/features/prism/views/review-center/review-center-history-view"
 import { ReviewCenterInboxView } from "@/features/prism/views/review-center/review-center-inbox-view"
 import { useManagedRepoPrSyncLoop } from "@/hooks/use-managed-repo-pr-sync"
 import { useReviewAttentionCounts } from "@/hooks/use-managed-repo-pr-sync"
@@ -17,8 +12,6 @@ import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
 
 interface ReviewCenterShellProps {
-  activeTab: ReviewCenterTab
-  onTabChange: (tab: ReviewCenterTab) => void
   onMenuClick?: () => void
   onSelectPr: (prId: string) => void
   importOpen: boolean
@@ -29,8 +22,6 @@ interface ReviewCenterShellProps {
 }
 
 export function ReviewCenterShell({
-  activeTab,
-  onTabChange,
   onMenuClick,
   onSelectPr,
   importOpen,
@@ -40,22 +31,11 @@ export function ReviewCenterShell({
   reloadToken,
 }: ReviewCenterShellProps) {
   const { navigate } = useNavigation()
-  const { badge, reload: reloadCounts } = useReviewAttentionCounts()
+  const { reload: reloadCounts } = useReviewAttentionCounts()
   const { syncBadges } = useManagedRepoPrSyncLoop({
     enabled: true,
     onSynced: () => reloadCounts(),
   })
-
-  const content =
-    activeTab === "history" ? (
-      <ReviewCenterHistoryView onSelectPr={onSelectPr} reloadToken={reloadToken} />
-    ) : (
-      <ReviewCenterInboxView
-        onSelectPr={onSelectPr}
-        reloadToken={reloadToken}
-        onImportOpenChange={onImportOpenChange}
-      />
-    )
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -80,10 +60,10 @@ export function ReviewCenterShell({
           ) : null}
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg font-semibold text-foreground">AI Review Inbox</h1>
+              <h1 className="text-lg font-semibold text-foreground">收件箱</h1>
               {syncBadges.newPrCount > 0 ? (
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-ai-blue/15 text-ai-blue font-medium">
-                  {syncBadges.newPrCount} 个新 PR 待查看
+                  {syncBadges.newPrCount} 个新 PR 等待评审
                 </span>
               ) : null}
               {syncBadges.revisitCount > 0 ? (
@@ -124,9 +104,13 @@ export function ReviewCenterShell({
         </div>
       </div>
 
-      <ReviewCenterNav active={activeTab} onChange={onTabChange} inboxBadge={badge} />
-
-      <div className={cn("flex flex-1 min-w-0 overflow-hidden flex flex-col")}>{content}</div>
+      <div className={cn("flex flex-1 min-w-0 overflow-hidden flex flex-col")}>
+        <ReviewCenterInboxView
+          onSelectPr={onSelectPr}
+          reloadToken={reloadToken}
+          onImportOpenChange={onImportOpenChange}
+        />
+      </div>
     </div>
   )
 }

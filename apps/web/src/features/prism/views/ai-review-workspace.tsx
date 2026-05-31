@@ -1,10 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { ArrowLeft, Menu } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import type { ReviewCenterTab } from "@/features/prism/components/review-center-nav"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { AIReviewView } from "@/features/prism/views/ai-review-view"
 import { ReviewCenterShell } from "@/features/prism/views/review-center/review-center-shell"
@@ -12,7 +11,6 @@ import { useImportPrByUrl } from "@/hooks/use-import-pr-by-url"
 import { usePullRequest } from "@/hooks/use-pull-request"
 import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
 import { useToast } from "@/hooks/use-toast"
-import { normalizeReviewTab } from "@/features/prism/lib/review-center-navigation"
 import { zh } from "@/lib/i18n/zh"
 
 interface AiReviewWorkspaceProps {
@@ -23,31 +21,24 @@ interface AiReviewWorkspaceProps {
 
 export function AiReviewWorkspace({
   prId,
-  reviewTab: reviewTabParam,
+  reviewTab: _reviewTabParam,
   onMenuClick,
 }: AiReviewWorkspaceProps) {
   const { navigate, repoId: urlRepoId } = useNavigation()
   const { data: currentPr } = usePullRequest(prId)
   const { toast } = useToast()
   const [importOpen, setImportOpen] = useState(false)
-  const [historyReloadToken, setHistoryReloadToken] = useState(0)
-  const [centerTab, setCenterTab] = useState<ReviewCenterTab>(
-    normalizeReviewTab(reviewTabParam),
-  )
+  const [inboxReloadToken, setInboxReloadToken] = useState(0)
 
-  useEffect(() => {
-    setCenterTab(normalizeReviewTab(reviewTabParam))
-  }, [reviewTabParam])
-
-  const bumpHistory = useCallback(() => {
-    setHistoryReloadToken((n) => n + 1)
+  const bumpInbox = useCallback(() => {
+    setInboxReloadToken((n) => n + 1)
   }, [])
 
   const { importing, handleImportUrl } = useImportPrByUrl({
     currentPrId: prId ?? undefined,
     onImportSuccess: () => {
       toast({ title: zh.aiReview.importSuccess })
-      bumpHistory()
+      bumpInbox()
       setImportOpen(false)
     },
     onImportError: (message) => {
@@ -55,7 +46,7 @@ export function AiReviewWorkspace({
     },
     onSamePrImport: () => {
       toast({ title: zh.aiReview.importSuccess })
-      bumpHistory()
+      bumpInbox()
       setImportOpen(false)
     },
   })
@@ -67,27 +58,17 @@ export function AiReviewWorkspace({
       navigate("ai-review", {
         prId: id,
         repoId: urlRepoId ?? undefined,
-        reviewTab: centerTab,
       })
     },
-    [navigate, urlRepoId, centerTab],
+    [navigate, urlRepoId],
   )
 
   const handleBackToList = useCallback(() => {
     navigate("ai-review", {
       aiReviewList: true,
       repoId: urlRepoId ?? undefined,
-      reviewTab: centerTab,
     })
-  }, [navigate, urlRepoId, centerTab])
-
-  const handleTabChange = useCallback(
-    (tab: ReviewCenterTab) => {
-      setCenterTab(tab)
-      navigate("ai-review", { aiReviewList: true, reviewTab: tab })
-    },
-    [navigate],
-  )
+  }, [navigate, urlRepoId])
 
   const handleImport = useCallback(
     async (url: string) => {
@@ -99,15 +80,13 @@ export function AiReviewWorkspace({
   if (!prId) {
     return (
       <ReviewCenterShell
-        activeTab={centerTab}
-        onTabChange={handleTabChange}
         onMenuClick={onMenuClick}
         onSelectPr={handleSelectPr}
         importOpen={importOpen}
         onImportOpenChange={setImportOpen}
         importing={importing}
         onImport={handleImport}
-        reloadToken={historyReloadToken}
+        reloadToken={inboxReloadToken}
       />
     )
   }
@@ -133,7 +112,7 @@ export function AiReviewWorkspace({
           className="text-muted-foreground hover:text-foreground -ml-2"
         >
           <ArrowLeft className="w-4 h-4" />
-          返回评审中心
+          返回收件箱
         </Button>
         {currentPr ? (
           <span className="text-sm text-muted-foreground truncate hidden sm:inline">
@@ -143,7 +122,7 @@ export function AiReviewWorkspace({
       </div>
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        <AIReviewView key={prId} prId={prId} onReviewStatusChanged={bumpHistory} />
+        <AIReviewView key={prId} prId={prId} onReviewStatusChanged={bumpInbox} />
       </div>
     </div>
   )

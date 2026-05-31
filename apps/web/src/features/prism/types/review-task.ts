@@ -7,7 +7,6 @@ export type ReviewTaskRisk = "低" | "中" | "高" | "严重"
 export type ReviewAdvisoryAction =
   | "立即 Review"
   | "建议重点检查"
-  | "建议要求修改"
   | "风险较低"
 
 /** @deprecated Use ReviewInboxItem + attentionState */
@@ -62,9 +61,7 @@ export type ReviewInboxItem = {
 /** @deprecated Use ReviewInboxItem */
 export type ReviewTask = ReviewInboxItem
 
-export type InboxSegment = "unread" | "high_risk" | "needs_revisit" | "all"
-
-export type ReviewCenterListMode = "inbox" | "history"
+export type InboxSegment = "unread" | "read" | "all"
 
 export function mapApiRiskToZh(
   level: PullRequestListItem["riskLevel"],

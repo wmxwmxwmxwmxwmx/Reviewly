@@ -39,7 +39,6 @@ export function ReviewInsightDrawer({
   scanning,
   streaming,
   model,
-  jobSummary,
   hasAnalysis,
   restoring,
   error,
@@ -47,12 +46,11 @@ export function ReviewInsightDrawer({
   reviewTimelineKey = 0,
   onGoToSettings,
 }: ReviewInsightDrawerProps) {
-  const [ruleSummaryOpen, setRuleSummaryOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
 
   if (!open) return null
 
-  const hasReport = Boolean(generatedSummary?.trim() || jobSummary?.trim())
+  const hasReport = Boolean(generatedSummary?.trim())
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -99,7 +97,6 @@ export function ReviewInsightDrawer({
               streaming={streaming}
               model={model}
               generatedSummary={generatedSummary}
-              jobSummary={jobSummary}
               hasAnalysis={hasAnalysis}
               restoring={restoring}
               error={error}
@@ -109,28 +106,6 @@ export function ReviewInsightDrawer({
           ) : (
             <p className="text-sm text-muted-foreground py-4">暂无 AI 分析报告，请先运行代码分析。</p>
           )}
-
-          {jobSummary && jobSummary !== generatedSummary ? (
-            <div className="rounded-lg border border-border bg-card overflow-hidden">
-              <button
-                type="button"
-                className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-accent text-left"
-                onClick={() => setRuleSummaryOpen((v) => !v)}
-              >
-                {ruleSummaryOpen ? (
-                  <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
-                ) : (
-                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                )}
-                <span className="text-xs font-semibold text-foreground">规则扫描摘要</span>
-              </button>
-              {ruleSummaryOpen ? (
-                <div className="px-3 pb-3 border-t border-border pt-2 text-[11px] text-muted-foreground whitespace-pre-wrap">
-                  {jobSummary}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
 
           <div className="rounded-lg border border-border bg-card overflow-hidden">
             <button

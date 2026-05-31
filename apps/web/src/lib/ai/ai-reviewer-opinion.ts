@@ -1,14 +1,29 @@
-import type { AnalysisFinding, AnalysisSummary } from "@reviewly/shared"
+import type { AnalysisFinding, AnalysisSummary, GovernanceRule } from "@reviewly/shared"
 
 export type AiReviewerVerdict = "approve" | "request_changes" | "block" | "pending"
 
+export type MergeRecommendationLabel =
+  | "建议合并"
+  | "需要人工重点检查"
+  | "需要修改"
+  | "不建议合并"
+
+export interface ParsedSummarySections {
+  riskLevel?: string
+  keyFindings: string[]
+  reviewSuggestions: string[]
+  reason?: string
+}
+
 export interface AiReviewerOpinion {
   verdict: AiReviewerVerdict
-  verdictLabel: string
+  verdictLabel: MergeRecommendationLabel | string
   suggestChanges: boolean
   points: string[]
   analysisExcerpt?: string
   llmInsight?: string
+  conclusionReason?: string
+  parsedSections?: ParsedSummarySections
   scores: {
     riskScore: number
     securityScore: number
@@ -31,14 +46,25 @@ const TYPE_LABELS: Record<AnalysisFinding["type"], string> = {
   maintainability: "可维护性",
 }
 
-const VERDICT_LABELS: Record<Exclude<AiReviewerVerdict, "pending">, string> = {
-  approve: "建议合并",
-  request_changes: "需要修改",
-  block: "不建议合并",
+const MERGE_LABEL_TO_VERDICT: Record<MergeRecommendationLabel, AiReviewerVerdict> = {
+  建议合并: "approve",
+  需要人工重点检查: "request_changes",
+  需要修改: "request_changes",
+  不建议合并: "block",
 }
 
+const MERGE_RECOMMENDATION_PATTERN =
+  /合并建议[：:]\s*(建议合并|需要人工重点检查|需要修改|不建议合并)/
+
 const PLACEHOLDER_BULLET =
-  /^(严重|高|中|低|总计)[：:]\s*0\s*$|共\s*0\s*项发现|未发现阻塞合并项/i
+  /^(严重|高|中|低|总计)[：:]\s*0\s*$|共\s*0\s*项发现|未发现阻塞合并项|未发现显著风险/i
+
+const GOVERNANCE_SEVERITY_RANK: Record<string, number> = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+}
 
 /** Whether PR-level analysis has real output worth showing in Copilot / task cards. */
 export function isPrAnalysisComplete(input: {
@@ -56,11 +82,92 @@ export function isPrAnalysisComplete(input: {
   )
 }
 
-/** Align badge verdict with the generated AI summary report when possible. */
+function extractSection(text: string, heading: string): string | undefined {
+  const pattern = new RegExp(`^##\\s*${heading}\\s*$`, "im")
+  const match = pattern.exec(text)
+  if (!match) return undefined
+  const start = match.index + match[0].length
+  const rest = text.slice(start)
+  const nextHeading = rest.search(/^##\s/m)
+  const body = (nextHeading === -1 ? rest : rest.slice(0, nextHeading)).trim()
+  return body || undefined
+}
+
+function extractBullets(section: string | undefined, max = 5): string[] {
+  if (!section) return []
+  const bullets: string[] = []
+  for (const line of section.split("\n")) {
+    const trimmed = line.trim()
+    const bullet = trimmed.match(/^[-*]\s+(.+)/)
+    if (bullet?.[1]) {
+      const text = bullet[1].replace(/\*\*/g, "").trim()
+      if (text && !PLACEHOLDER_BULLET.test(text)) {
+        bullets.push(text)
+      }
+    }
+    if (bullets.length >= max) break
+  }
+  return bullets
+}
+
+function extractReasonFromConclusion(section: string | undefined): string | undefined {
+  if (!section) return undefined
+  const reasonMatch = section.match(/理由[：:]\s*([\s\S]+)/)
+  if (reasonMatch?.[1]) {
+    return reasonMatch[1].trim().split("\n")[0]?.trim()
+  }
+  return undefined
+}
+
+export function parseSummarySections(summary: string): ParsedSummarySections {
+  const riskSection = extractSection(summary, "风险等级")
+  const findingsSection = extractSection(summary, "关键发现")
+  const reviewSection = extractSection(summary, "Review建议")
+  const conclusionSection = extractSection(summary, "评审结论")
+
+  const riskLevel = riskSection?.split("\n")[0]?.trim().replace(/\*\*/g, "")
+
+  let reviewSuggestions = extractBullets(reviewSection, 5)
+  if (reviewSuggestions.length === 0 && reviewSection) {
+    reviewSuggestions = reviewSection
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("Reviewer"))
+      .slice(0, 5)
+  }
+
+  return {
+    riskLevel: riskLevel || undefined,
+    keyFindings: extractBullets(findingsSection, 5),
+    reviewSuggestions,
+    reason: extractReasonFromConclusion(conclusionSection),
+  }
+}
+
+export function parseMergeRecommendation(text: string): {
+  label: MergeRecommendationLabel
+  verdict: AiReviewerVerdict
+} | null {
+  const conclusion = extractSection(text, "评审结论") ?? text
+  const match = MERGE_RECOMMENDATION_PATTERN.exec(conclusion)
+  if (match?.[1]) {
+    const label = match[1] as MergeRecommendationLabel
+    return { label, verdict: MERGE_LABEL_TO_VERDICT[label] }
+  }
+  const fullMatch = MERGE_RECOMMENDATION_PATTERN.exec(text)
+  if (fullMatch?.[1]) {
+    const label = fullMatch[1] as MergeRecommendationLabel
+    return { label, verdict: MERGE_LABEL_TO_VERDICT[label] }
+  }
+  return null
+}
+
+/** @deprecated Prefer parseMergeRecommendation */
 export function inferVerdictFromSummaryText(text: string): AiReviewerVerdict | null {
+  const parsed = parseMergeRecommendation(text)
+  if (parsed) return parsed.verdict
   const normalized = text.trim()
   if (!normalized) return null
-  // Block / reject patterns first (must precede approve patterns)
   if (
     /❌\s*不建议合并|不建议合并|存在风险[，,]?\s*不建议合并|不通过|阻止合并|不应合并|禁止合并|不可合并|\bblock\b/i.test(
       normalized,
@@ -68,6 +175,7 @@ export function inferVerdictFromSummaryText(text: string): AiReviewerVerdict | n
   ) {
     return "block"
   }
+  if (/需要人工重点检查/.test(normalized)) return "request_changes"
   if (/需要修改|要求修改|修改后再|有待改进|request\s*changes/i.test(normalized)) {
     return "request_changes"
   }
@@ -77,24 +185,60 @@ export function inferVerdictFromSummaryText(text: string): AiReviewerVerdict | n
   return null
 }
 
-/** Parse verdict from the conclusion section of an LLM report (narrow slice). */
+/** @deprecated Prefer parseMergeRecommendation */
 export function inferVerdictFromConclusionSection(text: string): AiReviewerVerdict | null {
-  const sections = ["评审结论", "结论", "Review Conclusion", "Conclusion"]
-
-  for (const key of sections) {
+  const section = extractSection(text, "评审结论")
+  if (section) {
+    const parsed = parseMergeRecommendation(`## 评审结论\n${section}`)
+    if (parsed) return parsed.verdict
+  }
+  for (const key of ["评审结论", "结论", "Review Conclusion", "Conclusion"]) {
     const idx = text.indexOf(key)
     if (idx === -1) continue
-
-    const slice = text.slice(idx, idx + 300)
+    const slice = text.slice(idx, idx + 500)
     const v = inferVerdictFromSummaryText(slice)
     if (v) return v
   }
-
   return null
+}
+
+export function deriveVerdictFromGovernance(
+  rules: GovernanceRule[],
+): { verdict: AiReviewerVerdict; label: MergeRecommendationLabel } | null {
+  const violated = rules.filter((r) => r.violated === true)
+  if (violated.length === 0) return null
+
+  let maxRank = 0
+  for (const rule of violated) {
+    const rank = GOVERNANCE_SEVERITY_RANK[rule.severity ?? "medium"] ?? 2
+    maxRank = Math.max(maxRank, rank)
+  }
+
+  if (maxRank >= GOVERNANCE_SEVERITY_RANK.high) {
+    return { verdict: "block", label: "不建议合并" }
+  }
+  if (maxRank >= GOVERNANCE_SEVERITY_RANK.medium) {
+    return { verdict: "request_changes", label: "需要人工重点检查" }
+  }
+  return { verdict: "approve", label: "建议合并" }
+}
+
+function mergeRecommendationToLabel(rec: AnalysisSummary["mergeRecommendation"]): MergeRecommendationLabel {
+  switch (rec) {
+    case "approve":
+      return "建议合并"
+    case "block":
+      return "不建议合并"
+    case "request_changes":
+      return "需要修改"
+    default:
+      return "建议合并"
+  }
 }
 
 function applyVerdict(
   verdict: AiReviewerVerdict,
+  label: MergeRecommendationLabel | string,
   findings: AnalysisFinding[],
 ): Pick<AiReviewerOpinion, "verdict" | "verdictLabel" | "suggestChanges"> {
   const suggestChanges =
@@ -102,10 +246,7 @@ function applyVerdict(
     verdict === "request_changes" ||
     findings.some((f) => f.severity === "critical")
 
-  const verdictLabel =
-    verdict === "pending" ? "待完成分析" : VERDICT_LABELS[verdict]
-
-  return { verdict, verdictLabel, suggestChanges }
+  return { verdict, verdictLabel: label, suggestChanges }
 }
 
 function sortFindings(findings: AnalysisFinding[]): AnalysisFinding[] {
@@ -116,30 +257,23 @@ function sortFindings(findings: AnalysisFinding[]): AnalysisFinding[] {
   )
 }
 
-function deriveVerdictFromFindings(findings: AnalysisFinding[]): AiReviewerVerdict {
+function deriveVerdictFromFindings(findings: AnalysisFinding[]): {
+  verdict: AiReviewerVerdict
+  label: MergeRecommendationLabel
+} {
   const critical = findings.filter((f) => f.severity === "critical").length
   const high = findings.filter((f) => f.severity === "high").length
   const risk = Math.min(100, critical * 25 + high * 12)
-  if (risk >= 70) return "block"
-  if (risk >= 40 || critical > 0) return "request_changes"
-  if (findings.length === 0) return "pending"
-  return "approve"
+  if (risk >= 70) return { verdict: "block", label: "不建议合并" }
+  if (risk >= 40 || critical > 0) return { verdict: "request_changes", label: "需要修改" }
+  if (findings.length === 0) return { verdict: "approve", label: "建议合并" }
+  const medium = findings.some((f) => f.severity === "medium")
+  if (medium) return { verdict: "request_changes", label: "需要人工重点检查" }
+  return { verdict: "approve", label: "建议合并" }
 }
 
 function extractMarkdownBullets(summary: string, max = 5): string[] {
-  const lines = summary.split("\n")
-  const bullets: string[] = []
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (trimmed.startsWith("- ")) {
-      const text = trimmed.slice(2).replace(/\*\*/g, "").trim()
-      if (text && !PLACEHOLDER_BULLET.test(text)) {
-        bullets.push(text)
-      }
-    }
-    if (bullets.length >= max) break
-  }
-  return bullets
+  return extractBullets(summary, max)
 }
 
 function stripMarkdown(text: string, maxLen: number): string {
@@ -157,9 +291,13 @@ function buildReasonPoints(input: {
   generatedSummary?: string
   latest?: AnalysisSummary | null
   prRef: string
+  parsedSections?: ParsedSummarySections
 }): string[] {
-  const { findings, generatedSummary, latest, prRef } = input
-  const points: string[] = []
+  const { findings, generatedSummary, latest, prRef, parsedSections } = input
+
+  if (parsedSections?.keyFindings.length) {
+    return parsedSections.keyFindings.slice(0, 5)
+  }
 
   if (generatedSummary?.trim()) {
     const fromLlm = extractMarkdownBullets(generatedSummary, 5)
@@ -169,9 +307,9 @@ function buildReasonPoints(input: {
   if (findings.length > 0) {
     const critical = findings.filter((f) => f.severity === "critical").length
     const high = findings.filter((f) => f.severity === "high").length
-    points.push(
+    const points: string[] = [
       `已对 ${prRef} 完成规则扫描：共 ${findings.length} 项发现（严重 ${critical} · 高 ${high}）。`,
-    )
+    ]
     for (const f of sortFindings(findings).slice(0, 3)) {
       const loc = f.file ? `（${f.file}${f.line ? `:${f.line}` : ""}）` : ""
       points.push(`[${TYPE_LABELS[f.type]}·${f.severity}] ${f.title}${loc}`)
@@ -184,7 +322,7 @@ function buildReasonPoints(input: {
     if (fromSummary.length > 0) return fromSummary
   }
 
-  return points
+  return []
 }
 
 export interface BuildAiReviewerOpinionInput {
@@ -195,6 +333,7 @@ export interface BuildAiReviewerOpinionInput {
   prNumber?: number
   generatedSummary?: string
   hasCompletedAnalysis?: boolean
+  governanceRules?: GovernanceRule[]
 }
 
 export function buildAiReviewerOpinion(input: BuildAiReviewerOpinionInput): AiReviewerOpinion {
@@ -206,6 +345,7 @@ export function buildAiReviewerOpinion(input: BuildAiReviewerOpinionInput): AiRe
     prNumber,
     generatedSummary,
     hasCompletedAnalysis = false,
+    governanceRules = [],
   } = input
 
   const scores = {
@@ -215,8 +355,6 @@ export function buildAiReviewerOpinion(input: BuildAiReviewerOpinionInput): AiRe
     maintainabilityScore: latest?.maintainabilityScore ?? 0,
   }
 
-  const analyzed = hasCompletedAnalysis
-
   const prRef =
     repoLabel && prNumber != null
       ? `${repoLabel} #${prNumber}`
@@ -224,30 +362,45 @@ export function buildAiReviewerOpinion(input: BuildAiReviewerOpinionInput): AiRe
         ? `「${prTitle.slice(0, 48)}${prTitle.length > 48 ? "…" : ""}」`
         : "本次 PR"
 
-  if (!analyzed) {
+  const llmSummary = generatedSummary?.trim()
+  const parsedSections = llmSummary ? parseSummarySections(llmSummary) : undefined
+
+  if (!hasCompletedAnalysis) {
     return {
-      ...applyVerdict("pending", findings),
-      points: ["请先点击「开始分析」生成基于改动的评审意见。"],
+      verdict: "pending",
+      verdictLabel: "待完成分析",
+      suggestChanges: false,
+      points: [],
       scores,
-      llmInsight: undefined,
+      parsedSections,
     }
   }
 
-  // RULE:
-  // If generatedSummary exists, it is the SINGLE source of truth.
-  // NEVER override it using mergeRecommendation or findings.
-  let verdict: AiReviewerVerdict = "pending"
-  const llmSummary = generatedSummary?.trim()
+  let verdict: AiReviewerVerdict = "approve"
+  let label: MergeRecommendationLabel = "建议合并"
 
-  if (llmSummary) {
-    verdict =
-      inferVerdictFromSummaryText(llmSummary) ??
-      inferVerdictFromConclusionSection(llmSummary) ??
-      "pending"
-  } else if (latest?.mergeRecommendation) {
-    verdict = latest.mergeRecommendation
-  } else if (findings.length > 0) {
-    verdict = deriveVerdictFromFindings(findings)
+  const parsedMerge = llmSummary ? parseMergeRecommendation(llmSummary) : null
+  if (parsedMerge) {
+    verdict = parsedMerge.verdict
+    label = parsedMerge.label
+  } else {
+    const fromGov = deriveVerdictFromGovernance(governanceRules)
+    if (fromGov) {
+      verdict = fromGov.verdict
+      label = fromGov.label
+    } else if (latest?.mergeRecommendation) {
+      verdict = latest.mergeRecommendation
+      label = mergeRecommendationToLabel(latest.mergeRecommendation)
+    } else if (findings.length > 0) {
+      const fromFindings = deriveVerdictFromFindings(findings)
+      verdict = fromFindings.verdict
+      label = fromFindings.label
+    }
+  }
+
+  if (verdict === "pending") {
+    verdict = "approve"
+    label = "建议合并"
   }
 
   const points = buildReasonPoints({
@@ -255,6 +408,7 @@ export function buildAiReviewerOpinion(input: BuildAiReviewerOpinionInput): AiRe
     generatedSummary,
     latest,
     prRef,
+    parsedSections,
   })
 
   const engineBullets = latest?.summary ? extractMarkdownBullets(latest.summary, 2) : []
@@ -266,17 +420,17 @@ export function buildAiReviewerOpinion(input: BuildAiReviewerOpinionInput): AiRe
         : undefined
 
   const llmInsight =
-    generatedSummary && generatedSummary.trim().length > 40
-      ? stripMarkdown(generatedSummary, 320)
-      : undefined
+    llmSummary && llmSummary.length > 40 ? stripMarkdown(llmSummary, 320) : undefined
 
-  const applied = applyVerdict(verdict, findings)
+  const applied = applyVerdict(verdict, label, findings)
 
   return {
     ...applied,
     points: points.slice(0, 5),
     analysisExcerpt,
     llmInsight,
+    conclusionReason: parsedSections?.reason,
+    parsedSections,
     scores,
   }
 }

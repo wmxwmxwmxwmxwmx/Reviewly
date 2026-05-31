@@ -4,7 +4,6 @@ import type { PrioritySettings } from "@/features/prism/lib/governance-priority-
 import {
   computeAttentionState,
   getFingerprintInput,
-  hasViewRecord,
   type ReviewAttentionState,
 } from "@/features/prism/lib/review-attention-state"
 import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
@@ -137,20 +136,6 @@ export type ComputeInboxOptions = {
   metricsCache?: Map<string, PrMetrics>
 }
 
-export function belongsInInbox(item: ReviewInboxItem): boolean {
-  if (item.attentionState === "unread" || item.attentionState === "needs_revisit") {
-    return true
-  }
-  if (item.attentionState === "reviewed" && isHighRiskLevel(item.riskLevel)) {
-    return true
-  }
-  return false
-}
-
-export function belongsInHistory(item: ReviewInboxItem): boolean {
-  return hasViewRecord(item.prId)
-}
-
 export function computeInboxItems(
   prs: PullRequestListItem[],
   options: ComputeInboxOptions = {},
@@ -207,28 +192,17 @@ export function filterInboxItems(
   items: ReviewInboxItem[],
   segment: InboxSegment,
 ): ReviewInboxItem[] {
-  const inbox = items.filter(belongsInInbox)
   switch (segment) {
     case "unread":
-      return inbox.filter((i) => i.attentionState === "unread")
-    case "high_risk":
-      return inbox.filter((i) => isHighRiskLevel(i.riskLevel))
-    case "needs_revisit":
-      return inbox.filter((i) => i.attentionState === "needs_revisit")
+      return items.filter((i) => i.attentionState === "unread")
+    case "read":
+      return items.filter(
+        (i) => i.attentionState === "reviewed" || i.attentionState === "needs_revisit",
+      )
     case "all":
     default:
-      return inbox
+      return items
   }
-}
-
-export function filterHistoryItems(items: ReviewInboxItem[]): ReviewInboxItem[] {
-  return items
-    .filter(belongsInHistory)
-    .sort((a, b) => {
-      const ta = new Date(a.source.createdAt ?? a.updatedAt).getTime()
-      const tb = new Date(b.source.createdAt ?? b.updatedAt).getTime()
-      return tb - ta
-    })
 }
 
 /** @deprecated Use computeInboxItems */

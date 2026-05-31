@@ -2,9 +2,6 @@
 export {
   computeInboxItems as computePriority,
   filterInboxItems,
-  filterHistoryItems,
-  belongsInInbox,
-  belongsInHistory,
   type PrMetrics,
 } from "@/features/prism/ai/review-attention-score"
 

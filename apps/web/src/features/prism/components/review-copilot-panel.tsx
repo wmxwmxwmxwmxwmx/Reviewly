@@ -1,14 +1,15 @@
 "use client"
 
-import type { AnalysisFinding, PullRequest } from "@reviewly/shared"
-import { FileText, Settings2 } from "lucide-react"
+import type { AnalysisFinding, GovernanceRule, PullRequest } from "@reviewly/shared"
+import { ExternalLink, FileText, Settings2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { ReviewAdvisoryBar } from "@/features/prism/components/review-advisory-bar"
-import { ReviewCompletionBanner } from "@/features/prism/components/review-completion-banner"
+import { GovernanceRuleResults } from "@/features/prism/components/governance-rule-results"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import type { AnalysisPanelState } from "@/features/prism/lib/analysis-panel-state"
 import type { ReviewInboxItem } from "@/features/prism/types/review-task"
 import type { AiReviewerOpinion } from "@/lib/ai/ai-reviewer-opinion"
+import { openGitHubReview } from "@/lib/github-pr-url"
 import { cn } from "@/lib/utils"
 
 const SEVERITY_ORDER: Record<string, number> = {
@@ -20,10 +21,13 @@ const SEVERITY_ORDER: Record<string, number> = {
 
 type ReviewCopilotPanelProps = {
   pr: PullRequest
+  panelState: AnalysisPanelState
+  runningLabel?: string
   opinion: AiReviewerOpinion
   findings: AnalysisFinding[]
   taskForActions: ReviewInboxItem
-  analysisComplete: boolean
+  governanceRules?: GovernanceRule[]
+  governanceLoading?: boolean
   onOpenFullReport?: () => void
   className?: string
 }
@@ -40,28 +44,36 @@ function buildRiskPoints(findings: AnalysisFinding[]): string[] {
     .filter(Boolean)
 }
 
+function PanelSkeleton() {
+  return (
+    <div className="space-y-3 py-1">
+      <div className="h-3 bg-surface-2 rounded animate-pulse w-2/3" />
+      <div className="h-3 bg-surface-2 rounded animate-pulse w-full" />
+      <div className="h-3 bg-surface-2 rounded animate-pulse w-5/6" />
+      <div className="h-3 bg-surface-2 rounded animate-pulse w-4/6" />
+    </div>
+  )
+}
+
 export function ReviewCopilotPanel({
   pr,
+  panelState,
+  runningLabel = "正在分析...",
   opinion,
   findings,
   taskForActions,
-  analysisComplete,
+  governanceRules = [],
+  governanceLoading = false,
   onOpenFullReport,
   className,
 }: ReviewCopilotPanelProps) {
   const { navigate } = useNavigation()
 
-  const actionTask: ReviewInboxItem = {
-    ...taskForActions,
-    hasRealAi: analysisComplete,
-    opinion,
-  }
-
-  const riskPoints = analysisComplete ? buildRiskPoints(findings) : []
-  const reasonPoints = analysisComplete ? opinion.points.slice(0, 5) : []
-  const highRiskCount = findings.filter(
-    (f) => f.severity === "critical" || f.severity === "high",
-  ).length
+  const parsed = opinion.parsedSections
+  const riskLevel = parsed?.riskLevel ?? taskForActions.riskLevel
+  const keyFindings =
+    parsed?.keyFindings.length ? parsed.keyFindings : buildRiskPoints(findings)
+  const reviewSuggestions = parsed?.reviewSuggestions ?? []
 
   return (
     <aside
@@ -90,17 +102,14 @@ export function ReviewCopilotPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4 text-[12px]">
-        {!analysisComplete ? (
-          <div className="space-y-2">
-            <div>
-              <p className="text-muted-foreground mb-1">AI 评审结论</p>
-              <p className="font-medium text-muted-foreground">待完成分析</p>
-            </div>
-            <p className="text-muted-foreground leading-relaxed">
-              请先点击「开始分析」生成基于改动的评审意见。
-            </p>
+        {panelState === "running" ? (
+          <div className="space-y-3">
+            <p className="text-muted-foreground animate-pulse">{runningLabel}</p>
+            <PanelSkeleton />
           </div>
-        ) : (
+        ) : null}
+
+        {panelState === "completed" ? (
           <>
             <div>
               <p className="text-muted-foreground mb-1">AI 评审结论</p>
@@ -110,17 +119,48 @@ export function ReviewCopilotPanel({
                   opinion.verdict === "approve" && "text-risk-low",
                   opinion.verdict === "request_changes" && "text-risk-medium",
                   opinion.verdict === "block" && "text-risk-high",
-                  opinion.verdict === "pending" && "text-muted-foreground",
                 )}
               >
                 {opinion.verdictLabel}
               </p>
+              {opinion.conclusionReason ? (
+                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                  {opinion.conclusionReason}
+                </p>
+              ) : null}
             </div>
 
             <div>
               <p className="text-muted-foreground mb-1">风险等级</p>
-              <p className="font-medium text-foreground">{actionTask.riskLevel}</p>
+              <p className="font-medium text-foreground">{riskLevel}</p>
             </div>
+
+            {keyFindings.length > 0 ? (
+              <div>
+                <p className="text-muted-foreground mb-1.5">关键发现</p>
+                <ul className="space-y-1 list-disc list-inside text-foreground/90">
+                  {keyFindings.map((p, i) => (
+                    <li key={`${p}-${i}`}>{p}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <GovernanceRuleResults
+              rules={governanceRules}
+              loading={governanceLoading}
+            />
+
+            {reviewSuggestions.length > 0 ? (
+              <div>
+                <p className="text-muted-foreground mb-1.5">Review 建议</p>
+                <ul className="space-y-1 list-disc list-inside text-foreground/90">
+                  {reviewSuggestions.map((p, i) => (
+                    <li key={`${p}-${i}`}>{p}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             {onOpenFullReport ? (
               <Button
@@ -134,41 +174,23 @@ export function ReviewCopilotPanel({
                 查看完整报告
               </Button>
             ) : null}
-
-            {reasonPoints.length > 0 ? (
-              <div>
-                <p className="text-muted-foreground mb-1.5">原因</p>
-                <ul className="space-y-1 list-disc list-inside text-foreground/90">
-                  {reasonPoints.map((r) => (
-                    <li key={r}>{r}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {riskPoints.length > 0 ? (
-              <div>
-                <p className="text-muted-foreground mb-1.5">关键风险点</p>
-                <ol className="space-y-1 list-decimal list-inside text-foreground/90">
-                  {riskPoints.map((p, i) => (
-                    <li key={`${p}-${i}`}>{p}</li>
-                  ))}
-                </ol>
-              </div>
-            ) : null}
-
-            <ReviewCompletionBanner pr={pr} highRiskCount={highRiskCount} />
-
-            <div className="pt-2 border-t border-border">
-              <ReviewAdvisoryBar
-                task={actionTask}
-                suggestedLabel={opinion.verdictLabel}
-                layout="panel"
-              />
-            </div>
           </>
-        )}
+        ) : null}
       </div>
+
+      {panelState === "completed" ? (
+        <div className="shrink-0 px-3 py-3 border-t border-border">
+          <Button
+            type="button"
+            size="sm"
+            className="w-full gap-1.5 bg-ai-blue hover:bg-sky-300 text-primary-foreground"
+            onClick={() => openGitHubReview(pr)}
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            在 GitHub Review
+          </Button>
+        </div>
+      ) : null}
     </aside>
   )
 }
