@@ -43,13 +43,22 @@ async def run_onboarding(session: Session, job_id: str) -> None:
 
     try:
         _update(session, job_id, 5, "正在刷新仓库元数据…")
-        if repo_row.html_url:
+        repo_url = repo_row.html_url or (
+            f"https://github.com/{repo_row.full_name}" if repo_row.full_name else None
+        )
+        if repo_url:
             try:
+                from app.repositories import auth_users as auth_users_repo
                 from app.github.repositories import fetch_repo_by_url
                 from app.github.repo_mapper import github_repo_to_metadata
                 from datetime import datetime, timezone
 
-                gh = await fetch_repo_by_url(repo_row.html_url, None)
+                user_token: str | None = None
+                if repo_row.owner_user_id:
+                    owner = auth_users_repo.get_user_row(session, repo_row.owner_user_id)
+                    if owner:
+                        user_token = auth_users_repo.decrypt_token(owner.access_token_encrypted)
+                gh = await fetch_repo_by_url(repo_url, user_token)
                 metadata = github_repo_to_metadata(gh, open_prs=repo_row.open_prs or 0, last_synced_at=datetime.now(timezone.utc))
                 metadata["id"] = repo_id
                 metadata["owner_user_id"] = repo_row.owner_user_id

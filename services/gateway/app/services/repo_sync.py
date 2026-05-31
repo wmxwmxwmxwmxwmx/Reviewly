@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -14,7 +14,7 @@ from app.db.models import AuthUser, Repository
 from app.github import public_client
 from app.github.client import GitHubClient
 from app.github.repo_mapper import github_repo_to_metadata
-from app.github.repositories import fetch_repo_by_url, fetch_user_repositories
+from app.github.repositories import fetch_repo, fetch_repo_by_url, fetch_user_repositories
 from app.repositories import auth_users as auth_users_repo
 from app.repositories import repos as repos_repo
 from app.repositories.repo_management import external_sync_metadata_defaults
@@ -96,6 +96,56 @@ async def import_repository_from_url(
     return dto
 
 
+async def _refresh_incomplete_user_repos(
+    session: Session,
+    user: AuthUser,
+    token: str,
+) -> int:
+    """Fill stars/forks/html_url for repos created via PR import or partial sync."""
+    rows = session.scalars(
+        select(Repository).where(
+            Repository.owner_user_id == user.id,
+            or_(
+                Repository.stars.is_(None),
+                Repository.html_url.is_(None),
+                Repository.last_synced_at.is_(None),
+            ),
+        )
+    ).all()
+    refreshed = 0
+    for row in rows:
+        if not row.full_name or "/" not in row.full_name:
+            continue
+        owner, name = row.full_name.split("/", 1)
+        try:
+            gh_repo = await fetch_repo(owner, name, token)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not refresh metadata for %s: %s", row.full_name, exc)
+            continue
+        metadata = github_repo_to_metadata(
+            gh_repo,
+            open_prs=row.open_prs or 0,
+            last_synced_at=_now_utc(),
+        )
+        metadata["id"] = row.id
+        metadata["owner_user_id"] = user.id
+        metadata["source"] = row.source or "oauth"
+        if row.source_type:
+            metadata["source_type"] = row.source_type
+        if row.repository_type:
+            metadata["repository_type"] = row.repository_type
+        metadata["managed"] = row.managed
+        if row.visibility:
+            metadata["visibility"] = row.visibility
+        if row.team_id:
+            metadata["team_id"] = row.team_id
+        repos_repo.upsert_repository(session, metadata)
+        refreshed += 1
+    if refreshed:
+        logger.info("User %s refreshed metadata for %s incomplete repositories", user.username, refreshed)
+    return refreshed
+
+
 async def sync_repositories_for_user(session: Session, user: AuthUser) -> dict[str, Any]:
     token = _user_token(user)
     gh_repos = await fetch_user_repositories(token)
@@ -136,6 +186,8 @@ async def sync_repositories_for_user(session: Session, user: AuthUser) -> dict[s
     )
     if claimed:
         logger.info("User %s claimed %s orphan repositories", user.username, claimed)
+
+    metadata_refreshed = await _refresh_incomplete_user_repos(session, user, token)
 
     session.commit()
     record_activity(
