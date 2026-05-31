@@ -327,19 +327,9 @@ npm run dev:db
 npm run dev
 ```
 
-**数据库：PostgreSQL 与 SQLite**
+**登录页提示 Gateway 不可达、终端 `ECONNREFUSED 127.0.0.1:3001`**
 
-默认 `services/gateway/.env` 使用 `DATABASE_URL=postgresql+psycopg://...@localhost:5432/prism`，需先 `docker compose up -d` 启动 Postgres，否则 `npm run dev` 时 Gateway 迁移会失败、**uvicorn 不会监听 3001**。
-
-无 Docker 时可改为 SQLite（`services/gateway/.env`）：
-
-```env
-DATABASE_URL=sqlite:///./prism.db
-```
-
-**登录页空白、终端 `ECONNREFUSED 127.0.0.1:3001`**
-
-表示 Gateway 未起来。先确认健康检查：
+表示 Gateway 未起来（多为迁移失败）。`npm run dev` 通常会自动回退 SQLite；若仍失败，先确认健康检查：
 
 ```bash
 curl http://127.0.0.1:3001/health

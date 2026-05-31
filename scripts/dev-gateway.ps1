@@ -27,17 +27,28 @@ if (Test-Path $envFile) {
 
 $resolveScript = Join-Path $Gateway "scripts\resolve_dev_database.py"
 Write-Host "Resolving database (Postgres / SQLite auto)..."
-$resolveErr = Join-Path $env:TEMP "prism-db-resolve.err"
-$dbUrl = & $python $resolveScript 2> $resolveErr
-if ($LASTEXITCODE -ne 0) {
-    if (Test-Path $resolveErr) { Get-Content $resolveErr | Write-Host }
-    exit 1
+# Python 将说明写到 stderr；PowerShell 默认会把 stderr 当成错误并中断（即使 exit 0）
+$prevErrorAction = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+$resolveOutput = & $python $resolveScript 2>&1
+$resolveExitCode = $LASTEXITCODE
+$ErrorActionPreference = $prevErrorAction
+foreach ($line in $resolveOutput) {
+    if ($line -is [System.Management.Automation.ErrorRecord]) {
+        Write-Host $line.Exception.Message
+    }
 }
-if (Test-Path $resolveErr) { Get-Content $resolveErr | Write-Host }
-Remove-Item $resolveErr -ErrorAction SilentlyContinue
+$dbUrl = (
+    $resolveOutput |
+    Where-Object { $_ -is [string] -and $_ -match '^(sqlite|postgresql)' } |
+    Select-Object -First 1
+)
+if ($null -eq $dbUrl) {
+    $dbUrl = ($resolveOutput | Where-Object { $_ -is [string] } | Select-Object -First 1)
+}
 $dbUrl = ($dbUrl | Out-String).Trim()
-if (-not $dbUrl) {
-    Write-Error "Failed to resolve DATABASE_URL."
+if ($resolveExitCode -ne 0 -or -not $dbUrl) {
+    Write-Error "Failed to resolve DATABASE_URL (exit=$resolveExitCode)."
     exit 1
 }
 [System.Environment]::SetEnvironmentVariable("DATABASE_URL", $dbUrl, "Process")
