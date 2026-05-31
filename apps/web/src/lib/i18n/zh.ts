@@ -33,7 +33,7 @@ export const zh = {
     redirectingToGitHub: "正在跳转 GitHub 授权…",
     gatewayUnreachableTitle: "无法连接后端 Gateway（127.0.0.1:3001）",
     gatewayUnreachableHint:
-      "Gateway 未启动或数据库迁移失败。请重新执行 npm run dev（会自动探测 Postgres 或回退 SQLite）；需要 Postgres 时可执行 npm run dev:db，或在 services/gateway/.env 设置 PRISM_DATABASE_MODE=sqlite。",
+      "Gateway 未启动。请执行 npm run dev（Docker 容器模式）或 npm run deploy；查看日志: docker compose -f deploy/docker-compose.yml logs gateway。本地开发可用 npm run dev:local。",
     gatewayHealthCheck: "健康检查：curl http://127.0.0.1:3001/health",
     retry: "重试",
     continueOAuth: "继续 GitHub 授权",
