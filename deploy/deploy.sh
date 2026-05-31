@@ -41,10 +41,20 @@ if [ -f deploy/.env ] && grep -q '^PRISM_STUB_ENGINE=1' deploy/.env; then
 fi
 
 prism_step "[3/7] 构建 Docker 镜像（首次较慢）..."
-if [ "$USE_ENGINE" = "1" ]; then
-  "${COMPOSE[@]}" build
+if [ "${PRISM_SKIP_BUILD:-0}" != "1" ]; then
+  if [ "$USE_ENGINE" = "1" ]; then
+    "${COMPOSE[@]}" build
+  else
+    "${COMPOSE[@]}" build postgres gateway web
+  fi
 else
-  "${COMPOSE[@]}" build postgres gateway web
+  prism_color yellow "  跳过镜像构建（使用已有镜像）"
+  gw_img="$("${COMPOSE[@]}" images -q gateway 2>/dev/null || true)"
+  web_img="$("${COMPOSE[@]}" images -q web 2>/dev/null || true)"
+  if [ -z "$gw_img" ] || [ -z "$web_img" ]; then
+    prism_color yellow "  未找到 gateway/web 镜像，改为构建..."
+    "${COMPOSE[@]}" build postgres gateway web
+  fi
 fi
 
 prism_step "[4/7] 启动 PostgreSQL..."

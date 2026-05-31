@@ -284,24 +284,14 @@ OAuth `state` 携带 `return_path`，回调后进入 `FRONTEND_URL/auth/callback
 
 ## 本地开发
 
-```bash
-# 安装依赖
-npm install
+**默认使用 Docker 容器**（推荐，避免本机 Python/Postgres/端口冲突）：
 
-# 同时启动 Web (:3000) 与 Gateway (:3001)
+```bash
+# 需已安装并启动 Docker Desktop / Docker Engine
 npm run dev
 ```
 
-启动时 Gateway **自动选择数据库**（无需手改 `.env` 即可兼容）：
-
-| 优先级 | 场景 | 行为 |
-|--------|------|------|
-| 1 | Docker / 本机 Postgres `prism:prism@localhost:5432` 可用 | 使用 PostgreSQL |
-| 2 | 5432 未启动但已装 Docker | 自动执行 `docker compose … up -d postgres` 并重试 |
-| 3 | 仍不可用（密码不对、无 Docker 等） | 自动回退 **SQLite**（`services/gateway/prism.db`） |
-| 可选 | 手动起 Postgres | `npm run dev:db` 后再 `npm run dev` |
-
-在 `services/gateway/.env` 可设 `PRISM_DATABASE_MODE`：`auto`（默认）、`postgres`（仅 PG）、`sqlite`（仅 SQLite）。
+将自动：释放 3000/3001 端口 → 构建/启动 `postgres` + `gateway` + `web` 容器。
 
 | 地址 | 说明 |
 |------|------|
@@ -310,29 +300,37 @@ npm run dev
 | http://localhost:3001/health | 健康检查（`migrations` 应为 `ok`） |
 | http://localhost:3001/docs | OpenAPI 文档 |
 
-**仅启动 Gateway**
-
 ```bash
-npm run dev:gateway
-# 自动探测数据库并执行 alembic upgrade head
+npm run stop              # 停止 Docker 栈
+npm run dev -- --Rebuild  # 强制重新构建镜像（Windows PowerShell）
+npm run deploy            # 完整一键部署（与 dev 相同栈，含 .env 初始化）
 ```
 
-**仅启动数据库（PostgreSQL，与 deploy 栈一致）**
+**本地 Node/Python 开发**（改代码热重载，需本机 Python 3.11+）：
 
 ```bash
-npm run dev:db
-npm run dev
+npm run dev:local
 ```
 
-**登录页提示 Gateway 不可达、终端 `ECONNREFUSED 127.0.0.1:3001`**
-
-表示 Gateway 未起来（多为迁移失败）。`npm run dev` 通常会自动回退 SQLite；若仍失败，先确认健康检查：
+`dev:local` 下 Gateway 会**自动选择数据库**（Postgres 或 SQLite 回退），详见 `services/gateway/.env` 中 `PRISM_DATABASE_MODE`。
 
 ```bash
+npm run dev:db       # 仅启动 Docker Postgres（配合 dev:local）
+npm run dev:gateway  # 仅本地 Gateway
+npm run dev:clean    # 释放 3000/3001 后重启 dev:local
+```
+
+**Gateway 不可达 / `ECONNREFUSED 127.0.0.1:3001`**
+
+Docker 模式：确认容器在跑并查看日志：
+
+```bash
+docker compose -f deploy/docker-compose.yml ps
+docker compose -f deploy/docker-compose.yml logs gateway
 curl http://127.0.0.1:3001/health
 ```
 
-正常应返回 `ok`。修复数据库后重新 `npm run dev`；登录页在 Gateway 不可达时会显示提示与「重试」，而非空白。
+本地 `dev:local` 模式：Gateway 会自动回退 SQLite；若仍失败，先确认健康检查：
 
 **C++ 引擎（可选）**
 
@@ -509,8 +507,9 @@ Reviewly/
 
 | 现象 | 处理 |
 |------|------|
-| Gateway 3001 启动失败 | `npm run kill:gateway` 或 `npm run dev:clean`；`npm run dev` 会自动探测 DB 并迁移 |
-| 本地 dev：`prism` 密码认证失败 / 5432 连不上 | 正常：`npm run dev` 会自动回退 SQLite；要 Postgres 则 `npm run dev:db` 后再启动 |
+| Gateway 3001 启动失败 | Docker：`docker compose -f deploy/docker-compose.yml logs gateway`；本地：`npm run dev:clean` 后 `npm run dev:local` |
+| `dockerDesktopLinuxEngine` / Docker 未运行 | 打开 **Docker Desktop** 等 Engine Ready 后重试 `npm run dev`；无 Docker 用 `npm run dev:local` |
+| 本地 dev：`prism` 密码认证失败 / 5432 连不上 | 使用 `npm run dev`（Docker 模式）；或 `dev:local` 会自动回退 SQLite |
 | GitHub 登录 404 | `deploy/.env` 中 OAuth 仍是占位符；按 README「GitHub OAuth 登录配置」创建 OAuth App 并填写真实 Client ID/Secret |
 | GitHub OAuth 回调失败 | Callback URL 与 GitHub App 设置不一致；检查 IP/端口是否与 `OAUTH_CALLBACK_URL` 相同 |
 | 只能登录浏览器当前 GitHub 账号 | 见上文 [多 GitHub 账号登录](#多-github-账号登录)：登录页「使用其他 GitHub 账号登录」或右上角「切换账号」 |

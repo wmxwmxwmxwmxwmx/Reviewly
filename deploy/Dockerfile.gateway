@@ -13,7 +13,7 @@ COPY services/gateway/ .
 RUN mkdir -p /data/repo-cache
 
 COPY deploy/entrypoint-gateway.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 EXPOSE 3001
 ENTRYPOINT ["/entrypoint.sh"]

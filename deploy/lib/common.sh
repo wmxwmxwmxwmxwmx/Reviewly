@@ -408,6 +408,7 @@ prism_parse_deploy_args() {
       -y|--yes) PRISM_DEPLOY_YES=1; shift ;;
       --stub-engine) PRISM_DEPLOY_STUB_ENGINE=1; shift ;;
       --with-engine) PRISM_DEPLOY_STUB_ENGINE=0; shift ;;
+      --skip-build) PRISM_SKIP_BUILD=1; shift ;;
       -h|--help)
         cat <<'EOF'
 用法: bash deploy/deploy.sh [选项]
@@ -415,6 +416,7 @@ prism_parse_deploy_args() {
   -y, --yes         不询问，自动生成 .env 与密钥后直接部署
   --stub-engine     使用 Python 引擎 stub（不构建 C++，推荐新机）
   --with-engine     构建并启动 C++ gRPC 引擎
+  --skip-build      跳过镜像构建（镜像不存在时仍会自动构建）
   -h, --help        显示帮助
 
 新机推荐:

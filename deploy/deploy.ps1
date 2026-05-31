@@ -1,20 +1,38 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 param(
     [switch]$Yes,
     [switch]$StubEngine,
     [switch]$WithEngine,
+    [switch]$SkipBuild,
     [switch]$Help
 )
 
 $ErrorActionPreference = "Stop"
+# docker CLI 常向 stderr 输出；PS 7+ 勿将其当作终止错误
+if ($PSVersionTable.PSVersion.Major -ge 7) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
+
+function Invoke-DockerCli {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$DockerArgs)
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & docker @DockerArgs 2>$null | Out-Null
+        return $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+}
 
 if ($Help) {
     @"
-用法: .\deploy\deploy.ps1 [-Yes] [-StubEngine] [-WithEngine]
+用法: .\deploy\deploy.ps1 [-Yes] [-StubEngine] [-WithEngine] [-SkipBuild]
 
   -Yes          不询问，自动生成 .env 与密钥
   -StubEngine   跳过 C++ 引擎（推荐新机）
   -WithEngine   构建 C++ 引擎
+  -SkipBuild    跳过镜像构建（使用已有镜像）
 "@
     exit 0
 }
@@ -102,8 +120,8 @@ function Set-PublicUrls([string]$FrontendUrl) {
     $front = if ($FrontendUrl) { $FrontendUrl.TrimEnd("/") } else { "http://localhost:3000" }
     if ($front -match '^(https?)://([^:/]+)') {
         $scheme = $Matches[1]
-        $host = $Matches[2]
-        $callback = "${scheme}://${host}:3001/api/auth/github/callback"
+        $hostName = $Matches[2]
+        $callback = "${scheme}://${hostName}:3001/api/auth/github/callback"
     } else {
         $callback = "http://localhost:3001/api/auth/github/callback"
         $front = "http://localhost:3000"
@@ -158,7 +176,7 @@ function Ensure-GithubOAuth {
     Write-Host ""
     Write-Host "── GitHub OAuth 配置（登录必需）──" -ForegroundColor Green
     Write-Host "在 https://github.com/settings/developers 创建 OAuth App"
-    $front = Read-Host "浏览器访问前端的地址 [http://localhost:3000]"
+    $front = Read-Host '浏览器访问前端的地址 [http://localhost:3000]'
     if (-not $front) { $front = "http://localhost:3000" }
     $callback = Set-PublicUrls -FrontendUrl $front
     Write-Host ""
@@ -221,7 +239,7 @@ function Require-GithubOAuthOrExit {
         return
     }
     if (Ensure-GithubOAuth) { return }
-    $skip = Read-Host "跳过 GitHub 配置并启用开发模式? [y/N]"
+    $skip = Read-Host '跳过 GitHub 配置并启用开发模式? [y/N]'
     if ($skip -match '^[yY]') {
         Set-EnvKey $EnvFile "PRISM_AUTH_BYPASS" "1"
         Write-Host "  已启用 PRISM_AUTH_BYPASS=1" -ForegroundColor Yellow
@@ -233,27 +251,32 @@ function Require-GithubOAuthOrExit {
 
 function Test-Docker {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        Write-Err "未检测到 Docker。请先安装 Docker Desktop 并启动:"
+        Write-Err "未检测到 Docker CLI。请先安装 Docker Desktop:"
         Write-Host "  https://www.docker.com/products/docker-desktop/"
-        Write-Host "  或使用: winget install Docker.DockerDesktop"
+        Write-Host "  或: winget install Docker.DockerDesktop"
+        Write-Host ""
+        Write-Host "无 Docker 时可改用本地开发: npm run dev:local" -ForegroundColor Yellow
         exit 1
     }
-    & docker compose version *> $null
-    if ($LASTEXITCODE -ne 0) {
+    if ((Invoke-DockerCli compose version) -ne 0) {
         Write-Err "未检测到 docker compose。请更新 Docker Desktop。"
         exit 1
     }
-    & docker info *> $null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Err "Docker 未运行。请打开 Docker Desktop 等待 Ready。"
+    if ((Invoke-DockerCli info) -ne 0) {
+        Write-Host ""
+        Write-Err "Docker 引擎未运行（无法连接 dockerDesktopLinuxEngine）。"
+        Write-Host "  1. 打开 Docker Desktop，等待左下角显示 Engine running / Ready" -ForegroundColor Yellow
+        Write-Host "  2. 再执行: npm run dev" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "  无 Docker 时可改用: npm run dev:local" -ForegroundColor Yellow
         exit 1
     }
 }
 
 function Invoke-Compose {
-    param([string[]]$Args)
-    & docker compose -f $ComposeFile --env-file $EnvFile @Args
-    if ($LASTEXITCODE -ne 0) { throw "docker compose failed: $($Args -join ' ')" }
+    param([string[]]$ComposeArgs)
+    & docker compose -f $ComposeFile --env-file $EnvFile @ComposeArgs
+    if ($LASTEXITCODE -ne 0) { throw "docker compose failed: $($ComposeArgs -join ' ')" }
 }
 
 function Test-PortInUse([int]$Port, [string]$Name) {
@@ -264,7 +287,7 @@ function Test-PortInUse([int]$Port, [string]$Name) {
     }
 }
 
-Write-Step "[1/7] 检查运行环境..."
+Write-Step '[1/7] 检查运行环境...'
 Test-Docker
 Stop-ExistingStack
 try {
@@ -274,7 +297,7 @@ try {
 } catch { }
 
 $firstDeploy = -not (Test-Path $EnvFile)
-Write-Step "[2/7] 准备 deploy/.env ..."
+Write-Step '[2/7] 准备 deploy/.env ...'
 Initialize-DeployEnv -FirstDeploy:$firstDeploy
 Require-GithubOAuthOrExit
 
@@ -283,23 +306,51 @@ if (-not $useEngine) {
     Write-Host "  PRISM_STUB_ENGINE=1，将跳过 engine 容器" -ForegroundColor Yellow
 }
 
-Write-Step "[3/7] 构建 Docker 镜像（首次较慢）..."
-if ($useEngine) { Invoke-Compose @("build") }
-else { Invoke-Compose @("build", "postgres", "gateway", "web") }
+Write-Step '[3/7] 构建 Docker 镜像（首次较慢）...'
+function Build-PrismImages {
+    if ($useEngine) {
+        Invoke-Compose @("build")
+    } else {
+        Invoke-Compose @("build", "postgres", "gateway", "web")
+    }
+}
 
-Write-Step "[4/7] 启动 PostgreSQL..."
+if ($SkipBuild) {
+    Write-Host "  跳过镜像构建（使用已有镜像）" -ForegroundColor Yellow
+    $gwImg = & docker compose -f $ComposeFile --env-file $EnvFile images -q gateway 2>$null
+    $webImg = & docker compose -f $ComposeFile --env-file $EnvFile images -q web 2>$null
+    if (-not $gwImg -or -not $webImg) {
+        Write-Host "  未找到 gateway/web 镜像，改为构建..." -ForegroundColor Yellow
+        Build-PrismImages
+    }
+} else {
+    Build-PrismImages
+}
+
+Write-Step '[4/7] 启动 PostgreSQL...'
 Invoke-Compose @("up", "-d", "postgres")
 
-Write-Step "[5/7] 等待 PostgreSQL..."
+Write-Step '[5/7] 等待 PostgreSQL...'
 for ($i = 1; $i -le 30; $i++) {
     & docker compose -f $ComposeFile --env-file $EnvFile exec -T postgres pg_isready -U prism -d prism 2>$null
-    if ($LASTEXITCODE -eq 0) { Write-Ok "  PostgreSQL 已就绪"; break }
+    if ($LASTEXITCODE -eq 0) {
+        Write-Ok "  PostgreSQL 已就绪"
+        break
+    }
     Start-Sleep -Seconds 2
 }
 
-Write-Step "[6/7] 启动 Gateway$(if ($useEngine) { ' 与 Engine' })..."
-if ($useEngine) { Invoke-Compose @("up", "-d", "gateway", "engine") }
-else { Invoke-Compose @("up", "-d", "gateway") }
+$gatewayStepLabel = '[6/7] 启动 Gateway'
+if ($useEngine) {
+    $gatewayStepLabel += " 与 Engine"
+}
+$gatewayStepLabel += "..."
+Write-Step $gatewayStepLabel
+if ($useEngine) {
+    Invoke-Compose @("up", "-d", "gateway", "engine")
+} else {
+    Invoke-Compose @("up", "-d", "gateway")
+}
 
 for ($i = 1; $i -le 30; $i++) {
     try {
@@ -308,7 +359,7 @@ for ($i = 1; $i -le 30; $i++) {
     } catch { Start-Sleep -Seconds 2 }
 }
 
-Write-Step "[7/7] 启动 Web..."
+Write-Step '[7/7] 启动 Web...'
 Invoke-Compose @("up", "-d", "web")
 
 for ($i = 1; $i -le 20; $i++) {
