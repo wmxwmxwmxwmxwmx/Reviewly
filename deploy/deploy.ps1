@@ -4,6 +4,7 @@ param(
     [switch]$StubEngine,
     [switch]$WithEngine,
     [switch]$SkipBuild,
+    [switch]$QuickStart,
     [switch]$Help
 )
 
@@ -15,12 +16,13 @@ if ($PSVersionTable.PSVersion.Major -ge 7) {
 
 if ($Help) {
     @"
-用法: .\deploy\deploy.ps1 [-Yes] [-StubEngine] [-WithEngine] [-SkipBuild]
+用法: .\deploy\deploy.ps1 [-Yes] [-StubEngine] [-WithEngine] [-SkipBuild] [-QuickStart]
 
   -Yes          不询问，自动生成 .env 与密钥
   -StubEngine   跳过 C++ 引擎（推荐新机）
   -WithEngine   构建 C++ 引擎
   -SkipBuild    跳过镜像构建（使用已有镜像）
+  -QuickStart   环境已就绪时快速启动（跳过全栈 down、减少日志）
 "@
     exit 0
 }
@@ -35,6 +37,7 @@ $EnvExample = Join-Path $Root "deploy\.env.example"
 $GatewayEnv = Join-Path $Root "services\gateway\.env"
 
 function Write-Step([string]$Message) {
+    if ($QuickStart) { return }
     if ($Yes) { Write-Host $Message }
     else { Write-Host $Message -ForegroundColor Yellow }
 }
@@ -103,6 +106,50 @@ function Test-OAuthConfigured {
     if (-not $cidVal -or -not $secVal) { return $false }
     if ($cidVal -match '<your-|your-client' -or $secVal -match '<your-|your-client') { return $false }
     return $true
+}
+
+function Test-GatewayOAuthConfigured {
+    if (-not (Test-Path $GatewayEnv)) { return $false }
+    $cid = (Select-String -Path $GatewayEnv -Pattern '^GITHUB_OAUTH_CLIENT_ID=' -ErrorAction SilentlyContinue | Select-Object -First 1)
+    $sec = (Select-String -Path $GatewayEnv -Pattern '^GITHUB_OAUTH_CLIENT_SECRET=' -ErrorAction SilentlyContinue | Select-Object -First 1)
+    $cidVal = if ($cid) { ($cid.Line -split "=", 2)[1].Trim() } else { "" }
+    $secVal = if ($sec) { ($sec.Line -split "=", 2)[1].Trim() } else { "" }
+    if (-not $cidVal -or -not $secVal) { return $false }
+    if ($cidVal -match '<your-|your-client' -or $secVal -match '<your-|your-client') { return $false }
+    return $true
+}
+
+function Test-DeploySecretsReady {
+    if (-not (Test-Path $EnvFile)) { return $false }
+    $content = Get-Content $EnvFile -Raw -Encoding UTF8
+    if ($content -match 'JWT_SECRET=<generate>|JWT_SECRET=\s*$') { return $false }
+    if ($content -match 'SETTINGS_ENCRYPTION_KEY=<generate>|SETTINGS_ENCRYPTION_KEY=\s*$') { return $false }
+    return $true
+}
+
+function Test-DevEnvReady {
+    if (-not (Test-Path $EnvFile)) { return $false }
+    if (-not (Test-DeploySecretsReady)) { return $false }
+    if (Test-Path $EnvFile) {
+        Merge-GatewayEnv
+        Clear-PlaceholderEnvKeys
+    }
+    if (Test-OAuthConfigured) { return $true }
+    if (Test-GatewayOAuthConfigured) { return $true }
+    $bypass = (Select-String -Path $EnvFile -Pattern '^PRISM_AUTH_BYPASS=1' -ErrorAction SilentlyContinue | Select-Object -First 1)
+    return [bool]$bypass
+}
+
+function Test-OurPostgresRunning {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return $false }
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $names = & docker ps --filter "name=prism-postgres" --filter "status=running" --format "{{.Names}}" 2>$null
+        return ($names -match "prism-postgres")
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
 }
 
 function Set-PublicUrls([string]$FrontendUrl) {
@@ -217,14 +264,29 @@ function Initialize-DeployEnv {
             Write-Host "  首次部署已设 PRISM_STUB_ENGINE=1（跳过 C++ 编译）" -ForegroundColor Yellow
         }
     }
-    if (-not $Yes) {
+    if (-not $Yes -and -not $QuickStart) {
         Write-Host "  配置已保存。按 Enter 开始构建镜像，Ctrl+C 取消" -ForegroundColor Yellow
         Read-Host
     }
 }
 
 function Require-GithubOAuthOrExit {
+    if ($QuickStart -and (Test-DevEnvReady)) {
+        if (-not (Test-Path $EnvFile)) {
+            Copy-Item $EnvExample $EnvFile
+        }
+        Merge-GatewayEnv
+        Fix-DockerDeployEnv
+        Clear-PlaceholderEnvKeys
+        return
+    }
     if ($Yes) {
+        if (Test-DevEnvReady) {
+            Merge-GatewayEnv
+            Fix-DockerDeployEnv
+            Clear-PlaceholderEnvKeys
+            if (Test-OAuthConfigured) { return }
+        }
         if (-not (Ensure-GithubOAuth)) {
             $null = Set-PublicUrls -FrontendUrl "http://localhost:3000"
             Set-EnvKey $EnvFile "PRISM_AUTH_BYPASS" "1"
@@ -284,15 +346,32 @@ function Invoke-Compose {
 
 function Test-PortInUse([int]$Port, [string]$Name) {
     $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-    if ($conn) {
-        Write-Err "端口 $Port ($Name) 已被占用"
-        exit 1
+    if (-not $conn) { return }
+    if ($Port -eq 5432 -and (Test-OurPostgresRunning)) {
+        if (-not $QuickStart) {
+            Write-Host "  端口 5432 已由 prism-postgres 占用（将复用）" -ForegroundColor Yellow
+        }
+        return
+    }
+    Write-Err "端口 $Port ($Name) 已被占用"
+    exit 1
+}
+
+$script:EnvReady = $false
+if ($QuickStart) {
+    $script:EnvReady = Test-DevEnvReady
+    if ($script:EnvReady) {
+        Write-Host ""
+        Write-Host "[Reviewly] 快速启动（复用 deploy/.env 与 Postgres）..." -ForegroundColor Cyan
+        Write-Host ""
     }
 }
 
 Write-Step '[1/7] 检查运行环境...'
 Test-Docker
-Stop-ExistingStack
+if (-not ($QuickStart -and $script:EnvReady)) {
+    Stop-ExistingStack
+}
 try {
     Test-PortInUse -Port 5432 -Name "PostgreSQL"
     Test-PortInUse -Port 3001 -Name "Gateway"
@@ -319,11 +398,13 @@ function Build-PrismImages {
 }
 
 if ($SkipBuild) {
-    Write-Host "  跳过镜像构建（使用已有镜像）" -ForegroundColor Yellow
+    if (-not $QuickStart) {
+        Write-Host "  跳过镜像构建（使用已有镜像）" -ForegroundColor Yellow
+    }
     $gwImg = & docker compose -f $ComposeFile --env-file $EnvFile images -q gateway 2>$null
     $webImg = & docker compose -f $ComposeFile --env-file $EnvFile images -q web 2>$null
     if (-not $gwImg -or -not $webImg) {
-        Write-Host "  未找到 gateway/web 镜像，改为构建..." -ForegroundColor Yellow
+        Write-Host "  首次构建 gateway/web 镜像..." -ForegroundColor Yellow
         Build-PrismImages
     }
 } else {

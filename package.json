@@ -11,6 +11,7 @@
     "dev:docker": "node scripts/dev-docker.mjs",
     "dev:local": "concurrently -n web,gateway -c cyan,green \"npm run dev -w @reviewly/web\" \"npm run dev:gateway\"",
     "dev:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev-clean.ps1",
+    "dev:clean:docker": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev-clean-docker.ps1",
     "dev:gateway": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/dev-gateway.ps1",
     "dev:db": "docker compose -f deploy/docker-compose.yml up -d postgres",
     "kill:gateway": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/kill-port.ps1 -Port 3001",

@@ -321,41 +321,35 @@ OAuth `state` 携带 `return_path`；Gateway 回调 302 至 `FRONTEND_URL/auth/c
 
 ## 本地开发
 
-**默认使用 Docker 容器**（推荐，避免本机 Python/Postgres/端口冲突）：
+### 日常开发（推荐：热重载 + Docker Postgres）
+
+已配置 `deploy/.env` / `services/gateway/.env` 时，用 **本机 Web/Gateway** + **容器 Postgres**，不会重复走 OAuth 向导或全量 Docker 部署：
 
 ```bash
-# 需已安装并启动 Docker Desktop / Docker Engine
-npm run dev
+npm run dev:local     # Web + Gateway 热重载
+npm run dev:db        # 仅启动 Docker Postgres（配合 dev:local）
+npm run dev:clean     # 释放 3000/3001 → 确保 Postgres → 重启 dev:local
 ```
-
-将自动：释放 3000/3001 端口 → 构建/启动 `postgres` + `gateway` + `web` 容器。
 
 | 地址 | 说明 |
 |------|------|
 | http://localhost:3000 | Web 前端 |
 | http://localhost:3001 | API 网关 |
 | http://localhost:3001/health | 健康检查（`migrations` 应为 `ok`） |
-| http://localhost:3001/docs | OpenAPI 文档 |
-
-```bash
-npm run stop              # 停止 Docker 栈
-npm run dev -- --Rebuild  # 强制重新构建镜像（Windows PowerShell）
-npm run deploy            # 完整一键部署（与 dev 相同栈，含 .env 初始化）
-```
-
-**本地 Node/Python 开发**（改代码热重载，需本机 Python 3.11+）：
-
-```bash
-npm run dev:local
-```
 
 `dev:local` 下 Gateway 会**自动选择数据库**（Postgres 或 SQLite 回退），详见 `services/gateway/.env` 中 `PRISM_DATABASE_MODE`。
 
+### Docker 全栈（Web + Gateway + Postgres 均在容器）
+
 ```bash
-npm run dev:db       # 仅启动 Docker Postgres（配合 dev:local）
-npm run dev:gateway  # 仅本地 Gateway
-npm run dev:clean    # 释放 3000/3001 后重启 dev:local
+npm run dev              # 已配置 .env 时快速启动（-QuickStart），跳过 OAuth 交互
+npm run dev:clean:docker # 释放端口后重启 Docker 全栈
+npm run stop             # 停止 Docker 栈
+npm run dev -- --Rebuild # 强制重新构建镜像（Windows PowerShell）
+npm run deploy           # 完整一键部署（首次无 .env 时会初始化配置）
 ```
+
+`npm run dev` 在环境已就绪时会复用 `deploy/.env` 与已运行的 `prism-postgres`，不再提示「GitHub OAuth 配置」或「按 Enter 开始构建」。
 
 **Gateway 不可达 / `ECONNREFUSED 127.0.0.1:3001`**
 
@@ -522,7 +516,11 @@ Reviewly/
 
 | 命令 | 说明 |
 |------|------|
-| `npm run dev` | Web + Gateway |
+| `npm run dev` | Docker 全栈（环境已就绪时快速启动） |
+| `npm run dev:local` | 本机 Web + Gateway 热重载 |
+| `npm run dev:db` | 仅 Docker Postgres |
+| `npm run dev:clean` | 清端口 → Postgres → **dev:local** |
+| `npm run dev:clean:docker` | 清端口 → **Docker 全栈** |
 | `npm run dev:gateway` | 仅 Gateway |
 | `npm run dev:engine` | 仅 C++ 引擎 |
 | `npm run deploy` | Docker 全栈（需 Node；等价于 deploy 脚本） |
@@ -535,7 +533,6 @@ Reviewly/
 | `npm run build` | 构建 shared + web |
 | `npm run lint` | ESLint + TypeScript 检查 |
 | `npm run test` | Gateway pytest |
-| `npm run dev:clean` | 释放 3000/3001 端口并重启 |
 | `npm run start:app` | 一键启动并打开浏览器 |
 
 ---
@@ -544,8 +541,9 @@ Reviewly/
 
 | 现象 | 处理 |
 |------|------|
-| Gateway 3001 启动失败 | Docker：`docker compose -f deploy/docker-compose.yml logs gateway`；本地：`npm run dev:clean` 后 `npm run dev:local` |
-| `dockerDesktopLinuxEngine` / Docker 未运行 | 打开 **Docker Desktop** 等 Engine Ready 后重试 `npm run dev`；无 Docker 用 `npm run dev:local` |
+| Gateway 3001 启动失败 | Docker：`docker compose -f deploy/docker-compose.yml logs gateway`；本地：`npm run dev:clean` |
+| 已配 `.env` 仍进 OAuth 向导 | 检查 `deploy/.env` / `services/gateway/.env` 是否含 `<your-` 占位符；日常开发用 `npm run dev:local` |
+| `dockerDesktopLinuxEngine` / Docker 未运行 | 打开 **Docker Desktop** 后 `npm run dev:db` 或 `npm run dev`；无 Docker 用 `npm run dev:local`（SQLite 回退） |
 | 本地 dev：`prism` 密码认证失败 / 5432 连不上 | 使用 `npm run dev`（Docker 模式）；或 `dev:local` 会自动回退 SQLite |
 | GitHub 登录 404 | `deploy/.env` 中 OAuth 仍是占位符；按 README「GitHub OAuth 登录配置」创建 OAuth App 并填写真实 Client ID/Secret |
 | GitHub OAuth 回调失败 | Callback URL 与 GitHub App 设置不一致；检查 IP/端口是否与 `OAUTH_CALLBACK_URL` 相同 |

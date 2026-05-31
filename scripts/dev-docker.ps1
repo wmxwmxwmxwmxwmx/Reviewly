@@ -64,7 +64,7 @@ foreach ($port in @(3000, 3001)) {
 }
 
 $deployScript = Join-Path $Root "deploy\deploy.ps1"
-$deployArgs = @("-Yes", "-StubEngine")
+$deployArgs = @("-Yes", "-StubEngine", "-QuickStart")
 if (-not $Rebuild) {
     $deployArgs += "-SkipBuild"
 }
