@@ -20,7 +20,8 @@
     "test:e2e": "python scripts/test_review_center_workbench.py",
     "clean": "node scripts/clean.mjs",
     "start:app": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start.ps1",
-    "deploy": "node scripts/deploy.mjs"
+    "deploy": "node scripts/deploy.mjs",
+    "stop": "node scripts/stop.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

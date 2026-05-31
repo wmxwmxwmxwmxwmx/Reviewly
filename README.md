@@ -17,7 +17,20 @@
 
 详细说明见 [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)。
 
-**想本地跑完整环境？** → 新机请看 [新机从零部署](#新机从零部署)；已装 Docker 可直接 [一键部署](#一键部署已有-docker)。
+## 评委 / 演示一键启动（无需手填 OAuth）
+
+仓库已内置 `deploy/.env` 与 GitHub OAuth，**克隆后无需再输入** `GITHUB_OAUTH_CLIENT_ID` / `SECRET`。
+
+```bash
+git clone <仓库地址> Reviewly && cd Reviewly
+# Windows: 双击 deploy.bat
+# Linux:   bash deploy/bootstrap.sh
+# 或:      npm run deploy
+```
+
+启动后打开 http://localhost:3000 → **使用 GitHub 登录**。
+
+> GitHub OAuth App 的 Callback 须为 `http://localhost:3001/api/auth/github/callback`（已在演示配置中）。**勿将本仓库公开到公网**（含 Client Secret）；正式环境请更换密钥。
 
 ---
 
@@ -132,14 +145,23 @@ docker compose -f deploy/docker-compose.yml ps
 ### 停止与重启
 
 ```bash
-docker compose -f deploy/docker-compose.yml down    # 停止，保留数据
+# 一键停止全部服务（Docker 栈 + 本地 3000/3001 进程）
+./stop.sh              # Linux/macOS
+stop.bat               # Windows 双击
+npm run stop           # 全平台
+```
+
+```bash
+docker compose -f deploy/docker-compose.yml down    # 仅停止 Docker，保留数据
 bash deploy/deploy.sh -y                            # 再次部署
 docker compose -f deploy/docker-compose.yml down -v # 清空数据库卷
 ```
 
 ### GitHub OAuth 登录配置
 
-> **部署时会自动引导**：运行 `bash deploy/bootstrap.sh` 或 `bash deploy/deploy.sh` 时，若未配置 OAuth，终端会提示输入 **Client ID / Secret** 并自动写入 `deploy/.env`（也会从 `services/gateway/.env` 合并已有配置）。
+> **评委 / 克隆即用**：`deploy/.env` 已提交仓库，内含演示用 OAuth，**无需手填**。见文首 [评委 / 演示一键启动](#评委--演示一键启动无需手填-oauth)。
+
+> **自行部署**：若删除了仓库内 `deploy/.env`，可从 `deploy/.env.example` 复制，或运行 `bash deploy/setup-github-oauth.sh`。
 
 **已部署、仅需补配 OAuth：**
 
@@ -410,6 +432,7 @@ Reviewly/
 | `npm run dev:gateway` | 仅 Gateway |
 | `npm run dev:engine` | 仅 C++ 引擎 |
 | `npm run deploy` | Docker 全栈（需 Node；等价于 deploy 脚本） |
+| `npm run stop` | 一键停止 Docker 栈与本地 3000/3001 |
 | `bash deploy/bootstrap.sh` | **新机推荐**：引导装 Docker + 部署 |
 | `npm run build` | 构建 shared + web |
 | `npm run lint` | ESLint + TypeScript 检查 |

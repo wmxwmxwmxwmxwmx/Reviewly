@@ -24,10 +24,12 @@ venv/
 .cache/
 *.tsbuildinfo
 
-# Environment
+# Environment（deploy/.env、services/gateway/.env 为评委演示配置，已提交仓库）
 .env
 .env.*
 !.env.example
+!deploy/.env
+!services/gateway/.env
 
 # Logs & debug
 *.log
