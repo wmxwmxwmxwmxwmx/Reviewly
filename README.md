@@ -25,7 +25,7 @@
 git clone <仓库地址> Reviewly && cd Reviewly
 # Windows: 双击 deploy.bat 或 install.bat（全程无交互）
 # Linux:   bash install.sh
-# 或:      npm run install
+# 或:      npm run deploy
 ```
 
 启动后打开 http://localhost:3000 → **使用 GitHub 登录**。
