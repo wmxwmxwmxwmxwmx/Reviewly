@@ -1,6 +1,6 @@
 "use client"
 
-import { Loader2, Sparkles, X } from "lucide-react"
+import { Loader2, Bot, X } from "lucide-react"
 
 import type { SecurityCenterFinding } from "@reviewly/shared"
 
@@ -64,7 +64,7 @@ export function SecurityExplainPanel({
                 onClick={onExplain}
                 className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-white bg-ai-blue rounded-md hover:opacity-90"
               >
-                <Sparkles className="w-3.5 h-3.5" />
+                <Bot className="w-3.5 h-3.5" />
                 {finding.aiInsight?.content
                   ? zh.actions.regenerate
                   : zh.actions.generateAiExplain}

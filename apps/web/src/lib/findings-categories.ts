@@ -8,8 +8,8 @@ export const RISK_CATEGORY_TABS: { id: FindingCategory | "all"; label: string }[
   { id: "security", label: "安全" },
   { id: "performance", label: "性能" },
   { id: "architecture", label: "架构" },
-  { id: "maintainability", label: "维护性" },
-  { id: "convention", label: "规范" },
+  { id: "maintainability", label: "可维护问题" },
+  { id: "convention", label: "编码规范" },
 ]
 
 export const EMPTY_CATEGORY_COUNTS: Record<FindingCategory, number> = {

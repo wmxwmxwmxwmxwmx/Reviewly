@@ -280,7 +280,7 @@ export function ReviewDecisionBar({
           <Textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="输入审批意见…"
+            placeholder="输入评审意见…"
             rows={4}
           />
           <DialogFooter>

@@ -42,7 +42,7 @@ function LoginContent() {
     <div className="w-full max-w-md rounded-xl border border-border bg-panel p-8 shadow-2xl">
       <div className="mb-6 text-center">
         <h1 className="text-xl font-semibold text-foreground">PRism</h1>
-        <p className="mt-1 text-sm text-muted-foreground">企业级 AI 代码评审平台</p>
+        <p className="mt-1 text-sm text-muted-foreground">企业级代码评审平台</p>
       </div>
 
       {error && (

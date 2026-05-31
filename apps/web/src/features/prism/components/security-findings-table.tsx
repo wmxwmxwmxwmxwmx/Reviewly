@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { ChevronRight, Sparkles } from "lucide-react"
+import { ChevronRight, Bot } from "lucide-react"
 
 import type { SecurityCenterFinding } from "@reviewly/shared"
 
@@ -108,7 +108,7 @@ export function SecurityFindingsTable({
                       disabled={explainingId === row.id}
                       className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-surface-3 text-ai-blue hover:bg-surface-2 disabled:opacity-50"
                     >
-                      <Sparkles className="w-3 h-3" />
+                      <Bot className="w-3 h-3" />
                       {zh.actions.aiExplain}
                     </button>
                     {row.pullRequestId && (

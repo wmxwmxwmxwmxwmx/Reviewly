@@ -66,7 +66,7 @@ export function ReviewQuickVerdict({
     <div className="rounded-lg border border-border bg-card p-3 space-y-2.5">
       <div className="flex items-center gap-2">
         <Bot className="w-4 h-4 text-ai-blue shrink-0" />
-        <span className="text-xs font-semibold text-foreground">AI 评审意见</span>
+        <span className="text-xs font-semibold text-foreground">AI 评审建议</span>
         <span
           className={cn(
             "ml-auto text-[10px] px-2 py-0.5 rounded-full border font-medium",

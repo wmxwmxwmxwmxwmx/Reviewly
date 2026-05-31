@@ -4,7 +4,7 @@ import uuid
 from copy import deepcopy
 from typing import Any
 
-from sqlalchemy import not_, select
+from sqlalchemy import inspect as sa_inspect, not_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import AuditLog, GovernanceRule, GovernanceViolation, PullRequest, Repository
@@ -13,6 +13,20 @@ from app.repositories.seed_filter import (
     seed_governance_rule_predicate,
     seed_pull_request_predicate,
 )
+
+
+def ensure_governance_schema(session: Session) -> None:
+    """Create governance tables when Alembic version is ahead of actual schema."""
+    bind = session.get_bind()
+    inspector = sa_inspect(bind)
+    if inspector.has_table("governance_rules") and inspector.has_table("governance_violations"):
+        return
+    GovernanceRule.metadata.create_all(
+        bind=bind,
+        tables=[GovernanceRule.__table__, GovernanceViolation.__table__],
+    )
+
+
 def _row_to_definition(row: GovernanceRule) -> dict[str, Any]:
     payload = deepcopy(row.payload) if row.payload else {}
     payload["id"] = row.id
@@ -92,6 +106,7 @@ def list_rule_definitions(
     *,
     include_disabled: bool = False,
 ) -> list[dict[str, Any]]:
+    ensure_governance_schema(session)
     query = select(GovernanceRule).where(not_(seed_governance_rule_predicate()))
     if not include_disabled:
         query = query.where(GovernanceRule.enabled.is_(True))
@@ -106,6 +121,7 @@ def list_rules(session: Session) -> list[dict]:
 
 
 def get_rule(session: Session, rule_id: str) -> dict | None:
+    ensure_governance_schema(session)
     row = session.get(GovernanceRule, rule_id)
     if row is None:
         return None
@@ -113,6 +129,7 @@ def get_rule(session: Session, rule_id: str) -> dict | None:
 
 
 def create_rule(session: Session, body: dict[str, Any]) -> dict:
+    ensure_governance_schema(session)
     rid = body.get("id") or f"g-{uuid.uuid4().hex[:8]}"
     payload = _normalize_rule_body(body)
     row = GovernanceRule(
@@ -128,18 +145,33 @@ def create_rule(session: Session, body: dict[str, Any]) -> dict:
     return _row_to_definition(row)
 
 
+def _pick_field(payload: dict[str, Any], camel: str, snake: str, default: Any = None) -> Any:
+    if camel in payload:
+        return payload[camel]
+    if snake in payload:
+        return payload[snake]
+    return default
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [x.strip() for x in value.split(",") if x.strip()]
+    if isinstance(value, list):
+        return [str(x).strip() for x in value if str(x).strip()]
+    return []
+
+
 def _normalize_rule_body(body: dict[str, Any]) -> dict[str, Any]:
     payload = deepcopy(body)
     rule_text = str(payload.get("rule", "")).strip()
     if not rule_text:
         raise ValueError("规则描述不能为空")
-    payload["rule"] = rule_text
     severity = str(payload.get("severity", "medium")).lower()
     if severity not in ("critical", "high", "medium", "low"):
         severity = "medium"
-    payload["severity"] = severity
-    payload["enabled"] = bool(payload.get("enabled", True))
-    match_type = str(payload.get("matchType", "keyword")).lower()
+    match_type = str(_pick_field(payload, "matchType", "match_type", "keyword")).lower()
     if match_type not in (
         "keyword",
         "file_pattern",
@@ -149,18 +181,30 @@ def _normalize_rule_body(body: dict[str, Any]) -> dict[str, Any]:
         "large_pr",
     ):
         match_type = "keyword"
-    payload["matchType"] = match_type
-    for key in ("keywords", "filePatterns", "findingTypes", "findingSeverities"):
-        if key not in payload:
-            payload[key] = []
-        elif isinstance(payload[key], str):
-            payload[key] = [x.strip() for x in payload[key].split(",") if x.strip()]
-    if payload.get("description") is not None:
-        payload["description"] = str(payload["description"]).strip()
-    return payload
+    description = _pick_field(payload, "description", "description")
+    normalized: dict[str, Any] = {
+        "rule": rule_text,
+        "severity": severity,
+        "enabled": bool(payload.get("enabled", True)),
+        "matchType": match_type,
+        "keywords": _normalize_string_list(payload.get("keywords")),
+        "filePatterns": _normalize_string_list(
+            _pick_field(payload, "filePatterns", "file_patterns"),
+        ),
+        "findingTypes": _normalize_string_list(
+            _pick_field(payload, "findingTypes", "finding_types"),
+        ),
+        "findingSeverities": _normalize_string_list(
+            _pick_field(payload, "findingSeverities", "finding_severities"),
+        ),
+    }
+    if description is not None:
+        normalized["description"] = str(description).strip()
+    return normalized
 
 
 def update_rule(session: Session, rule_id: str, body: dict[str, Any]) -> dict | None:
+    ensure_governance_schema(session)
     row = session.get(GovernanceRule, rule_id)
     if row is None:
         return None
@@ -177,6 +221,7 @@ def update_rule(session: Session, rule_id: str, body: dict[str, Any]) -> dict | 
 
 
 def delete_rule(session: Session, rule_id: str) -> bool:
+    ensure_governance_schema(session)
     row = session.get(GovernanceRule, rule_id)
     if row is None:
         return False

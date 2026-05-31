@@ -129,8 +129,10 @@ export function ReviewCenterShell({
             </button>
           )}
           <div>
-            <h1 className="text-lg font-semibold text-foreground">Review Center</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">PR inbox · review · ship</p>
+            <h1 className="text-lg font-semibold text-foreground">代码评审中心</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {zh.pageSubtitle.aiReview}
+            </p>
           </div>
         </div>
         <Button

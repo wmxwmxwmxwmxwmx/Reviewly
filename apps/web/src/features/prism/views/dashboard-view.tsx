@@ -41,7 +41,7 @@ import { zh } from "@/lib/i18n/zh"
 const STAT_CARDS = [
   {
     key: "pendingAssigned" as const,
-    label: "待我审批",
+    label: "待我评审",
     icon: ClipboardCheck,
     color: "text-ai-blue",
     bg: "bg-ai-blue/10 border-ai-blue/20",
@@ -73,7 +73,7 @@ const STAT_CARDS = [
   },
   {
     key: "weeklyAnalysisCount" as const,
-    label: "本周 AI 分析",
+    label: "本周评审次数",
     icon: BrainCircuit,
     color: "text-ai-purple",
     bg: "bg-ai-purple/10 border-ai-purple/20",
@@ -310,7 +310,7 @@ export function DashboardView() {
             className="gap-2"
           >
             <ClipboardCheck className="size-4" />
-            我的待审批
+            待我评审
           </Button>
           <Button
             type="button"
@@ -319,7 +319,7 @@ export function DashboardView() {
             className="gap-2"
           >
             <BarChart3 className="size-4" />
-            查看统计
+            质量分析
           </Button>
           <Button
             type="button"

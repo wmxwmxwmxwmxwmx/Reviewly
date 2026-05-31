@@ -20,9 +20,7 @@ import {
   ChevronDown,
   ChevronRight,
   Cpu,
-  Zap,
   TriangleAlert,
-  Flame,
   ScrollText,
 } from "lucide-react"
 import type { AnalysisFinding, AnalysisJob, AnalysisSummary, AiUsageMetrics } from "@reviewly/shared"
@@ -51,7 +49,7 @@ function buildTabs(findingsCount: number): {
     {
       key: "incidents",
       label: "事故",
-      icon: Flame,
+      icon: AlertTriangle,
       disabled: true,
       title: "即将推出",
     },
@@ -166,7 +164,7 @@ function AIStreamPanel({
           {
             label: "延迟",
             value: runUsage?.latencyMs ? `${(runUsage.latencyMs / 1000).toFixed(2)}s` : "--",
-            icon: Zap,
+            icon: Cpu,
           },
           {
             label: "Token 用量",
@@ -594,7 +592,7 @@ export function AIPanel({
       {/* Panel Header */}
       <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-border">
         <BrainCircuit className="w-4 h-4 text-ai-blue shrink-0" />
-        <span className="text-sm font-semibold text-foreground">AI 分析面板</span>
+        <span className="text-sm font-semibold text-foreground">评审面板</span>
         {analyzing && (
           <div className="flex items-center gap-1 ml-1">
             <div className="thinking-dot w-1.5 h-1.5 rounded-full bg-ai-blue" />

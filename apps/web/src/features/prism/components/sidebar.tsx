@@ -3,7 +3,7 @@
 import { motion } from "framer-motion"
 import {
   LayoutDashboard,
-  BrainCircuit,
+  GitPullRequest,
   AlertTriangle,
   BookOpen,
   Settings,
@@ -41,7 +41,7 @@ const primaryNavItems: {
 }[] = [
   { icon: LayoutDashboard, label: zh.nav.dashboard, view: "dashboard" },
   { icon: BookOpen, label: zh.nav.repos, view: "repos" },
-  { icon: BrainCircuit, label: zh.nav.aiReview, view: "ai-review" },
+  { icon: GitPullRequest, label: zh.nav.aiReview, view: "ai-review" },
   { icon: AlertTriangle, label: zh.nav.findings, view: "findings" },
   { icon: Settings, label: zh.nav.settings, view: "settings" },
 ]
@@ -86,7 +86,7 @@ export function Sidebar({ className, activeView, onViewChange, mobile, onClose }
         </div>
         <div className="flex flex-col leading-tight min-w-0 flex-1">
           <span className="text-sm font-semibold tracking-wide text-foreground">PRism</span>
-          <span className="text-[10px] text-muted-foreground truncate">AI 智能代码评审平台</span>
+          <span className="text-[10px] text-muted-foreground truncate">企业级代码评审平台</span>
         </div>
         {mobile && onClose && (
           <button

@@ -68,6 +68,15 @@ export function formatPrismApiError(error: unknown, fallback = "请求失败"): 
     if (error.code === "SCHEMA_OUTDATED") {
       return SCHEMA_OUTDATED_HINT
     }
+    if (error.code === "DATABASE_UNAVAILABLE") {
+      return `${error.message}（请确认仅有一个 Gateway 在 localhost:3001 运行）`
+    }
+    if (error.code === "GATEWAY_STARTING") {
+      return error.message || "Gateway 正在启动，请稍候再试"
+    }
+    if (error.code === "GOVERNANCE_ERROR") {
+      return error.message || "治理规则操作失败，请稍后重试"
+    }
     return error.message || fallback
   }
   if (error instanceof Error) {
@@ -138,7 +147,22 @@ export function formatImportErrorMessage(error: unknown, fallback = "导入失�
   return formatPrismApiError(error, fallback)
 }
 
-export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+const API_FETCH_MAX_ATTEMPTS = 4
+const API_FETCH_RETRY_BASE_MS = 400
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isRetryableApiError(error: unknown): boolean {
+  if (error instanceof PrismApiError) {
+    if (error.code === "GATEWAY_STARTING") return true
+    if (error.status === 502 || error.status === 503 || error.status === 504) return true
+  }
+  return error instanceof TypeError
+}
+
+async function apiFetchOnce<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { silentStatuses, ...fetchOptions } = options
   const token = getAuthToken()
   const method = fetchOptions.method ?? "GET"
@@ -214,4 +238,20 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     }
     throw err
   }
+}
+
+export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= API_FETCH_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await apiFetchOnce<T>(path, options)
+    } catch (err) {
+      lastError = err
+      if (!isRetryableApiError(err) || attempt >= API_FETCH_MAX_ATTEMPTS) {
+        throw err
+      }
+      await sleep(API_FETCH_RETRY_BASE_MS * attempt)
+    }
+  }
+  throw lastError
 }

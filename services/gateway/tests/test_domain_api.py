@@ -56,6 +56,34 @@ def test_governance_rules_crud(client: TestClient) -> None:
     assert client.delete(f"/api/governance/rules/{rid}").status_code == 200
 
 
+def test_governance_rules_create_ui_payload(client: TestClient) -> None:
+    """Matches GovernanceRuleDialog → createGovernanceRule request body."""
+    created = client.post(
+        "/api/governance/rules",
+        json={
+            "rule": "嘿嘿嘿",
+            "severity": "medium",
+            "enabled": True,
+            "matchType": "keyword",
+            "keywords": ["token", "password", "密钥"],
+            "filePatterns": [],
+            "findingTypes": [],
+            "findingSeverities": [],
+        },
+    )
+    assert created.status_code == 200
+    body = created.json()
+    assert body["rule"] == "嘿嘿嘿"
+    assert body["matchType"] == "keyword"
+    assert "密钥" in body["keywords"]
+
+    listed = client.get("/api/governance/rules", params={"includeDisabled": True})
+    assert listed.status_code == 200
+    assert any(r["id"] == body["id"] for r in listed.json())
+
+    assert client.delete(f"/api/governance/rules/{body['id']}").status_code == 200
+
+
 def test_team_members_list(client: TestClient) -> None:
     r = client.get("/api/team/members")
     assert r.status_code == 200

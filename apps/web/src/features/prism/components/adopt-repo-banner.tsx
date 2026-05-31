@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Loader2, Sparkles } from "lucide-react"
+import { Loader2, Shield } from "lucide-react"
 
 import type { PullRequest, Repository } from "@reviewly/shared"
 
@@ -78,7 +78,7 @@ export function AdoptRepoBanner({ pr, onAdopted }: AdoptRepoBannerProps) {
   return (
     <div className="mx-5 mt-3 rounded-md border border-ai-blue/30 bg-ai-blue/5 px-4 py-3 text-sm">
       <div className="flex items-start gap-3">
-        <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-ai-blue" />
+        <Shield className="mt-0.5 h-4 w-4 shrink-0 text-ai-blue" />
         <div className="min-w-0 flex-1 space-y-2">
           <p className="font-medium text-foreground">{zh.adoptRepo.title}</p>
           <p className="text-xs text-muted-foreground leading-relaxed">

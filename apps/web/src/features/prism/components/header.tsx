@@ -6,7 +6,7 @@ import {
   BrainCircuit,
   Loader2,
   Menu,
-  Zap,
+  PlayCircle,
 } from "lucide-react"
 import { RepositoryBadges } from "@/features/prism/components/repository-badges"
 import type { AnalysisPhase } from "@/hooks/use-review-layout"
@@ -150,10 +150,10 @@ export function Header({
                 ? "border-ai-blue/40 bg-ai-blue/15 text-ai-blue"
                 : "border-border text-muted-foreground hover:text-foreground hover:bg-accent",
             )}
-            aria-label="AI 洞察"
+            aria-label="评审洞察"
           >
             <BrainCircuit className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">AI 洞察</span>
+            <span className="hidden md:inline">评审洞察</span>
           </button>
         ) : null}
 
@@ -187,7 +187,7 @@ export function Header({
             </>
           ) : (
             <>
-              <Zap className="w-3.5 h-3.5" />
+              <PlayCircle className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">
                 {hasFindings ? zh.common.regenerateSummary : zh.common.startAnalyze}
               </span>

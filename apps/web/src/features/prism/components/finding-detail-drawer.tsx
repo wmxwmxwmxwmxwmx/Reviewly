@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
-import { ExternalLink, Loader2, Sparkles, X } from "lucide-react"
+import { ExternalLink, Loader2, Bot, X } from "lucide-react"
 
 import type { UnifiedFinding } from "@reviewly/shared"
 
@@ -129,7 +129,7 @@ export function FindingDetailDrawer({
             </DetailField>
           )}
           {aiText && (
-            <DetailField label="AI 分析">
+            <DetailField label={zh.findings.aiAnalysis}>
               <div className="rounded-md border border-border bg-surface-2 p-3 text-xs">
                 <SummaryMarkdown content={aiText} />
               </div>
@@ -199,7 +199,7 @@ export function FindingDetailDrawer({
               {aiLoading ? (
                 <Loader2 className="size-3.5 animate-spin" />
               ) : (
-                <Sparkles className="size-3.5" />
+                <Bot className="size-3.5" />
               )}
               {finding.findingType === "security"
                 ? zh.findings.aiSecurity

@@ -18,13 +18,23 @@ export function useGovernance(options?: { includeDisabled?: boolean }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const reloadRules = useCallback(
+    async (signal?: AbortSignal) => {
+      const data = await fetchGovernanceRules(includeDisabled, signal)
+      if (shouldApplyResult(signal)) {
+        setRules(data)
+      }
+      return data
+    },
+    [includeDisabled],
+  )
+
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setLoading(true)
       setError(null)
       try {
-        const data = await fetchGovernanceRules(includeDisabled, signal)
-        setRules(data)
+        await reloadRules(signal)
       } catch (e: unknown) {
         if (isAbortError(e)) return
         setError(e instanceof PrismApiError ? e.message : "加载失败")
@@ -32,7 +42,7 @@ export function useGovernance(options?: { includeDisabled?: boolean }) {
         if (shouldApplyResult(signal)) setLoading(false)
       }
     },
-    [includeDisabled],
+    [reloadRules],
   )
 
   useEffect(() => {
@@ -44,27 +54,36 @@ export function useGovernance(options?: { includeDisabled?: boolean }) {
   const addRule = useCallback(
     async (input: GovernanceRuleInput) => {
       const created = await createGovernanceRule(input)
-      await load()
+      setRules((prev) => (prev.some((r) => r.id === created.id) ? prev : [...prev, created]))
+      void reloadRules().catch(() => {
+        /* 保存已成功；后台刷新失败时保留乐观更新 */
+      })
       return created
     },
-    [load],
+    [reloadRules],
   )
 
   const editRule = useCallback(
     async (id: string, input: Partial<GovernanceRuleInput>) => {
       const updated = await updateGovernanceRule(id, input)
-      await load()
+      setRules((prev) => prev.map((r) => (r.id === id ? { ...r, ...updated } : r)))
+      void reloadRules().catch(() => {
+        /* 保存已成功；后台刷新失败时保留乐观更新 */
+      })
       return updated
     },
-    [load],
+    [reloadRules],
   )
 
   const removeRule = useCallback(
     async (id: string) => {
       await deleteGovernanceRule(id)
-      await load()
+      setRules((prev) => prev.filter((r) => r.id !== id))
+      void reloadRules().catch(() => {
+        /* 删除已成功；后台刷新失败时保留乐观更新 */
+      })
     },
-    [load],
+    [reloadRules],
   )
 
   return {
