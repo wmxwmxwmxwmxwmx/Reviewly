@@ -1,17 +1,16 @@
 "use client"
 
-import { motion } from "framer-motion"
-import { AlertCircle, CheckCircle2, ChevronRight, Cpu, Activity } from "lucide-react"
+import { AlertCircle, CheckCircle2, ChevronRight, Activity, Loader2 } from "lucide-react"
 
+import { ProviderIcon } from "@/features/prism/components/provider-icon"
 import { useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { useAuth } from "@/features/prism/contexts/auth-context"
 import { AccountMenu } from "@/features/prism/components/account-menu"
 import type { NavView } from "@/features/prism/components/sidebar"
+import { useProviderBalance } from "@/hooks/use-provider-balance"
 import { useSidebarStatus } from "@/hooks/use-sidebar-status"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
-
-const MONTHLY_TOKEN_BUDGET = 100_000
 
 function formatTokenCount(total: number): string {
   if (total >= 1_000_000) {
@@ -51,6 +50,12 @@ export function SidebarFooter({ onOpenSettings, onNavigate }: SidebarFooterProps
   const { settings, settingsHydrated, providerLabel, hasApiKey, monthlyUsage } = useAISettings()
   const { user, isAuthenticated, loading: authLoading } = useAuth()
   const { github, member, ready: statusReady } = useSidebarStatus()
+  const { balance, loading: balanceLoading } = useProviderBalance({
+    enabled: settingsHydrated && hasApiKey,
+    provider: settings.provider,
+    apiKey: settings.apiKey,
+    baseUrl: settings.baseUrl,
+  })
 
   if (!settingsHydrated || !statusReady || authLoading) {
     return <FooterSkeleton />
@@ -59,10 +64,14 @@ export function SidebarFooter({ onOpenSettings, onNavigate }: SidebarFooterProps
   const configured = hasApiKey
   const displayModel = settings.model || zh.sidebar.noModelSelected
   const monthlyTokens = formatTokenCount(monthlyUsage.totalTokens)
-  const budgetLabel = formatTokenCount(MONTHLY_TOKEN_BUDGET)
-  const modelUsagePercent = configured
-    ? Math.min(100, Math.round((monthlyUsage.totalTokens / MONTHLY_TOKEN_BUDGET) * 100))
-    : 8
+
+  const balanceLabel = (() => {
+    if (!configured) return providerLabel
+    if (balanceLoading && !balance) return zh.sidebar.balanceLoading
+    if (balance?.available && balance.amount) return balance.amount
+    if (balance?.message) return balance.message
+    return zh.sidebar.balanceUnavailable
+  })()
 
   const githubConnected = (github?.connected ?? false) || isAuthenticated
   const githubHost = isAuthenticated
@@ -97,12 +106,7 @@ export function SidebarFooter({ onOpenSettings, onNavigate }: SidebarFooterProps
         onClick={onOpenSettings}
         className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-surface-2 hover:bg-surface-3 transition-colors text-left w-full"
       >
-        <Cpu
-          className={cn(
-            "w-3.5 h-3.5 shrink-0",
-            configured ? "text-ai-blue" : "text-risk-medium",
-          )}
-        />
+        <ProviderIcon provider={settings.provider} className="size-4 rounded-[5px]" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <div className="text-[11px] font-medium text-foreground truncate">{displayModel}</div>
@@ -115,20 +119,22 @@ export function SidebarFooter({ onOpenSettings, onNavigate }: SidebarFooterProps
               {configured ? zh.sidebar.aiConfigured : zh.sidebar.aiNotConfigured}
             </span>
           </div>
-          <div className="flex items-center gap-1 mt-1">
-            <div className="flex-1 h-1 rounded-full bg-surface-4 overflow-hidden">
-              <motion.div
-                className={cn(
-                  "h-full rounded-full",
-                  configured ? "bg-ai-blue" : "bg-risk-medium",
-                )}
-                initial={false}
-                animate={{ width: `${modelUsagePercent}%` }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
-              />
-            </div>
-            <span className="text-[9px] text-muted-foreground shrink-0">
-              {configured ? `${monthlyTokens} / ${budgetLabel}` : providerLabel}
+          <div className="flex items-center justify-between gap-2 mt-1">
+            <span className="text-[10px] text-muted-foreground">{zh.sidebar.currentBalance}</span>
+            <span
+              className={cn(
+                "text-[10px] font-medium truncate",
+                balance?.available ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {balanceLoading ? (
+                <span className="inline-flex items-center gap-1">
+                  <Loader2 className="size-3 animate-spin" />
+                  {balanceLabel}
+                </span>
+              ) : (
+                balanceLabel
+              )}
             </span>
           </div>
         </div>

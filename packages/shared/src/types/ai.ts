@@ -37,6 +37,32 @@ export type ChatResponse = {
   latencyMs: number
 }
 
+export type ModelValidationErrorType =
+  | "invalid_api_key"
+  | "model_not_found"
+  | "connection_failed"
+  | "timeout"
+  | "server_error"
+  | "invalid_request"
+
+export type ModelValidateRequest = {
+  provider: string
+  baseUrl?: string
+  apiKey: string
+  model: string
+}
+
+export type ModelValidateResponse = {
+  success: boolean
+  latency?: number
+  model?: string
+  provider?: string
+  status?: string
+  contextWindow?: string | null
+  errorType?: ModelValidationErrorType
+  message?: string
+}
+
 export function isAIProvider(value: unknown): value is AIProvider {
   return typeof value === "string" && value in PROVIDER_ENDPOINTS
 }

@@ -15,10 +15,13 @@ import {
   estimateCostCnyFromUsage,
 } from "@/lib/ai/pricing"
 import { zh } from "@/lib/i18n/zh"
+import { PROVIDER_ENDPOINTS, type AIProvider as SharedAIProvider } from "@reviewly/shared"
 
 export { estimateCostCny, estimateCostCnyFromUsage }
 
-export type AIProvider = "anthropic" | "openai" | "google" | "deepseek" | "openrouter" | "custom"
+export type AIProvider = SharedAIProvider
+
+export type ModelValidationStatus = "success" | "failed"
 
 export interface AIProviderOption {
   value: AIProvider
@@ -30,6 +33,10 @@ export interface AISettings {
   provider: AIProvider
   model: string
   apiKey: string
+  baseUrl: string
+  validatedAt?: string | null
+  lastValidationStatus?: ModelValidationStatus | null
+  lastValidationLatency?: number | null
 }
 
 export interface AIUsageRecord {
@@ -81,6 +88,11 @@ const DEFAULT_SETTINGS: AISettings = {
   provider: "anthropic",
   model: "claude-opus-4.6",
   apiKey: "",
+  baseUrl: PROVIDER_ENDPOINTS.anthropic,
+}
+
+export function defaultBaseUrlForProvider(provider: AIProvider): string {
+  return PROVIDER_ENDPOINTS[provider] ?? ""
 }
 
 const AISettingsContext = createContext<AISettingsContextValue | null>(null)
@@ -102,6 +114,17 @@ function normalizeSettings(value: unknown): AISettings {
     provider,
     model: typeof candidate.model === "string" && candidate.model.trim() ? candidate.model : fallbackModel,
     apiKey: typeof candidate.apiKey === "string" ? candidate.apiKey : "",
+    baseUrl:
+      typeof candidate.baseUrl === "string" && candidate.baseUrl.trim()
+        ? candidate.baseUrl
+        : defaultBaseUrlForProvider(provider),
+    validatedAt: typeof candidate.validatedAt === "string" ? candidate.validatedAt : null,
+    lastValidationStatus:
+      candidate.lastValidationStatus === "success" || candidate.lastValidationStatus === "failed"
+        ? candidate.lastValidationStatus
+        : null,
+    lastValidationLatency:
+      typeof candidate.lastValidationLatency === "number" ? candidate.lastValidationLatency : null,
   }
 }
 
@@ -158,7 +181,15 @@ function isCurrentMonth(isoDate: string) {
 }
 
 type ServerSettingsPayload = {
-  ai?: { provider?: string; model?: string; temperature?: number }
+  ai?: {
+    provider?: string
+    model?: string
+    temperature?: number
+    customEndpoint?: string
+    validatedAt?: string | null
+    lastValidationStatus?: ModelValidationStatus | null
+    lastValidationLatency?: number | null
+  }
   secrets?: Record<string, string>
 }
 
@@ -213,6 +244,14 @@ export function AISettingsProvider({ children }: { children: ReactNode }) {
               typeof payload.ai?.model === "string" && payload.ai.model.trim()
                 ? payload.ai.model
                 : current.model || fallbackModel,
+            baseUrl:
+              typeof payload.ai?.customEndpoint === "string" && payload.ai.customEndpoint.trim()
+                ? payload.ai.customEndpoint
+                : current.baseUrl || defaultBaseUrlForProvider(provider),
+            validatedAt: payload.ai?.validatedAt ?? current.validatedAt ?? null,
+            lastValidationStatus: payload.ai?.lastValidationStatus ?? current.lastValidationStatus ?? null,
+            lastValidationLatency:
+              payload.ai?.lastValidationLatency ?? current.lastValidationLatency ?? null,
           })
         })
         const secrets = payload.secrets ?? {}

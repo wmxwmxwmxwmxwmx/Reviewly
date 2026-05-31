@@ -701,11 +701,17 @@ export interface SecuritySettings {
   sessionTimeoutMinutes: SessionTimeoutMinutes
 }
 
+export type ModelValidationStatus = "success" | "failed"
+
 export interface PrismSettings {
   ai: {
     provider: string
     model: string
     temperature: number
+    customEndpoint?: string
+    validatedAt?: string | null
+    lastValidationStatus?: ModelValidationStatus | null
+    lastValidationLatency?: number | null
   }
   analysis: {
     autoRunOnOpen: boolean

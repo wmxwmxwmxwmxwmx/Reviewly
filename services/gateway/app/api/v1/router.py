@@ -7,6 +7,7 @@ from app.api.v1 import (
     data,
     domain,
     findings,
+    models,
     performance_optimize,
     placeholders,
     repository_jobs,
@@ -19,6 +20,7 @@ from app.api.v1 import (
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(ai.router)
+api_router.include_router(models.router)
 api_router.include_router(findings.router)
 api_router.include_router(architecture.router)
 api_router.include_router(repos.router)

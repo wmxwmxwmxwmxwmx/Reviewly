@@ -1,12 +1,26 @@
 ﻿"use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { motion } from "framer-motion"
-import { Bot, User, Shield, Save, Check, KeyRound } from "lucide-react"
-import type { SessionTimeoutMinutes } from "@reviewly/shared"
+import {
+  Bot,
+  User,
+  Shield,
+  Save,
+  Check,
+  KeyRound,
+  Loader2,
+  Circle,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  Link2,
+} from "lucide-react"
+import type { ModelValidateResponse, SessionTimeoutMinutes } from "@reviewly/shared"
 
 import {
   AI_PROVIDER_OPTIONS,
+  defaultBaseUrlForProvider,
   type AIProvider,
   useAISettings,
 } from "@/features/prism/contexts/ai-settings-context"
@@ -15,10 +29,35 @@ import { ProfileDialog } from "@/features/prism/components/profile-dialog"
 import { useSecuritySettings } from "@/features/prism/contexts/security-settings-context"
 import { TwoFactorPinDialog } from "@/features/prism/components/two-factor-pin-dialog"
 import { SESSION_TIMEOUT_OPTIONS } from "@/features/prism/lib/security-settings"
+import { validateModelConfig } from "@/lib/api/models"
 import { patchSettings } from "@/lib/api/settings"
 import { PrismApiError } from "@/lib/api/client"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { toast } from "@/hooks/use-toast"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
+
+type ValidationPhase = "idle" | "validating" | "success" | "error"
+
+function formatValidatedAt(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const pad = (value: number) => String(value).padStart(2, "0")
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function formatValidatedTimeShort(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const pad = (value: number) => String(value).padStart(2, "0")
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function providerDisplayLabel(provider: AIProvider) {
+  return AI_PROVIDER_OPTIONS.find((option) => option.value === provider)?.label ?? provider
+}
 
 export function SettingsView() {
   const { user, isAuthenticated, loading: authLoading } = useAuth()
@@ -43,6 +82,9 @@ export function SettingsView() {
   const [aiSaveError, setAiSaveError] = useState<string | null>(null)
   const [pinDialogOpen, setPinDialogOpen] = useState(false)
   const [pinDialogMode, setPinDialogMode] = useState<"setup" | "disable">("setup")
+  const [validationPhase, setValidationPhase] = useState<ValidationPhase>("idle")
+  const [validationResult, setValidationResult] = useState<ModelValidateResponse | null>(null)
+  const [validationMessage, setValidationMessage] = useState<string | null>(null)
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -54,6 +96,25 @@ export function SettingsView() {
   useEffect(() => {
     setAiForm(settings)
   }, [settings])
+
+  const configFingerprint = useMemo(
+    () =>
+      [aiForm.provider, aiForm.model, aiForm.apiKey, aiForm.baseUrl].join("|"),
+    [aiForm.apiKey, aiForm.baseUrl, aiForm.model, aiForm.provider],
+  )
+  const lastValidatedFingerprintRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (
+      lastValidatedFingerprintRef.current &&
+      lastValidatedFingerprintRef.current !== configFingerprint &&
+      validationPhase !== "validating"
+    ) {
+      setValidationPhase("idle")
+      setValidationResult(null)
+      setValidationMessage(null)
+    }
+  }, [configFingerprint, validationPhase])
 
   const handleTwoFactorToggle = () => {
     if (!security.twoFactorEnabled) {
@@ -97,14 +158,82 @@ export function SettingsView() {
     setSaved(false)
   }
 
+  const markConfigDirty = () => {
+    setSaved(false)
+    setValidationPhase("idle")
+    setValidationResult(null)
+    setValidationMessage(null)
+  }
+
   const handleProviderChange = (provider: AIProvider) => {
     const option = AI_PROVIDER_OPTIONS.find((item) => item.value === provider)
     setAiForm((current) => ({
       ...current,
       provider,
       model: option?.defaultModel ?? current.model,
+      baseUrl: defaultBaseUrlForProvider(provider),
     }))
-    setSaved(false)
+    markConfigDirty()
+  }
+
+  const handleTestConnection = async () => {
+    if (validationPhase === "validating") return
+
+    setValidationPhase("validating")
+    setValidationResult(null)
+    setValidationMessage(null)
+
+    try {
+      const result = await validateModelConfig({
+        provider: aiForm.provider,
+        baseUrl: aiForm.baseUrl.trim() || undefined,
+        apiKey: aiForm.apiKey,
+        model: aiForm.model,
+      })
+
+      if (result.success) {
+        const validatedAt = new Date().toISOString()
+        const nextForm = {
+          ...aiForm,
+          validatedAt,
+          lastValidationStatus: "success" as const,
+          lastValidationLatency: result.latency ?? null,
+        }
+        setAiForm(nextForm)
+        setValidationPhase("success")
+        setValidationResult(result)
+        lastValidatedFingerprintRef.current = configFingerprint
+        toast({
+          title: zh.settings.validateSuccess,
+        })
+        return
+      }
+
+      setValidationPhase("error")
+      setValidationMessage(result.message ?? zh.settings.validateFailed)
+      setAiForm((current) => ({
+        ...current,
+        lastValidationStatus: "failed",
+      }))
+      toast({
+        variant: "destructive",
+        title: zh.settings.validateFailed,
+        description: result.message,
+      })
+    } catch (error: unknown) {
+      const message = error instanceof PrismApiError ? error.message : zh.settings.validateFailed
+      setValidationPhase("error")
+      setValidationMessage(message)
+      setAiForm((current) => ({
+        ...current,
+        lastValidationStatus: "failed",
+      }))
+      toast({
+        variant: "destructive",
+        title: zh.settings.validateFailed,
+        description: message,
+      })
+    }
   }
 
   const handleSave = async () => {
@@ -117,6 +246,10 @@ export function SettingsView() {
           model: aiForm.model,
           temperature: 0.2,
           apiKey: aiForm.apiKey,
+          customEndpoint: aiForm.baseUrl.trim() || undefined,
+          validatedAt: aiForm.validatedAt ?? null,
+          lastValidationStatus: aiForm.lastValidationStatus ?? null,
+          lastValidationLatency: aiForm.lastValidationLatency ?? null,
         },
       } as Parameters<typeof patchSettings>[0])
     } catch (e: unknown) {
@@ -135,6 +268,13 @@ export function SettingsView() {
   const formDisabled = !settingsHydrated
   const accountUsername = user?.username ?? (authLoading ? "…" : zh.sidebar.notLoggedIn)
   const accountEmail = user?.email ?? (isAuthenticated ? "—" : zh.sidebar.signInHint)
+
+  const showPersistedValidation =
+    aiForm.lastValidationStatus === "success" &&
+    aiForm.validatedAt &&
+    validationPhase !== "validating" &&
+    validationPhase !== "success"
+  const showValidationHint = !showPersistedValidation && validationPhase !== "success"
 
   return (
     <div className="p-5 space-y-5">
@@ -162,9 +302,9 @@ export function SettingsView() {
             {hasApiKey ? `已配置 ${maskedApiKey}` : `未配置 ${zh.settings.apiKey}`}
           </span>
         </div>
-        <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
           {!settingsHydrated && (
-            <p className="lg:col-span-3 text-xs text-muted-foreground">正在加载 AI 设置…</p>
+            <p className="lg:col-span-2 text-xs text-muted-foreground">正在加载 AI 设置…</p>
           )}
           <label className="space-y-2">
             <span className="text-xs font-medium text-muted-foreground">模型供应商</span>
@@ -189,14 +329,35 @@ export function SettingsView() {
               disabled={formDisabled}
               onChange={(event) => {
                 setAiForm((current) => ({ ...current, model: event.target.value }))
-                setSaved(false)
+                markConfigDirty()
               }}
               placeholder="例如 claude-opus-4.6"
               className="w-full h-10 rounded-md border border-border bg-surface-2 px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ai-blue focus:ring-2 focus:ring-ai-blue/20"
             />
           </label>
 
-          <label className="space-y-2">
+          <label className="space-y-2 lg:col-span-2">
+            <span className="text-xs font-medium text-muted-foreground">{zh.settings.baseUrl}</span>
+            <div className="relative">
+              <Link2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={aiForm.baseUrl}
+                disabled={formDisabled}
+                onChange={(event) => {
+                  setAiForm((current) => ({ ...current, baseUrl: event.target.value }))
+                  markConfigDirty()
+                }}
+                placeholder={
+                  aiForm.provider === "custom"
+                    ? "https://your-host/v1/chat/completions"
+                    : defaultBaseUrlForProvider(aiForm.provider)
+                }
+                className="w-full h-10 rounded-md border border-border bg-surface-2 pl-9 pr-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ai-blue focus:ring-2 focus:ring-ai-blue/20"
+              />
+            </div>
+          </label>
+
+          <label className="space-y-2 lg:col-span-2">
             <span className="text-xs font-medium text-muted-foreground">{zh.settings.apiKey}</span>
             <div className="relative">
               <KeyRound className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -206,7 +367,7 @@ export function SettingsView() {
                 disabled={formDisabled}
                 onChange={(event) => {
                   setAiForm((current) => ({ ...current, apiKey: event.target.value }))
-                  setSaved(false)
+                  markConfigDirty()
                 }}
                 placeholder={`输入供应商 ${zh.settings.apiKey}`}
                 className="w-full h-10 rounded-md border border-border bg-surface-2 pl-9 pr-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ai-blue focus:ring-2 focus:ring-ai-blue/20"
@@ -214,7 +375,119 @@ export function SettingsView() {
             </div>
           </label>
         </div>
-        <div className="px-4 pb-4 flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+
+        <div className="px-4 pb-4 space-y-3 border-t border-border/60">
+          <div className="pt-3 flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">{zh.settings.modelStatus}</span>
+            {validationPhase === "idle" && !showPersistedValidation && (
+              <Badge variant="outline" className="text-muted-foreground">
+                <Circle className="size-3" />
+                {zh.settings.notValidated}
+              </Badge>
+            )}
+            {showPersistedValidation && (
+              <Badge className="border-risk-low/30 bg-risk-low/10 text-risk-low hover:bg-risk-low/10">
+                <CheckCircle2 className="size-3" />
+                {zh.settings.validated}
+              </Badge>
+            )}
+            {validationPhase === "validating" && (
+              <Badge variant="outline" className="text-ai-blue border-ai-blue/30">
+                <Loader2 className="size-3 animate-spin" />
+                {zh.settings.validatingConnection}
+              </Badge>
+            )}
+            {validationPhase === "success" && (
+              <Badge className="border-risk-low/30 bg-risk-low/10 text-risk-low hover:bg-risk-low/10">
+                <CheckCircle2 className="size-3" />
+                {zh.settings.validateSuccess}
+              </Badge>
+            )}
+            {validationPhase === "error" && (
+              <Badge variant="destructive">
+                <XCircle className="size-3" />
+                验证失败
+              </Badge>
+            )}
+          </div>
+
+          {validationPhase === "validating" && (
+            <Alert className="border-ai-blue/30 bg-ai-blue/5">
+              <Loader2 className="animate-spin text-ai-blue" />
+              <AlertTitle>{zh.settings.validatingConnection}</AlertTitle>
+              <AlertDescription>正在向模型服务发送最小测试请求…</AlertDescription>
+            </Alert>
+          )}
+
+          {validationPhase === "success" && validationResult?.success && (
+            <div className="rounded-lg border border-border bg-surface-2/50 overflow-hidden">
+              <div className="px-3 py-2 border-b border-border bg-surface-2/80 flex items-center gap-2">
+                <CheckCircle2 className="size-4 text-risk-low" />
+                <span className="text-sm font-medium text-foreground">{zh.settings.validateSuccess}</span>
+              </div>
+              <div className="px-3 py-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Provider</span>
+                  <span className="text-foreground">{validationResult.provider ?? providerDisplayLabel(aiForm.provider)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Model</span>
+                  <span className="font-mono text-ai-blue">{validationResult.model ?? aiForm.model}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Status</span>
+                  <span className="text-risk-low">{validationResult.status ?? "Available"}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Latency</span>
+                  <span className="text-foreground">{validationResult.latency ?? 0}ms</span>
+                </div>
+                {validationResult.contextWindow && (
+                  <div className="flex items-center justify-between gap-3 sm:col-span-2">
+                    <span className="text-muted-foreground">Context Window</span>
+                    <span className="text-foreground">{validationResult.contextWindow}</span>
+                  </div>
+                )}
+                {aiForm.validatedAt && (
+                  <div className="flex items-center justify-between gap-3 sm:col-span-2">
+                    <span className="text-muted-foreground">{zh.settings.validatedAt}</span>
+                    <span className="text-foreground">{formatValidatedAt(aiForm.validatedAt)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {validationPhase === "error" && validationMessage && (
+            <Alert variant="destructive">
+              <XCircle />
+              <AlertTitle>验证失败</AlertTitle>
+              <AlertDescription>{validationMessage}</AlertDescription>
+            </Alert>
+          )}
+
+          {validationPhase === "idle" && showPersistedValidation && aiForm.validatedAt && (
+            <Alert className="border-risk-low/30 bg-risk-low/5">
+              <CheckCircle2 className="text-risk-low" />
+              <AlertTitle>{zh.settings.validated}</AlertTitle>
+              <AlertDescription className="space-y-1">
+                <p>
+                  模型：<span className="font-mono text-ai-blue">{aiForm.model}</span>
+                </p>
+                {typeof aiForm.lastValidationLatency === "number" && (
+                  <p>
+                    {zh.settings.responseTime}：{aiForm.lastValidationLatency}ms
+                  </p>
+                )}
+                <p>
+                  {zh.settings.validatedAt}：{formatValidatedAt(aiForm.validatedAt)}
+                </p>
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+
+        <div className="px-4 pb-4 flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between border-t border-border/60 pt-3">
           <div>
             当前侧边栏左下角会同步显示：<span className="text-foreground">{providerLabel}</span> ·{" "}
             <span className="font-mono text-ai-blue">{aiForm.model || "未选择模型"}</span>
@@ -343,24 +616,56 @@ export function SettingsView() {
       {aiSaveError && <p className="text-xs text-risk-high">{aiSaveError}</p>}
       {saveError && <p className="text-xs text-risk-high">{saveError}</p>}
 
-      <button
-        type="button"
-        onClick={() => void handleSave()}
-        disabled={isSaving || formDisabled}
-        className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-ai-blue rounded-md hover:bg-sky-300 transition-colors disabled:opacity-50"
-      >
-        {saved ? (
-          <>
-            <Check className="w-4 h-4" />
-            已保存
-          </>
-        ) : (
-          <>
-            <Save className="w-4 h-4" />
-            {isSaving ? "保存中…" : "保存设置"}
-          </>
-        )}
-      </button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-xs text-muted-foreground min-h-5">
+          {showValidationHint && !aiForm.validatedAt && (
+            <span className="inline-flex items-center gap-1.5 text-risk-medium">
+              <AlertCircle className="size-3.5" />⚠️ {zh.settings.validateSuggest}
+            </span>
+          )}
+          {showPersistedValidation && aiForm.validatedAt && (
+            <span className="inline-flex items-center gap-1.5 text-risk-low">
+              <CheckCircle2 className="size-3.5" />
+              ✅ {zh.settings.validated} · {zh.settings.validatedAt} {formatValidatedTimeShort(aiForm.validatedAt)}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void handleTestConnection()}
+            disabled={formDisabled || validationPhase === "validating" || !aiForm.model.trim()}
+          >
+            {validationPhase === "validating" ? (
+              <>
+                <Loader2 className="animate-spin" />
+                {zh.settings.testingConnection}
+              </>
+            ) : (
+              zh.settings.testConnection
+            )}
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={isSaving || formDisabled}
+            className="bg-ai-blue text-white hover:bg-sky-300"
+          >
+            {saved ? (
+              <>
+                <Check />
+                已保存
+              </>
+            ) : (
+              <>
+                <Save />
+                {isSaving ? "保存中…" : "保存设置"}
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
 
       <TwoFactorPinDialog
         open={pinDialogOpen}
