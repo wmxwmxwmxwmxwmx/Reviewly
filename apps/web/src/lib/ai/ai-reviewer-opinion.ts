@@ -72,6 +72,23 @@ const STRUCTURED_SECTION_MARKERS =
 
 const SECTION_PLACEHOLDER = "未发现明显问题"
 
+/** Strip AI-generated leading list markers so items can be renumbered. */
+export function stripLeadingListMarker(text: string): string {
+  return text
+    .trim()
+    .replace(/^\d+[.)]\s*/, "")
+    .replace(/^\d+\s+(?=\S)/, "")
+}
+
+/** Merge section items into one markdown block with sequential numbering. */
+export function combineSectionItemsMarkdown(items: string[]): string {
+  if (items.length === 0) return SECTION_PLACEHOLDER
+  if (items.length === 1) return items[0]!
+  return items
+    .map((item, index) => `${index + 1}. ${stripLeadingListMarker(item)}`)
+    .join("\n\n")
+}
+
 const GOVERNANCE_SEVERITY_RANK: Record<string, number> = {
   critical: 4,
   high: 3,

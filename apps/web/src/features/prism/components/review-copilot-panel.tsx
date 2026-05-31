@@ -9,7 +9,10 @@ import { SummaryMarkdown } from "@/features/prism/components/summary-markdown"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import type { AnalysisPanelState } from "@/features/prism/lib/analysis-panel-state"
 import type { ReviewInboxItem } from "@/features/prism/types/review-task"
-import type { AiReviewerOpinion } from "@/lib/ai/ai-reviewer-opinion"
+import {
+  combineSectionItemsMarkdown,
+  type AiReviewerOpinion,
+} from "@/lib/ai/ai-reviewer-opinion"
 import { openGitHubReview } from "@/lib/github-pr-url"
 import { cn } from "@/lib/utils"
 
@@ -55,14 +58,12 @@ function ReviewSection({
   items: string[]
 }) {
   const list = items.length > 0 ? items : [SECTION_FALLBACK]
+  const content = combineSectionItemsMarkdown(list)
+
   return (
     <div>
       <p className="text-muted-foreground mb-1.5">{title}</p>
-      <div className="space-y-2.5">
-        {list.map((item, i) => (
-          <SummaryMarkdown key={`${title}-${i}`} content={item} variant="compact" />
-        ))}
-      </div>
+      <SummaryMarkdown content={content} variant="compact" />
     </div>
   )
 }

@@ -12,7 +12,6 @@ export type GovernanceOverviewMetrics = {
   ruleHits: number
   weeklyReviews: number
   highRiskPrs: number
-  avgRiskScore: number
   interceptedRisks: number
 }
 
@@ -56,12 +55,6 @@ export function useGovernanceOverview(allTasks: ReviewTask[]) {
     const highRiskPrs = allTasks.filter(
       (t) => t.riskLevel === "严重" || t.riskLevel === "高",
     ).length
-    const scores = allTasks
-      .map((t) => t.source.riskScore ?? 0)
-      .filter((s) => s > 0)
-    const avgRiskScore = scores.length
-      ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
-      : 0
     const interceptedPrs = new Set(
       violations.map((v) => v.pullRequestId).filter(Boolean),
     ).size
@@ -70,7 +63,6 @@ export function useGovernanceOverview(allTasks: ReviewTask[]) {
       ruleHits: violations.length,
       weeklyReviews: weeklyReviews ?? 0,
       highRiskPrs,
-      avgRiskScore,
       interceptedRisks: interceptedPrs > 0 ? interceptedPrs : violations.length,
     }
   }, [allTasks, violations, weeklyReviews])
