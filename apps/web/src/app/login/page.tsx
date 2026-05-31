@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { AlertCircle, Github, Loader2, LogIn } from "lucide-react"
+import { AlertCircle, Github, Loader2, LogIn, RefreshCw, ServerOff } from "lucide-react"
 import type { AuthStatusResponse } from "@reviewly/shared"
 
 import { useAuth } from "@/features/prism/contexts/auth-context"
@@ -55,14 +55,18 @@ function LoginContent() {
   const [error, setError] = useState<string | null>(null)
   const [authStatus, setAuthStatus] = useState<AuthStatusResponse | null>(null)
   const [statusLoading, setStatusLoading] = useState(true)
+  const [gatewayUnreachable, setGatewayUnreachable] = useState(false)
 
   const loadStatus = useCallback(async () => {
     setStatusLoading(true)
+    setGatewayUnreachable(false)
     try {
-      const status = await fetchAuthStatus()
+      const status = await fetchAuthStatus({ noRetry: true })
       setAuthStatus(status)
-    } catch {
+      setGatewayUnreachable(false)
+    } catch (e: unknown) {
       setAuthStatus(null)
+      setGatewayUnreachable(!(e instanceof PrismApiError && e.status === 401))
     } finally {
       setStatusLoading(false)
     }
@@ -210,6 +214,30 @@ function LoginContent() {
                 </p>
               </div>
             </>
+          ) : gatewayUnreachable && !bypassEnabled ? (
+            <div className="rounded-md border border-border bg-card/50 px-3 py-4 text-left text-sm text-muted-foreground">
+              <div className="mb-2 flex items-start gap-2 text-foreground">
+                <ServerOff className="mt-0.5 h-4 w-4 shrink-0 text-risk-high" />
+                <p className="font-medium">{zh.login.gatewayUnreachableTitle}</p>
+              </div>
+              <p className="mb-3 text-xs leading-relaxed">{zh.login.gatewayUnreachableHint}</p>
+              <code className="mb-3 block break-all rounded bg-background px-2 py-1.5 text-[11px] text-ai-blue">
+                {zh.login.gatewayHealthCheck}
+              </code>
+              <button
+                type="button"
+                onClick={() => void loadStatus()}
+                disabled={statusLoading}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-foreground transition-opacity hover:bg-surface-3 disabled:opacity-50"
+              >
+                {statusLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                {zh.login.retry}
+              </button>
+            </div>
           ) : (
             !bypassEnabled && authStatus && <OAuthSetupGuide status={authStatus} />
           )}

@@ -25,13 +25,32 @@ if (Test-Path $envFile) {
     }
 }
 
+$dbUrl = [System.Environment]::GetEnvironmentVariable("DATABASE_URL", "Process")
+if ($dbUrl -match "postgres") {
+    Write-Host "Checking PostgreSQL on localhost:5432..."
+    $pgCheck = Test-NetConnection -ComputerName localhost -Port 5432 -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
+    if (-not $pgCheck.TcpTestSucceeded) {
+        Write-Host ""
+        Write-Host "ERROR: PostgreSQL is not reachable on localhost:5432." -ForegroundColor Red
+        Write-Host "  Start Postgres from repo root:  docker compose up -d"
+        Write-Host "  Then retry:  npm run dev:gateway"
+        Write-Host ""
+        Write-Host "  Or use SQLite in services/gateway/.env (no Docker):"
+        Write-Host "    DATABASE_URL=sqlite:///./prism.db"
+        Write-Host ""
+        exit 1
+    }
+}
+
 Write-Host "Running database migrations..."
 & $python -m alembic upgrade head
 if ($LASTEXITCODE -ne 0) {
-    Write-Warning "Alembic migration failed."
-    Write-Warning "  PostgreSQL: run 'docker compose up -d' from repo root, then retry."
-    Write-Warning "  Or use SQLite in services/gateway/.env:"
-    Write-Warning "    DATABASE_URL=sqlite:///./prism.db"
+    Write-Host ""
+    Write-Host "ERROR: Alembic migration failed; Gateway will not start." -ForegroundColor Red
+    Write-Host "  PostgreSQL: run 'docker compose up -d' from repo root, then retry."
+    Write-Host "  Or use SQLite in services/gateway/.env:"
+    Write-Host "    DATABASE_URL=sqlite:///./prism.db"
+    Write-Host ""
     exit 1
 }
 
