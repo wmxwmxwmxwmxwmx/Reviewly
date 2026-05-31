@@ -14,28 +14,12 @@ import { useImportPrByUrl } from "@/hooks/use-import-pr-by-url"
 import { usePullRequest } from "@/hooks/use-pull-request"
 import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
 import { useToast } from "@/hooks/use-toast"
-import type { WorkbenchNavigatePayload } from "@/features/prism/lib/review-center-navigation"
 import {
+  normalizeReviewTab,
   parsePrFilterParam,
   parseReviewStatusParam,
 } from "@/features/prism/lib/review-center-navigation"
 import { zh } from "@/lib/i18n/zh"
-
-const REVIEW_TABS: ReviewCenterTab[] = [
-  "dashboard",
-  "pending",
-  "all",
-  "rules",
-  "stats",
-  "settings",
-]
-
-function parseReviewTab(value: string | null): ReviewCenterTab {
-  if (value && (REVIEW_TABS as string[]).includes(value)) {
-    return value as ReviewCenterTab
-  }
-  return "dashboard"
-}
 
 interface AiReviewWorkspaceProps {
   prId: string | null
@@ -56,12 +40,12 @@ export function AiReviewWorkspace({
   const [importOpen, setImportOpen] = useState(false)
   const [historyReloadToken, setHistoryReloadToken] = useState(0)
   const [centerTab, setCenterTab] = useState<ReviewCenterTab>(
-    parseReviewTab(reviewTabParam ?? null),
+    normalizeReviewTab(reviewTabParam),
   )
   const [filterRepoId, setFilterRepoId] = useState<string | null>(urlRepoId)
 
   useEffect(() => {
-    setCenterTab(parseReviewTab(reviewTabParam ?? null))
+    setCenterTab(normalizeReviewTab(reviewTabParam))
   }, [reviewTabParam])
 
   const bumpHistory = useCallback(() => {
@@ -128,24 +112,6 @@ export function AiReviewWorkspace({
     [navigate, filterRepoId],
   )
 
-  const handleWorkbenchNavigate = useCallback(
-    (payload: WorkbenchNavigatePayload) => {
-      setCenterTab(payload.tab)
-      navigate("ai-review", {
-        aiReviewList: true,
-        repoId: filterRepoId ?? undefined,
-        reviewTab: payload.tab,
-        reviewStatus: payload.reviewStatus,
-        prFilter: payload.prFilter,
-      })
-    },
-    [navigate, filterRepoId],
-  )
-
-  const handleNavigateFindings = useCallback(() => {
-    navigate("findings")
-  }, [navigate])
-
   const handleRepoChange = useCallback(
     (repoId: string | null) => {
       setFilterRepoId(repoId)
@@ -177,8 +143,6 @@ export function AiReviewWorkspace({
           onTabChange={handleTabChange}
           onMenuClick={onMenuClick}
           onSelectPr={handleSelectPr}
-          onWorkbenchNavigate={handleWorkbenchNavigate}
-          onNavigateFindings={handleNavigateFindings}
           listReviewStatus={listReviewStatus}
           listPrFilter={listPrFilter}
           importOpen={importOpen}

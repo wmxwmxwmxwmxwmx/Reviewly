@@ -59,7 +59,7 @@ export type NavParams = {
   status?: string
   /** Open AI review list without restoring last reviewed PR from session. */
   aiReviewList?: boolean
-  /** Review center sub-tab: dashboard | pending | all | rules | stats | settings */
+  /** Review center sub-tab: inbox | all | insights (legacy values normalized in normalizeReviewTab) */
   reviewTab?: string
   /** PR list review-status filter (ReviewStatus, not findings status). */
   reviewStatus?: string

@@ -45,7 +45,7 @@ const STAT_CARDS = [
     icon: ClipboardCheck,
     color: "text-ai-blue",
     bg: "bg-ai-blue/10 border-ai-blue/20",
-    reviewTab: "pending" as const,
+    reviewTab: "inbox" as const,
   },
   {
     key: "changesRequested" as const,
@@ -77,7 +77,7 @@ const STAT_CARDS = [
     icon: BrainCircuit,
     color: "text-ai-purple",
     bg: "bg-ai-purple/10 border-ai-purple/20",
-    reviewTab: "stats" as const,
+    reviewTab: "insights" as const,
     suffix: "次",
   },
 ]
@@ -306,7 +306,7 @@ export function DashboardView() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => navigate("ai-review", { reviewTab: "pending" })}
+            onClick={() => navigate("ai-review", { reviewTab: "inbox" })}
             className="gap-2"
           >
             <ClipboardCheck className="size-4" />
@@ -315,7 +315,7 @@ export function DashboardView() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => navigate("ai-review", { reviewTab: "stats" })}
+            onClick={() => navigate("ai-review", { reviewTab: "insights" })}
             className="gap-2"
           >
             <BarChart3 className="size-4" />

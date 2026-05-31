@@ -10,17 +10,10 @@ import {
   ReviewCenterNav,
   type ReviewCenterTab,
 } from "@/features/prism/components/review-center-nav"
-import { ReviewRepoFilter } from "@/features/prism/components/review-repo-filter"
-import { ReviewRepoSidebar } from "@/features/prism/components/review-repo-sidebar"
-import { AiReviewOverview } from "@/features/prism/views/ai-review-overview"
-import { ReviewCenterDashboardView } from "@/features/prism/views/review-center/review-center-dashboard"
-import { ReviewCenterRulesView } from "@/features/prism/views/review-center/review-center-rules"
-import { ReviewCenterSettingsView } from "@/features/prism/views/review-center/review-center-settings"
-import { ReviewCenterStatsView } from "@/features/prism/views/review-center/review-center-stats"
-import type {
-  ReviewPrFilter,
-  WorkbenchNavigatePayload,
-} from "@/features/prism/lib/review-center-navigation"
+import { ReviewCenterAllPrsView } from "@/features/prism/views/review-center/review-center-all-prs-view"
+import { ReviewCenterInboxView } from "@/features/prism/views/review-center/review-center-inbox-view"
+import { ReviewCenterInsightsView } from "@/features/prism/views/review-center/review-center-insights-view"
+import type { ReviewPrFilter } from "@/features/prism/lib/review-center-navigation"
 import { fetchReviewRepoGroups } from "@/lib/api/review-center"
 import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import { zh } from "@/lib/i18n/zh"
@@ -30,8 +23,6 @@ interface ReviewCenterShellProps {
   onTabChange: (tab: ReviewCenterTab) => void
   onMenuClick?: () => void
   onSelectPr: (prId: string) => void
-  onWorkbenchNavigate: (payload: WorkbenchNavigatePayload) => void
-  onNavigateFindings: () => void
   listReviewStatus: ReviewStatus | null
   listPrFilter: ReviewPrFilter | null
   importOpen: boolean
@@ -48,8 +39,6 @@ export function ReviewCenterShell({
   onTabChange,
   onMenuClick,
   onSelectPr,
-  onWorkbenchNavigate,
-  onNavigateFindings,
   listReviewStatus,
   listPrFilter,
   importOpen,
@@ -81,57 +70,40 @@ export function ReviewCenterShell({
     return () => ac.abort()
   }, [reloadToken])
 
-  const showRepoSidebar = activeTab === "all" || activeTab === "pending"
-
   const content = (() => {
     switch (activeTab) {
-      case "dashboard":
+      case "inbox":
         return (
-          <ReviewCenterDashboardView
-            onNavigate={onWorkbenchNavigate}
-            onNavigateFindings={onNavigateFindings}
+          <ReviewCenterInboxView
             onSelectPr={onSelectPr}
-          />
-        )
-      case "pending":
-        return (
-          <AiReviewOverview
-            embedded
-            pendingOnly
-            title="我的待审批"
-            repoId={repoId ?? undefined}
-            onSelectPr={onSelectPr}
-            importOpen={importOpen}
-            onImportOpenChange={onImportOpenChange}
-            importing={importing}
-            onImport={onImport}
             reloadToken={reloadToken}
+            onImportOpenChange={onImportOpenChange}
           />
         )
       case "all":
         return (
-          <AiReviewOverview
-            embedded
-            title="全部 PR"
+          <ReviewCenterAllPrsView
+            onSelectPr={onSelectPr}
+            reloadToken={reloadToken}
             repoId={repoId ?? undefined}
+            repoGroups={repoGroups}
+            groupsLoading={groupsLoading}
+            onRepoChange={onRepoChange}
+            onImportOpenChange={onImportOpenChange}
             initialStatus={listReviewStatus ?? "ALL"}
             prFilter={listPrFilter ?? undefined}
-            onSelectPr={onSelectPr}
-            importOpen={importOpen}
-            onImportOpenChange={onImportOpenChange}
-            importing={importing}
-            onImport={onImport}
-            reloadToken={reloadToken}
           />
         )
-      case "rules":
-        return <ReviewCenterRulesView />
-      case "stats":
-        return <ReviewCenterStatsView />
-      case "settings":
-        return <ReviewCenterSettingsView />
+      case "insights":
+        return <ReviewCenterInsightsView />
       default:
-        return null
+        return (
+          <ReviewCenterInboxView
+            onSelectPr={onSelectPr}
+            reloadToken={reloadToken}
+            onImportOpenChange={onImportOpenChange}
+          />
+        )
     }
   })()
 
@@ -157,10 +129,8 @@ export function ReviewCenterShell({
             </button>
           )}
           <div>
-            <h1 className="text-lg font-semibold text-foreground">AI 评审中心</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              企业级 Pull Request Review Center
-            </p>
+            <h1 className="text-lg font-semibold text-foreground">Review Center</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">PR inbox · review · ship</p>
           </div>
         </div>
         <Button
@@ -176,28 +146,7 @@ export function ReviewCenterShell({
 
       <ReviewCenterNav active={activeTab} onChange={onTabChange} />
 
-      {showRepoSidebar ? (
-        <div className="lg:hidden px-4 py-2 border-b border-border shrink-0">
-          <ReviewRepoFilter
-            groups={repoGroups}
-            selectedRepoId={repoId ?? null}
-            onSelectRepo={onRepoChange}
-            loading={groupsLoading}
-          />
-        </div>
-      ) : null}
-
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        {showRepoSidebar ? (
-          <ReviewRepoSidebar
-            groups={repoGroups}
-            selectedRepoId={repoId ?? null}
-            onSelectRepo={onRepoChange}
-            loading={groupsLoading}
-          />
-        ) : null}
-        <div className="flex-1 min-w-0 overflow-hidden flex flex-col">{content}</div>
-      </div>
+      <div className="flex flex-1 min-w-0 overflow-hidden flex flex-col">{content}</div>
     </div>
   )
 }

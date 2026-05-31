@@ -1,8 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Loader2, Menu, Plus, Search } from "lucide-react"
+import { Loader2, Plus, Search } from "lucide-react"
 import type { PullRequestListItem, ReviewStatus } from "@reviewly/shared"
+import type { RepoReviewGroup } from "@reviewly/shared"
 
 import {
   AlertDialog,
@@ -16,8 +17,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { EditPRDialog } from "@/features/prism/components/edit-pr-dialog"
-import { ImportPRDialog } from "@/features/prism/components/import-pr-dialog"
 import { ReviewPrList } from "@/features/prism/components/review-pr-list"
+import { ReviewRepoFilter } from "@/features/prism/components/review-repo-filter"
 import { ReviewStatusTabs } from "@/features/prism/components/review-status-tabs"
 import { useAuth } from "@/features/prism/contexts/auth-context"
 import type { ReviewPrFilter } from "@/features/prism/lib/review-center-navigation"
@@ -27,49 +28,37 @@ import { deletePullRequest, patchPullRequest } from "@/lib/api/pull-requests"
 import { PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 
-interface AiReviewOverviewProps {
-  onMenuClick?: () => void
+interface ReviewCenterAllPrsViewProps {
   onSelectPr: (prId: string) => void
-  importOpen: boolean
-  onImportOpenChange: (open: boolean) => void
-  importing: boolean
-  onImport: (url: string) => Promise<void>
   reloadToken?: number
-  embedded?: boolean
-  title?: string
   repoId?: string
-  pendingOnly?: boolean
+  repoGroups: RepoReviewGroup[]
+  groupsLoading?: boolean
+  onRepoChange: (repoId: string | null) => void
+  onImportOpenChange: (open: boolean) => void
   initialStatus?: ReviewStatus | "ALL"
   prFilter?: ReviewPrFilter
 }
 
-export function AiReviewOverview({
-  onMenuClick,
+export function ReviewCenterAllPrsView({
   onSelectPr,
-  importOpen,
-  onImportOpenChange,
-  importing,
-  onImport,
   reloadToken = 0,
-  embedded = false,
-  title,
   repoId,
-  pendingOnly = false,
+  repoGroups,
+  groupsLoading,
+  onRepoChange,
+  onImportOpenChange,
   initialStatus = "ALL",
   prFilter,
-}: AiReviewOverviewProps) {
+}: ReviewCenterAllPrsViewProps) {
   const { toast } = useToast()
   const { user } = useAuth()
-  const [statusFilter, setStatusFilter] = useState<ReviewStatus | "ALL">(
-    pendingOnly ? "OPEN" : initialStatus,
-  )
+  const [statusFilter, setStatusFilter] = useState<ReviewStatus | "ALL">(initialStatus)
   const [search, setSearch] = useState("")
 
   useEffect(() => {
-    if (!pendingOnly) {
-      setStatusFilter(initialStatus)
-    }
-  }, [initialStatus, pendingOnly])
+    setStatusFilter(initialStatus)
+  }, [initialStatus])
 
   const { items, statusCounts, loading, error, reload } = usePullRequests({
     includeExternal: "true",
@@ -81,6 +70,7 @@ export function AiReviewOverview({
     filter: prFilter === "high-risk" ? "high-risk" : undefined,
     author: prFilter === "my-created" ? user?.username : undefined,
   })
+
   const [editPr, setEditPr] = useState<PullRequestListItem | null>(null)
   const [deletePr, setDeletePr] = useState<PullRequestListItem | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -90,19 +80,15 @@ export function AiReviewOverview({
     if (reloadToken > 0) reload()
   }, [reloadToken, reload])
 
-  const filtered = useMemo(() => {
-    let list = items
-    if (pendingOnly) {
-      list = list.filter(
-        (pr) => pr.reviewStatus === "OPEN" || pr.reviewStatus === "IN_REVIEW",
-      )
-    }
-    return [...list].sort((a, b) => {
-      const favDiff = Number(Boolean(b.favorite)) - Number(Boolean(a.favorite))
-      if (favDiff !== 0) return favDiff
-      return (b.updatedAt || "").localeCompare(a.updatedAt || "")
-    })
-  }, [items, pendingOnly])
+  const filtered = useMemo(
+    () =>
+      [...items].sort((a, b) => {
+        const favDiff = Number(Boolean(b.favorite)) - Number(Boolean(a.favorite))
+        if (favDiff !== 0) return favDiff
+        return (b.updatedAt || "").localeCompare(a.updatedAt || "")
+      }),
+    [items],
+  )
 
   const activePresetLabel =
     prFilter === "high-risk"
@@ -110,8 +96,6 @@ export function AiReviewOverview({
       : prFilter === "my-created"
         ? "我创建的 PR"
         : null
-
-  const countLabel = loading ? zh.common.loading : `${filtered.length} 条`
 
   const toggleFavorite = useCallback(
     async (pr: PullRequestListItem) => {
@@ -166,50 +150,19 @@ export function AiReviewOverview({
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-      {!embedded && (
-        <>
-          <ImportPRDialog
-            open={importOpen}
-            onOpenChange={onImportOpenChange}
-            importing={importing}
-            onImport={onImport}
-          />
-          <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-border bg-panel/95 backdrop-blur-sm shrink-0">
-            <div className="flex items-center gap-2 min-w-0">
-              {onMenuClick && (
-                <button
-                  type="button"
-                  onClick={onMenuClick}
-                  className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-accent transition-colors shrink-0 lg:hidden"
-                  aria-label="打开菜单"
-                >
-                  <Menu className="w-5 h-5 text-foreground" />
-                </button>
-              )}
-              <div>
-                <h1 className="text-lg font-semibold text-foreground">AI 评审中心</h1>
-                <p className="text-xs text-muted-foreground mt-0.5">{zh.pageSubtitle.aiReview}</p>
-              </div>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => onImportOpenChange(true)}
-              className="bg-ai-blue hover:bg-sky-300 text-primary-foreground shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              {zh.aiReview.importButton}
-            </Button>
-          </div>
-        </>
-      )}
-
       <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-3 space-y-3">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <h2 className="text-sm font-semibold text-foreground shrink-0">
-            {title ?? zh.aiReview.historyTitle}
-          </h2>
-          <span className="text-xs text-muted-foreground font-mono">{countLabel}</span>
+          <h2 className="text-sm font-semibold text-foreground shrink-0">All PRs</h2>
+          <span className="text-xs text-muted-foreground font-mono">
+            {loading ? zh.common.loading : `${filtered.length} 条`}
+          </span>
+          <ReviewRepoFilter
+            groups={repoGroups}
+            selectedRepoId={repoId ?? null}
+            onSelectRepo={onRepoChange}
+            loading={groupsLoading}
+            className="sm:ml-2"
+          />
           <div className="relative flex-1 min-w-[10rem] sm:max-w-xs sm:ml-auto">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <input
@@ -222,13 +175,7 @@ export function AiReviewOverview({
           </div>
         </div>
 
-        {!pendingOnly && (
-          <ReviewStatusTabs
-            active={statusFilter}
-            counts={statusCounts}
-            onChange={setStatusFilter}
-          />
-        )}
+        <ReviewStatusTabs active={statusFilter} counts={statusCounts} onChange={setStatusFilter} />
 
         {activePresetLabel ? (
           <span className="inline-block text-[11px] px-2 py-0.5 rounded border border-ai-blue/30 bg-ai-blue/10 text-ai-blue">
@@ -240,6 +187,7 @@ export function AiReviewOverview({
           items={filtered}
           loading={loading}
           error={error}
+          variant="linear"
           onSelect={onSelectPr}
           onFavorite={(pr) => void toggleFavorite(pr)}
           onEdit={setEditPr}

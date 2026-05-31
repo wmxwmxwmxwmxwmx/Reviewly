@@ -1,30 +1,14 @@
 "use client"
 
-import {
-  BarChart3,
-  ClipboardCheck,
-  GitPullRequest,
-  LayoutDashboard,
-  ScrollText,
-  Settings,
-} from "lucide-react"
+import { BarChart3, Inbox, List } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export type ReviewCenterTab =
-  | "dashboard"
-  | "pending"
-  | "all"
-  | "rules"
-  | "stats"
-  | "settings"
+export type ReviewCenterTab = "inbox" | "all" | "insights"
 
-const TABS: { key: ReviewCenterTab; label: string; icon: typeof LayoutDashboard }[] = [
-  { key: "dashboard", label: "工作台", icon: LayoutDashboard },
-  { key: "pending", label: "我的待审批", icon: ClipboardCheck },
-  { key: "all", label: "全部 PR", icon: GitPullRequest },
-  { key: "rules", label: "审批规则", icon: ScrollText },
-  { key: "stats", label: "数据统计", icon: BarChart3 },
-  { key: "settings", label: "设置", icon: Settings },
+const TABS: { key: ReviewCenterTab; label: string; icon: typeof Inbox }[] = [
+  { key: "inbox", label: "Inbox", icon: Inbox },
+  { key: "all", label: "All PRs", icon: List },
+  { key: "insights", label: "Insights", icon: BarChart3 },
 ]
 
 interface ReviewCenterNavProps {

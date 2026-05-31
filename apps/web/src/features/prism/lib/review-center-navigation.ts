@@ -21,6 +21,30 @@ const REVIEW_STATUSES: ReviewStatus[] = [
 
 const PR_FILTERS: ReviewPrFilter[] = ["high-risk", "my-created"]
 
+const VALID_TABS: ReviewCenterTab[] = ["inbox", "all", "insights"]
+
+/** Map legacy reviewTab query values to Linear 3-tab model. */
+export function normalizeReviewTab(tab: string | null | undefined): ReviewCenterTab {
+  if (!tab) return "inbox"
+  if (VALID_TABS.includes(tab as ReviewCenterTab)) {
+    return tab as ReviewCenterTab
+  }
+  switch (tab) {
+    case "pending":
+    case "dashboard":
+      return "inbox"
+    case "stats":
+    case "rules":
+    case "settings":
+    case "governance":
+      return "insights"
+    case "all":
+      return "all"
+    default:
+      return "inbox"
+  }
+}
+
 export function parseReviewStatusParam(value: string | null): ReviewStatus | null {
   if (!value || value === "ALL") return null
   return REVIEW_STATUSES.includes(value as ReviewStatus) ? (value as ReviewStatus) : null
