@@ -568,6 +568,7 @@ Reviewly/
 | `gateway is unhealthy` / 连 `127.0.0.1:5432` 失败 | 确认 `deploy/.env` 中 `DATABASE_URL` 为 `@postgres:5432`；拉最新代码后 `docker compose -f deploy/docker-compose.yml build gateway --no-cache && docker compose -f deploy/docker-compose.yml up -d` |
 | Docker 部署失败 | 确认 Docker 已运行；`docker compose -f deploy/docker-compose.yml logs gateway` |
 | 双击 `deploy.bat` 闪退 | 已修复：失败会 `pause` 并显示退出码；若仍瞬间关闭，请从 CMD 运行 `deploy.bat` 查看输出 |
+| `bootstrap.ps1:35 Missing closing '}'` | 部署脚本语法损坏。在项目根 CMD 运行 `deploy.bat` 查看完整输出；执行 `powershell -NoProfile -File deploy\validate-scripts.ps1` 定位文件与行号；仍失败则 `git checkout -- deploy/*.ps1` 或重新 clone；需 **Windows PowerShell 5.1+**（非 PS 2.0） |
 | `[1/7]` 报 `Container Stopping` 后失败 | 已修复：`deploy.ps1` 通过 `Invoke-DockerCommand`（Start-Process）调用 docker，stderr 进度不会误判为 PowerShell 错误 |
 | Windows 无法自动装 Docker | 安装 [App Installer](https://aka.ms/getwinget) 或手动安装 Docker Desktop；右键 **以管理员身份运行** deploy.bat |
 | apt：`kali-rolling Release` 没有 Release 文件 | **Kali/Parrot** 等滚动版不能用 Docker 官方 apt 源。`sudo rm /etc/apt/sources.list.d/docker.list` 后执行 `bash install.sh`；`install-docker.sh` 会自动选 `apt_distro`（`docker.io`） |

@@ -12,6 +12,12 @@ if errorlevel 1 (
     goto :finish
 )
 
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0deploy\validate-scripts.ps1"
+if errorlevel 1 (
+    set "EXITCODE=1"
+    goto :finish
+)
+
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0deploy\bootstrap.ps1"
 set "EXITCODE=%ERRORLEVEL%"
 

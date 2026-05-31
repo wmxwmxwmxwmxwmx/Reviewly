@@ -1,3 +1,4 @@
 * text=auto
+*.ps1 text eol=crlf
 *.sh text eol=lf
 deploy/entrypoint-gateway.sh text eol=lf

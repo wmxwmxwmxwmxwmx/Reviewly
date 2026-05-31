@@ -155,3 +155,42 @@ function Exit-ReviewlyWithPause {
     }
     exit $ExitCode
 }
+
+function Test-DeployEnvOAuthValueReady {
+    param([string]$Value)
+    $v = if ($Value) { $Value.Trim() } else { "" }
+    if (-not $v) { return $false }
+    if ($v -match '<your-|your-client|your-pat|changeme|replace-me') { return $false }
+    return $true
+}
+
+function Test-DeployEnvOAuthInFile {
+    param([string]$EnvPath)
+    if (-not (Test-Path -LiteralPath $EnvPath)) { return $false }
+    $cid = Select-String -Path $EnvPath -Pattern '^GITHUB_OAUTH_CLIENT_ID=' -ErrorAction SilentlyContinue | Select-Object -First 1
+    $sec = Select-String -Path $EnvPath -Pattern '^GITHUB_OAUTH_CLIENT_SECRET=' -ErrorAction SilentlyContinue | Select-Object -First 1
+    $cidVal = if ($cid) { ($cid.Line -split "=", 2)[1].Trim() } else { "" }
+    $secVal = if ($sec) { ($sec.Line -split "=", 2)[1].Trim() } else { "" }
+    return (Test-DeployEnvOAuthValueReady $cidVal) -and (Test-DeployEnvOAuthValueReady $secVal)
+}
+
+function Test-DeployEnvReady {
+    <#
+    .SYNOPSIS
+      只读检查 deploy 环境是否已配置完成（与 deploy.ps1 Test-DevEnvReady 判定一致，不修改 .env）。
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Root
+    )
+    $envFile = Join-Path $Root "deploy\.env"
+    $gatewayEnv = Join-Path $Root "services\gateway\.env"
+    if (-not (Test-Path -LiteralPath $envFile)) { return $false }
+    $content = Get-Content -LiteralPath $envFile -Raw -Encoding UTF8
+    if ($content -match 'JWT_SECRET=<generate>|JWT_SECRET=\s*$') { return $false }
+    if ($content -match 'SETTINGS_ENCRYPTION_KEY=<generate>|SETTINGS_ENCRYPTION_KEY=\s*$') { return $false }
+    if (Test-DeployEnvOAuthInFile $envFile) { return $true }
+    if (Test-DeployEnvOAuthInFile $gatewayEnv) { return $true }
+    $bypass = Select-String -Path $envFile -Pattern '^PRISM_AUTH_BYPASS=1' -ErrorAction SilentlyContinue | Select-Object -First 1
+    return [bool]$bypass
+}
