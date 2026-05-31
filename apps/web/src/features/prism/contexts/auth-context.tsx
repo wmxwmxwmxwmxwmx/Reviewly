@@ -16,6 +16,10 @@ import { fetchAuthMe, fetchAuthStatus, fetchGithubLoginUrl, logoutAuth } from "@
 import { PrismApiError } from "@/lib/api/client"
 import { markOAuthPending } from "@/lib/auth/oauth-pending"
 import {
+  beginSwitchAccountFlow,
+  markHardReauthAttempted,
+} from "@/lib/auth/switch-account-flow"
+import {
   clearAuthSession,
   clearAuthToken,
   getAuthToken,
@@ -30,6 +34,7 @@ interface AuthContextValue {
   isAuthenticated: boolean
   login: (returnTo?: string) => Promise<void>
   loginWithOtherAccount: (loginHint?: string) => Promise<void>
+  loginWithHardReauth: (loginHint?: string) => Promise<void>
   logout: () => Promise<void>
   switchAccount: () => Promise<void>
   setTokenFromCallback: (token: string) => Promise<void>
@@ -100,18 +105,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = url
   }, [])
 
-  const loginWithOtherAccount = useCallback(async (loginHint?: string) => {
-    markOAuthPending()
-    clearAuthSession()
-    setToken(null)
-    setUser(null)
-    const hint = loginHint?.trim()
-    const { url } = await fetchGithubLoginUrl({
-      login: hint || undefined,
-      returnTo: "/",
-    })
-    window.location.href = url
-  }, [])
+  const loginWithOtherAccount = useCallback(
+    async (loginHint?: string) => {
+      const hint = loginHint?.trim()
+      beginSwitchAccountFlow(user?.githubId ?? null, hint || undefined)
+      markOAuthPending()
+      clearAuthSession()
+      setToken(null)
+      setUser(null)
+      const { url } = await fetchGithubLoginUrl({
+        login: hint || undefined,
+        returnTo: "/",
+        forceReauth: true,
+      })
+      window.location.href = url
+    },
+    [user],
+  )
+
+  const loginWithHardReauth = useCallback(
+    async (loginHint?: string) => {
+      const hint = loginHint?.trim()
+      beginSwitchAccountFlow(user?.githubId ?? null, hint || undefined)
+      markHardReauthAttempted()
+      markOAuthPending()
+      clearAuthSession()
+      setToken(null)
+      setUser(null)
+      const { url } = await fetchGithubLoginUrl({
+        login: hint || undefined,
+        returnTo: "/",
+        hardReauth: true,
+      })
+      window.location.href = url
+    },
+    [user],
+  )
 
   const logout = useCallback(async () => {
     try {
@@ -147,6 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       login,
       loginWithOtherAccount,
+      loginWithHardReauth,
       logout,
       switchAccount,
       setTokenFromCallback,
@@ -159,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       login,
       loginWithOtherAccount,
+      loginWithHardReauth,
       logout,
       switchAccount,
       setTokenFromCallback,

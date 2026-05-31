@@ -84,7 +84,9 @@ function LoginContent() {
 
   useEffect(() => {
     const oauthError = searchParams.get("error")
-    if (oauthError) {
+    if (oauthError === "same_github_account") {
+      setError(zh.login.sameGithubAccountError)
+    } else if (oauthError) {
       setError(`GitHub 登录失败：${oauthError}`)
     }
   }, [searchParams])

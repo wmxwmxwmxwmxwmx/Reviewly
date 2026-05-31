@@ -31,14 +31,18 @@ def auth_status() -> dict:
 @router.get("/github/login")
 def github_login(
     force_reauth: bool = Query(default=False),
+    hard_reauth: bool = Query(default=False),
     github_logout: bool = Query(default=False),
     login: str | None = Query(default=None),
+    prompt: str | None = Query(default=None),
     return_to: str | None = Query(default=None),
 ) -> dict:
+    use_hard = hard_reauth or github_logout
     url = auth_oauth.build_github_login_url(
         force_reauth=force_reauth,
-        github_logout=github_logout,
+        hard_reauth=use_hard,
         login=login,
+        prompt=prompt,
         return_path=return_to or "/",
     )
     return {"url": url}

@@ -45,23 +45,42 @@ def test_github_login_url(client: TestClient) -> None:
         assert "oauth/authorize" in r.json()["url"]
 
 
-def test_github_login_url_force_reauth_no_logout(client: TestClient) -> None:
+def test_github_login_url_default_no_prompt(client: TestClient) -> None:
+    r = client.get("/api/auth/github/login")
+    assert r.status_code in (200, 501)
+    if r.status_code == 200:
+        url = r.json()["url"]
+        assert "oauth/authorize" in url
+        assert "prompt=" not in url
+        assert "github.com/logout" not in url
+
+
+def test_github_login_url_force_reauth_prompt(client: TestClient) -> None:
     r = client.get("/api/auth/github/login", params={"force_reauth": True})
     assert r.status_code in (200, 501)
     if r.status_code == 200:
         url = r.json()["url"]
         assert "oauth/authorize" in url
+        assert "prompt=select_account" in url
         assert "github.com/logout" not in url
 
 
-def test_github_login_url_github_logout_ignored(client: TestClient) -> None:
-    """github_logout is API-compat only; must never return github.com/logout."""
+def test_github_login_url_hard_reauth_logout(client: TestClient) -> None:
+    r = client.get("/api/auth/github/login", params={"hard_reauth": True})
+    assert r.status_code in (200, 501)
+    if r.status_code == 200:
+        url = r.json()["url"]
+        assert "github.com/logout" in url
+        assert "return_to=" in url
+        assert "oauth%2Fauthorize" in url or "oauth/authorize" in url
+
+
+def test_github_login_url_github_logout_maps_to_hard(client: TestClient) -> None:
     r = client.get("/api/auth/github/login", params={"github_logout": True})
     assert r.status_code in (200, 501)
     if r.status_code == 200:
         url = r.json()["url"]
-        assert "oauth/authorize" in url
-        assert "github.com/logout" not in url
+        assert "github.com/logout" in url
 
 
 def test_github_login_url_login_hint(client: TestClient) -> None:

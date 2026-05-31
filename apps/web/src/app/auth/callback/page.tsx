@@ -4,9 +4,11 @@ import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2 } from "lucide-react"
 
+import { fetchAuthMe } from "@/lib/api/auth"
 import { useAuth } from "@/features/prism/contexts/auth-context"
 import { clearOAuthPending } from "@/lib/auth/oauth-pending"
 import { safeNextPath } from "@/lib/auth/safe-next-path"
+import { handleSwitchAccountAfterCallback } from "@/lib/auth/switch-account-flow"
 import { syncMyRepositories } from "@/lib/api/repos"
 
 function AuthCallbackContent() {
@@ -30,6 +32,16 @@ function AuthCallbackContent() {
         clearOAuthPending()
         await setTokenFromCallback(token)
         if (cancelled) return
+
+        const me = await fetchAuthMe()
+        const switchResult = await handleSwitchAccountAfterCallback(me)
+        if (cancelled) return
+        if (switchResult === "redirecting_hard") return
+        if (switchResult === "same_account_failed") {
+          router.replace("/login?error=same_github_account")
+          return
+        }
+
         setMessage("正在同步 GitHub 仓库…")
         try {
           await syncMyRepositories()

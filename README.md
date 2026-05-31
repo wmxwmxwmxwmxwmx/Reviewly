@@ -79,10 +79,10 @@ bash install.sh
 
 ### Windows 新机
 
-1. 安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/) 并启动（或 `winget install Docker.DockerDesktop`）。
-2. 克隆仓库后，**双击 `deploy.bat`**（静默部署，无弹窗确认）。
+1. 克隆仓库后，**双击 `deploy.bat`**（全程无交互；窗口结束时会 `pause`，不会闪退）。
+2. 脚本会自动：检测 Docker → 缺失时用 winget 安装 Docker Desktop（可能弹出 UAC）→ 启动 Desktop → 等待 `docker info` 就绪 → 部署。
 
-无需安装 Node。须先安装并启动 Docker Desktop。
+无需预装 Node / Python。若 winget 不可用或安装失败，可按提示手动安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/) 后重试；也可**右键 deploy.bat → 以管理员身份运行**。
 
 ### macOS 新机
 
@@ -237,21 +237,23 @@ docker compose -f deploy/docker-compose.yml restart gateway
 
 ### 多 GitHub 账号登录
 
-浏览器若已登录 GitHub，OAuth 会默认复用当前 session。PRism 提供两种登录方式：
+浏览器若已登录 GitHub，OAuth 会默认复用当前 session。PRism 使用**双层换号**策略：
 
-| 方式 | 入口 | 行为 |
-|------|------|------|
-| 快速登录 | 登录页主按钮「使用 GitHub 登录」 | 复用浏览器已登录 GitHub，一键授权 |
-| 其他账号 | 登录页「使用其他 GitHub 账号登录」 | 进入 `/login/switch` 分流页后选择 |
-| 切换账号 | 右上角账户菜单 → 切换账号 | 直接 OAuth authorize（不经 GitHub logout） |
-| 重新授权 | GitHub 账号对话框 → 重新授权 GitHub | 进入 `/login/switch` 或主登录页 |
+| 层级 | 入口 | Gateway 行为 |
+|------|------|----------------|
+| **快速登录** | 登录页「使用 GitHub 登录」 | 纯 `oauth/authorize`，无 `prompt` |
+| **Tier 1 切换** | `/login/switch` →「切换账号（推荐）」或账户菜单「切换账号」 | `prompt=select_account` + 可选 `login` hint |
+| **Tier 2 强制** | 同账号自动 fallback（回调检测）或「强制重新登录」按钮 | `github.com/logout?return_to=<authorize>`（仅此时） |
 
-所有登录路径均仅使用 `https://github.com/login/oauth/authorize`（**不使用** `github.com/logout`）。分流页 `/login/switch` 提供「当前账号」与「其他账号」（可选 `login` 用户名 hint）。OAuth `state` 携带 `return_path`，回调后进入 `FRONTEND_URL/auth/callback?token=…&next=…` 再跳转项目首页。
+分流页 `/login/switch` 提供三个按钮：当前账号（最快）、切换账号（Tier 1）、强制重新登录（Tier 2）。换号前会在 `sessionStorage` 记录原 `githubId`；若 Tier 1 后仍为同一账号，回调页自动触发**一次** Tier 2；若仍失败则跳转 `/login?error=same_github_account`。
+
+OAuth `state` 携带 `return_path`，回调后进入 `FRONTEND_URL/auth/callback?token=…&next=…` 再跳转项目首页。
 
 **限制与排错：**
 
 - OAuth App 为 **Development** 模式时，目标用户须在 GitHub OAuth App 的 allowlist 中（与会话无关）
-- 换号需浏览器已登录目标 GitHub 账号，或先在 GitHub 手动退出 / 使用无痕窗口
+- `prompt=select_account` 不保证 100% 弹出选择器；Tier 2 用于清除 `github.com` 会话
+- 若 `logout` 后停在 GitHub 首页：在首页点目标账号旁的 **Sign out**，再回到 PRism 点「继续 GitHub 授权」
 - OAuth 流程中断时，回到 PRism 登录页点「继续 GitHub 授权」
 - 确认 `FRONTEND_URL` 与浏览器访问地址一致（如 `http://localhost:3000`）
 
@@ -469,7 +471,9 @@ Reviewly/
 │   ├── deploy.sh / deploy.ps1
 │   ├── uninstall.sh / uninstall.ps1  # 安全卸载（仅 Reviewly 资源）
 │   ├── cleanup.sh / cleanup.ps1      # 卸载共享函数
-│   └── install-docker.sh     # Linux Docker 安装助手
+│   ├── install-docker.sh     # Linux Docker 安装助手
+│   ├── install-docker.ps1    # Windows Docker Desktop 安装/启动
+│   └── utils.ps1             # Windows 部署共享函数
 ├── install.sh                # Linux/macOS 一键安装
 ├── deploy.bat                # Windows 一键安装
 ├── docker-compose.yml        # 开发：仅 PostgreSQL
@@ -512,6 +516,8 @@ Reviewly/
 | 只能登录浏览器当前 GitHub 账号 | 见上文 [多 GitHub 账号登录](#多-github-账号登录)：登录页「使用其他 GitHub 账号登录」或右上角「切换账号」 |
 | `gateway is unhealthy` / 连 `127.0.0.1:5432` 失败 | 确认 `deploy/.env` 中 `DATABASE_URL` 为 `@postgres:5432`；拉最新代码后 `docker compose -f deploy/docker-compose.yml build gateway --no-cache && docker compose -f deploy/docker-compose.yml up -d` |
 | Docker 部署失败 | 确认 Docker 已运行；`docker compose -f deploy/docker-compose.yml logs gateway` |
+| 双击 `deploy.bat` 闪退 | 已修复：失败会 `pause` 并显示退出码；若仍瞬间关闭，请从 CMD 运行 `deploy.bat` 查看输出 |
+| Windows 无法自动装 Docker | 安装 [App Installer](https://aka.ms/getwinget) 或手动安装 Docker Desktop；右键 **以管理员身份运行** deploy.bat |
 | apt：`kali-rolling Release` 没有 Release 文件 | **Kali/Parrot** 等滚动版不能用 Docker 官方 apt 源。`sudo rm /etc/apt/sources.list.d/docker.list` 后执行 `bash install.sh`；`install-docker.sh` 会自动选 `apt_distro`（`docker.io`） |
 | Docker 安装方式 | `deploy/install-docker.sh` 按系统智能选择：Kali→系统源、Ubuntu/Debian 稳定版→官方脚本、Fedora/RHEL→dnf 通道、Arch→pacman、openSUSE→zypper |
 | Linux `Permission denied` | 执行 `bash deploy/deploy.sh -y` 或 `bash install.sh` |

@@ -5,7 +5,7 @@ import base64
 import json
 import logging
 import secrets
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import httpx
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ from app.repositories import auth_users as auth_users_repo
 logger = logging.getLogger(__name__)
 
 _OAUTH_AUTHORIZE = "https://github.com/login/oauth/authorize"
+_GITHUB_LOGOUT = "https://github.com/logout"
 _OAUTH_TOKEN = "https://github.com/login/oauth/access_token"
 _GITHUB_USER = "https://api.github.com/user"
 _GITHUB_EMAILS = "https://api.github.com/user/emails"
@@ -85,12 +86,23 @@ def parse_oauth_state(state: str | None) -> str:
     return "/"
 
 
+def _resolve_prompt(*, force_reauth: bool, prompt: str | None) -> str | None:
+    """GitHub OAuth App supports prompt=select_account (account picker)."""
+    if prompt and prompt.strip() == "select_account":
+        return "select_account"
+    if force_reauth:
+        return "select_account"
+    return None
+
+
 def build_github_login_url(
     *,
     state: str | None = None,
-    force_reauth: bool = False,  # noqa: ARG001 — API compat, no-op
-    github_logout: bool = False,  # noqa: ARG001 — API compat, no-op
+    force_reauth: bool = False,
+    hard_reauth: bool = False,
+    github_logout: bool = False,  # noqa: ARG001 — API compat; use hard_reauth
     login: str | None = None,
+    prompt: str | None = None,
     return_path: str = "/",
 ) -> str:
     if not _oauth_configured():
@@ -100,6 +112,7 @@ def build_github_login_url(
             "详见 README「GitHub OAuth 登录配置」。",
             501,
         )
+    use_hard = hard_reauth or github_logout
     oauth_state = state or encode_oauth_state(return_path)
     params = {
         "client_id": settings.github_oauth_client_id,
@@ -110,7 +123,16 @@ def build_github_login_url(
     login_hint = (login or "").strip()
     if login_hint:
         params["login"] = login_hint
-    return f"{_OAUTH_AUTHORIZE}?{urlencode(params)}"
+    resolved_prompt = _resolve_prompt(
+        force_reauth=force_reauth and not use_hard,
+        prompt=prompt,
+    )
+    if resolved_prompt:
+        params["prompt"] = resolved_prompt
+    authorize_url = f"{_OAUTH_AUTHORIZE}?{urlencode(params)}"
+    if use_hard:
+        return f"{_GITHUB_LOGOUT}?return_to={quote(authorize_url, safe='')}"
+    return authorize_url
 
 
 async def _exchange_code(code: str) -> dict:

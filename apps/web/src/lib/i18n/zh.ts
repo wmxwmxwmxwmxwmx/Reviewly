@@ -38,14 +38,19 @@ export const zh = {
     retry: "重试",
     continueOAuth: "继续 GitHub 授权",
     continueOAuthHint: "OAuth 流程中断后可点此继续完成 GitHub 授权",
+    sameGithubAccountError:
+      "仍登录为同一 GitHub 账号。请先在 GitHub 退出该账号，或使用下方「强制重新登录」。",
     switch: {
       title: "选择 GitHub 账号",
-      description: "推荐优先使用「当前 GitHub 账号」。换号时将直接进入 OAuth 授权页。",
+      description:
+        "快速登录复用当前浏览器会话；切换账号会尝试弹出 GitHub 账号选择器。",
       infoBox:
-        "GitHub 账号由浏览器会话决定。若需切换账号，请先在 GitHub 手动退出或使用无痕窗口，也可填写下方用户名作为授权提示。",
-      currentAccount: "使用当前 GitHub 账号",
-      otherAccount: "使用其他 GitHub 账号",
-      otherAccountHint: "直接进入 OAuth 授权；可选填目标 GitHub 用户名",
+        "推荐先点「切换账号」：会带上 prompt=select_account。若仍回到同一账号，系统会自动尝试一次强制退出后重登；也可直接点「强制重新登录」。",
+      currentAccount: "使用当前 GitHub 账号（最快）",
+      otherAccount: "切换账号（推荐）",
+      otherAccountHint: "尝试 GitHub 账号选择器；可选填目标用户名",
+      hardReauth: "无法切换？强制重新登录",
+      hardReauthHint: "经 GitHub 退出页后重新授权；若停在 GitHub 首页请点单个账号 Sign out",
       cancel: "返回",
     },
   },

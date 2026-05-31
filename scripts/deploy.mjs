@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 跨平台一键安装/部署：npm run deploy
- * 前置条件（Windows/macOS）：已安装并启动 Docker Desktop
+ * Windows：由 bootstrap 自动安装/启动 Docker Desktop；macOS 需已安装并启动 Docker Desktop
  */
 import { spawnSync } from "node:child_process";
 import path from "node:path";
