@@ -53,7 +53,7 @@ const STAT_CARDS = [
     icon: PencilLine,
     color: "text-risk-medium",
     bg: "bg-risk-medium/10 border-risk-medium/20",
-    reviewTab: "processing" as const,
+    reviewTab: "inbox" as const,
   },
   {
     key: "highRisk" as const,
@@ -61,7 +61,7 @@ const STAT_CARDS = [
     icon: ShieldAlert,
     color: "text-risk-high",
     bg: "bg-risk-high/10 border-risk-high/20",
-    reviewTab: "processing" as const,
+    reviewTab: "inbox" as const,
   },
   {
     key: "approved" as const,
@@ -279,7 +279,7 @@ export function DashboardView() {
                           return
                         }
                         if (activity.type.includes("pr")) {
-                          navigate("ai-review", { reviewTab: "processing" })
+                          navigate("ai-review", { reviewTab: "inbox" })
                         }
                       }}
                       className="w-full px-4 py-2.5 text-left text-sm hover:bg-surface-3/50 transition-colors flex items-center gap-2"

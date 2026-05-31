@@ -1,9 +1,16 @@
 import type { PullRequestListItem } from "@reviewly/shared"
 
 import type { AiReviewerOpinion } from "@/lib/ai/ai-reviewer-opinion"
+import type { ReviewAttentionState } from "@/features/prism/lib/review-attention-state"
 
 export type ReviewTaskRisk = "低" | "中" | "高" | "严重"
-export type ReviewTaskAction = "通过" | "需要审查" | "要求修改" | "延后"
+export type ReviewAdvisoryAction =
+  | "立即 Review"
+  | "建议重点检查"
+  | "建议要求修改"
+  | "风险较低"
+
+/** @deprecated Use ReviewInboxItem + attentionState */
 export type ReviewTaskQueue = "inbox" | "processing" | "done"
 
 export type ReviewTaskSignals = {
@@ -16,36 +23,48 @@ export type ReviewTaskSignals = {
   smallChange: boolean
 }
 
-export type ReviewTask = {
+export type ReviewInboxItem = {
   prId: string
   title: string
   repo: string
   branch: string
+  author: string
+  updatedAt: string
 
   riskLevel: ReviewTaskRisk
-  priorityScore: number
+  attentionState: ReviewAttentionState
+  attentionScore: number
+  attentionReasons: string[]
+
+  advisoryAction: ReviewAdvisoryAction
   priorityReason: string
 
-  recommendedAction: ReviewTaskAction
+  /** @deprecated legacy field */
+  priorityScore: number
+  /** @deprecated legacy field */
+  recommendedAction: ReviewAdvisoryAction
+  /** @deprecated legacy field */
   queue: ReviewTaskQueue
 
-  /** True when recommendation comes from buildAiReviewerOpinion */
   hasRealAi: boolean
-
   opinion?: AiReviewerOpinion
-
   aiSummary: string
 
-  /** 0 = unknown; only show in UI when hasRealFiles */
   filesChanged: number
   hasRealFiles: boolean
   complexity: number
   estimatedMinutes: number
 
   signals: ReviewTaskSignals
-
   source: PullRequestListItem
 }
+
+/** @deprecated Use ReviewInboxItem */
+export type ReviewTask = ReviewInboxItem
+
+export type InboxSegment = "unread" | "high_risk" | "needs_revisit" | "all"
+
+export type ReviewCenterListMode = "inbox" | "history"
 
 export function mapApiRiskToZh(
   level: PullRequestListItem["riskLevel"],
@@ -59,5 +78,20 @@ export function mapApiRiskToZh(
       return "中"
     default:
       return "低"
+  }
+}
+
+export function isHighRiskLevel(risk: ReviewTaskRisk): boolean {
+  return risk === "严重" || risk === "高"
+}
+
+export function githubStateLabel(state: PullRequestListItem["state"]): string {
+  switch (state) {
+    case "merged":
+      return "Merged"
+    case "closed":
+      return "Closed"
+    default:
+      return "Open"
   }
 }

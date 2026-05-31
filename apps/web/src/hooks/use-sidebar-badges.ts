@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from "react"
 
+import { useReviewAttentionCounts } from "@/hooks/use-managed-repo-pr-sync"
 import { useDashboardContext } from "@/features/prism/contexts/dashboard-context"
 import {
   useRunningTasksStore,
@@ -45,6 +46,7 @@ function toBadge(count: number): string | null {
 export function useSidebarBadges() {
   const { data: dashboard, error: dashboardError, loading, refetch } = useDashboardContext()
   const clientCounts = useRunningTasksStore()
+  const { badge: attentionBadge } = useReviewAttentionCounts()
 
   const serverCounts = dashboard?.runningTasks ?? defaultRunningTasks
 
@@ -64,7 +66,8 @@ export function useSidebarBadges() {
   }, [dashboard])
 
   const hasRunningTasks = useMemo(
-    () => MODULES.some((module) => totalCounts[module] > 0),
+    () =>
+      MODULES.filter((m) => m !== "aiReview").some((module) => totalCounts[module] > 0),
     [totalCounts],
   )
 
@@ -78,17 +81,20 @@ export function useSidebarBadges() {
 
   const badges = useMemo<SidebarBadgeState>(() => {
     if (!dashboard) {
-      return defaultBadges
+      return {
+        ...defaultBadges,
+        aiReview: toBadge(attentionBadge),
+      }
     }
     const findingsTaskCount = totalCounts.security + totalCounts.performance
     const findingsBadgeCount = Math.max(findingsOpenCount, findingsTaskCount)
     return {
       pullRequests: toBadge(totalCounts.pullRequests),
-      aiReview: toBadge(totalCounts.aiReview),
+      aiReview: toBadge(attentionBadge),
       findings: toBadge(findingsBadgeCount),
       governance: toBadge(totalCounts.governance),
     }
-  }, [dashboard, totalCounts, findingsOpenCount])
+  }, [dashboard, totalCounts, findingsOpenCount, attentionBadge])
 
   return { badges, error: dashboardError, loading }
 }

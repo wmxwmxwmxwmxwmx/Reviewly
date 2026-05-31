@@ -1,23 +1,26 @@
 ﻿"use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { AnalysisFinding, AiUsageMetrics, ReviewStatus } from "@reviewly/shared"
+import type { AnalysisFinding, AiUsageMetrics } from "@reviewly/shared"
 import { Loader2 } from "lucide-react"
 import { Header } from "@/features/prism/components/header"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import { useAIReviewSession } from "@/features/prism/contexts/ai-review-session-context"
-import { computePriority } from "@/features/prism/ai/priority-ranker"
+import { computeInboxItems } from "@/features/prism/ai/review-attention-score"
 import { DiffViewer } from "@/features/prism/components/diff-viewer"
 import {
   bucketFindingsBySeverity,
   ReviewFindingsDock,
 } from "@/features/prism/components/review-findings-dock"
 import { ReviewInsightDrawer } from "@/features/prism/components/review-insight-drawer"
-import { ReviewDecisionBar } from "@/features/prism/components/review-decision-bar"
+import { ReviewCompletionBanner } from "@/features/prism/components/review-completion-banner"
 import { ReviewPageSkeleton } from "@/features/prism/components/review-page-skeleton"
 import { enrichDiffFilesWithFindings, scrollTargetFromFinding } from "@/features/prism/lib/map-findings-to-diff"
 import { enrichTasksWithOpinion } from "@/features/prism/lib/review-task-verdict"
-import { readStore } from "@/features/prism/lib/review-task-store"
+import {
+  getFingerprintInput,
+  markReviewed,
+} from "@/features/prism/lib/review-attention-state"
 import { readPrioritySettings } from "@/features/prism/lib/governance-priority-settings"
 import { buildAiReviewerOpinion, isPrAnalysisComplete } from "@/lib/ai/ai-reviewer-opinion"
 import { deriveAnalysisPhase, useReviewLayout } from "@/hooks/use-review-layout"
@@ -104,6 +107,11 @@ export function AIReviewView({ prId, onReviewStatusChanged }: AIReviewViewProps)
   useEffect(() => {
     setLastReviewedPrId(prId)
   }, [prId, setLastReviewedPrId])
+
+  useEffect(() => {
+    if (!pr) return
+    markReviewed(pr.id, getFingerprintInput(pr))
+  }, [pr])
 
   useEffect(() => {
     abortLoad()
@@ -536,16 +544,6 @@ ${diffContext || "（无 diff 内容）"}`,
     onReviewStatusChanged?.()
   }, [patchLocal, reloadPr, refreshRepos, onReviewStatusChanged])
 
-  const handleCopilotStartReview = useCallback(() => {
-    const sorted = [...findings].sort(
-      (a, b) =>
-        ({ critical: 0, high: 1, medium: 2, low: 3 }[a.severity ?? "low"] ?? 9) -
-        ({ critical: 0, high: 1, medium: 2, low: 3 }[b.severity ?? "low"] ?? 9),
-    )
-    const top = sorted[0]
-    if (top) layout.jumpToFinding(scrollTargetFromFinding(top))
-  }, [findings, layout])
-
   const opinion = useMemo(
     () =>
       buildAiReviewerOpinion({
@@ -563,17 +561,13 @@ ${diffContext || "（无 diff 内容）"}`,
   const copilotTask = useMemo(() => {
     if (!pr) return null
     const metricsCache = new Map([
-      [
-        pr.id,
-        { branch: pr.sourceBranch, filesChanged: pr.filesChanged },
-      ],
+      [pr.id, { branch: pr.sourceBranch, filesChanged: pr.filesChanged }],
     ])
-    const ranked = computePriority([pr], {
+    const ranked = computeInboxItems([pr], {
       settings: readPrioritySettings(),
-      store: readStore(),
       metricsCache,
     })
-    const enriched = enrichTasksWithOpinion(ranked, readStore())
+    const enriched = enrichTasksWithOpinion(ranked)
     return enriched[0] ?? null
   }, [pr, generatedSummary, latest, findings])
 
@@ -658,21 +652,13 @@ ${diffContext || "（无 diff 内容）"}`,
           />
         ) : null}
 
-        {pr ? (
-          <div className="shrink-0 sticky bottom-0 z-40 border-t border-border bg-panel/95 backdrop-blur px-3 py-2.5 shadow-[0_-8px_24px_rgba(0,0,0,0.25)]">
-            <ReviewDecisionBar
-              prId={prId}
-              reviewStatus={pr.reviewStatus ?? "OPEN"}
-              layout="sticky"
-              compact
-              onUpdated={() => {
-                setReviewTimelineKey((k) => k + 1)
-                reloadPr()
-              }}
-              onStatusChange={(next: ReviewStatus) => {
-                patchLocal({ reviewStatus: next })
-                onReviewStatusChanged?.()
-              }}
+        {pr && analysisComplete ? (
+          <div className="shrink-0 sticky bottom-0 z-40 border-t border-border bg-panel/95 backdrop-blur px-3 py-2.5 shadow-[0_-8px_24px_rgba(0,0,0,0.25)] md:hidden">
+            <ReviewCompletionBanner
+              pr={pr}
+              highRiskCount={
+                findingsBuckets.critical.length + findingsBuckets.warning.length
+              }
             />
           </div>
         ) : null}
@@ -686,9 +672,6 @@ ${diffContext || "（无 diff 内容）"}`,
             taskForActions={copilotTask}
             analysisComplete={analysisComplete}
             onOpenFullReport={layout.openInsight}
-            onStartReview={handleCopilotStartReview}
-            onReviewStatusChanged={onReviewStatusChanged}
-            reloadPr={reloadPr}
             className="hidden md:flex"
           />
         ) : null}

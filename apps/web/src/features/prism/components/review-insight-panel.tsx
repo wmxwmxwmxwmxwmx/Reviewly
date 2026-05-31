@@ -5,7 +5,7 @@ import { ChevronDown, ChevronRight, X } from "lucide-react"
 import type { AnalysisFinding, AnalysisSummary, AiUsageMetrics, PullRequest, ReviewStatus } from "@reviewly/shared"
 
 import { AISummary } from "@/features/prism/components/ai-summary"
-import { ReviewDecisionBar } from "@/features/prism/components/review-decision-bar"
+import { ReviewCompletionBanner } from "@/features/prism/components/review-completion-banner"
 import { ReviewQuickVerdict } from "@/features/prism/components/review-quick-verdict"
 import { ReviewTimeline } from "@/features/prism/components/review-timeline"
 import { cn } from "@/lib/utils"
@@ -43,7 +43,7 @@ interface ReviewInsightPanelProps {
 export function ReviewInsightPanel({
   prId,
   pr,
-  reviewStatus,
+  reviewStatus: _reviewStatus,
   findings,
   latest,
   generatedSummary,
@@ -59,8 +59,8 @@ export function ReviewInsightPanel({
   usage,
   reviewTimelineKey = 0,
   onGoToSettings,
-  onUpdated,
-  onStatusChange,
+  onUpdated: _onUpdated,
+  onStatusChange: _onStatusChange,
   onClose,
   className,
 }: ReviewInsightPanelProps) {
@@ -114,18 +114,12 @@ export function ReviewInsightPanel({
           onGoToSettings={onGoToSettings}
         />
 
-        <div className="rounded-lg border border-border bg-card p-3 space-y-2">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-            人工决策
-          </p>
-          <ReviewDecisionBar
-            prId={prId}
-            reviewStatus={reviewStatus}
-            onUpdated={onUpdated}
-            onStatusChange={onStatusChange}
-            compact
-          />
-        </div>
+        <ReviewCompletionBanner
+          pr={pr}
+          highRiskCount={
+            findings.filter((f) => f.severity === "critical" || f.severity === "high").length
+          }
+        />
 
         <div className="rounded-lg border border-border bg-card overflow-hidden">
           <button

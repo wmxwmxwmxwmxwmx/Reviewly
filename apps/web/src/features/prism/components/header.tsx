@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import {
   ArrowRight,
+  ExternalLink,
   Loader2,
   Menu,
   PlayCircle,
@@ -10,6 +11,7 @@ import {
 import { RepositoryBadges } from "@/features/prism/components/repository-badges"
 import type { AnalysisPhase } from "@/hooks/use-review-layout"
 import { zh } from "@/lib/i18n/zh"
+import { openGitHubReview } from "@/lib/github-pr-url"
 import { cn } from "@/lib/utils"
 import type { PullRequest } from "@reviewly/shared"
 
@@ -145,6 +147,15 @@ export function Header({
             {zh.common.rescanAnalyze}
           </button>
         ) : null}
+
+        <button
+          type="button"
+          onClick={() => openGitHubReview(prData)}
+          className="hidden sm:inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[11px] font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-accent shrink-0"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          在 GitHub Review
+        </button>
 
         <motion.button
           type="button"

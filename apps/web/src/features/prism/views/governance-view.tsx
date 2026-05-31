@@ -27,13 +27,14 @@ import {
   type PrioritySettings,
 } from "@/features/prism/lib/governance-priority-settings"
 import {
+  clearDeferred,
   dispatchRescore,
   readStore,
   setIgnoredPatterns,
 } from "@/features/prism/lib/review-task-store"
 import { useGovernance } from "@/hooks/use-governance"
 import { useGovernanceOverview } from "@/hooks/use-governance-overview"
-import { useReviewTasks } from "@/hooks/use-review-tasks"
+import { useReviewInbox } from "@/hooks/use-review-inbox"
 import { useToast } from "@/hooks/use-toast"
 import { formatPrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
@@ -43,9 +44,9 @@ export function GovernanceView() {
   const { rules, loading, error, addRule, editRule, setRuleEnabled, removeRule } = useGovernance({
     includeDisabled: true,
   })
-  const { clearDeferred, restoreAllDone, allTasks } = useReviewTasks()
+  const { allItems } = useReviewInbox()
   const { loading: overviewLoading, hitCountByRule, metrics } =
-    useGovernanceOverview(allTasks)
+    useGovernanceOverview(allItems)
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<GovernanceRule | null>(null)
@@ -130,19 +131,19 @@ export function GovernanceView() {
     clearDeferred()
     dispatchRescore()
     toast({ title: "已重新评估", description: "所有 PR 优先级队列已刷新" })
-  }, [clearDeferred, toast])
+  }, [toast])
 
   const handleRebuildIndex = useCallback(() => {
     persistAdvancedSettings()
     toast({ title: "治理索引已重建", description: "已基于当前配置重建排序索引" })
   }, [persistAdvancedSettings, toast])
 
-  const handleRestoreAllDone = useCallback(() => {
-    if (!window.confirm("确定将所有已完成 PR 放回优先处理队列？")) return
-    restoreAllDone()
+  const handleClearDeferred = useCallback(() => {
+    if (!window.confirm("确定清除所有延后标记并刷新收件箱排序？")) return
+    clearDeferred()
     dispatchRescore()
-    toast({ title: "已恢复", description: "已完成 PR 已放回优先处理队列" })
-  }, [restoreAllDone, toast])
+    toast({ title: "已刷新", description: "延后标记已清除，收件箱排序已更新" })
+  }, [toast])
 
   return (
     <div className="p-5 space-y-6 max-w-6xl mx-auto">
@@ -172,10 +173,10 @@ export function GovernanceView() {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
-              onClick={handleRestoreAllDone}
+              onClick={handleClearDeferred}
               className="gap-2"
             >
-              ↩ 恢复已完成 PR
+              ↩ 清除延后标记
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

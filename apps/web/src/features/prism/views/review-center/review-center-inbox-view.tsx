@@ -1,13 +1,14 @@
 "use client"
 
+import { useState } from "react"
 import { Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { ReviewTaskList } from "@/features/prism/components/review-task-list"
-import { useReviewTaskActions } from "@/hooks/use-review-task-actions"
-import { useReviewTasks } from "@/hooks/use-review-tasks"
+import { InboxSegmentControl } from "@/features/prism/components/inbox-segment-control"
+import { ReviewInboxCardList } from "@/features/prism/components/review-inbox-card-list"
+import type { InboxSegment } from "@/features/prism/types/review-task"
+import { useReviewInbox } from "@/hooks/use-review-inbox"
 import { zh } from "@/lib/i18n/zh"
-import type { ReviewTask } from "@/features/prism/types/review-task"
 
 interface ReviewCenterInboxViewProps {
   onSelectPr: (prId: string) => void
@@ -20,18 +21,12 @@ export function ReviewCenterInboxView({
   reloadToken = 0,
   onImportOpenChange,
 }: ReviewCenterInboxViewProps) {
-  const { tasks, loading, error, reload, defer, getNextInbox } = useReviewTasks({
-    queue: "inbox",
+  const [segment, setSegment] = useState<InboxSegment>("unread")
+  const { tasks, loading, error } = useReviewInbox({
+    mode: "inbox",
+    segment,
     reloadToken,
   })
-
-  const { handleApprove, handleReview, handleDefer, handleRequestChanges } =
-    useReviewTaskActions({
-      onSelectPr,
-      reload,
-      defer,
-      getNextInbox,
-    })
 
   const emptyAction = (
     <Button
@@ -48,23 +43,21 @@ export function ReviewCenterInboxView({
 
   return (
     <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-3">
-      <div className="flex items-baseline justify-between gap-2 mb-3">
-        <h2 className="text-sm font-semibold text-foreground">优先处理</h2>
+      <div className="flex items-baseline justify-between gap-2 mb-2">
+        <h2 className="text-sm font-semibold text-foreground">收件箱</h2>
         <span className="text-xs text-muted-foreground font-mono">
-          {loading ? "…" : `${tasks.length} 条待处理`}
+          {loading ? "…" : `${tasks.length} 条需关注`}
         </span>
       </div>
 
-      <ReviewTaskList
-        tasks={tasks}
+      <InboxSegmentControl active={segment} onChange={setSegment} />
+
+      <ReviewInboxCardList
+        items={tasks}
         loading={loading}
         error={error}
-        onSelect={(task: ReviewTask) => onSelectPr(task.prId)}
-        onApprove={handleApprove}
-        onReview={handleReview}
-        onDefer={handleDefer}
-        onRequestChanges={handleRequestChanges}
-        emptyMessage="优先队列为空 — 导入 PR 或等待新的评审任务。"
+        onSelect={(item) => onSelectPr(item.prId)}
+        emptyMessage="收件箱为空 — 纳管仓库的新 PR 将自动出现在这里。"
         emptyAction={emptyAction}
       />
     </div>
