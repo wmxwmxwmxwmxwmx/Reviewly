@@ -30,7 +30,6 @@ import {
 } from "@/features/prism/lib/review-task-store"
 import { useGovernance } from "@/hooks/use-governance"
 import { useGovernanceOverview } from "@/hooks/use-governance-overview"
-import { useReviewInbox } from "@/hooks/use-review-inbox"
 import { useToast } from "@/hooks/use-toast"
 import { formatPrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
@@ -41,9 +40,7 @@ export function GovernanceView() {
   const { rules, loading, error, addRule, editRule, setRuleEnabled, removeRule } = useGovernance({
     includeDisabled: true,
   })
-  const { allItems } = useReviewInbox()
-  const { loading: overviewLoading, hitCountByRule, metrics } =
-    useGovernanceOverview(allItems)
+  const { loading: overviewLoading, hitCountByRule, metrics } = useGovernanceOverview()
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<GovernanceRule | null>(null)

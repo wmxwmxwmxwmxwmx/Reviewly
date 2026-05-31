@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import { fetchPullRequestsWithCounts } from "@/lib/api/review-center"
 import { PrismApiError } from "@/lib/api/client"
@@ -13,6 +13,7 @@ export function usePullRequests(filters?: Record<string, string | undefined>) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const filterKey = JSON.stringify(filters ?? {})
+  const loadAbortRef = useRef<AbortController | null>(null)
 
   const load = useCallback(
     async (signal: AbortSignal) => {
@@ -42,15 +43,23 @@ export function usePullRequests(filters?: Record<string, string | undefined>) {
   )
 
   useEffect(() => {
+    loadAbortRef.current?.abort()
     const ac = new AbortController()
+    loadAbortRef.current = ac
     void load(ac.signal)
-    return () => ac.abort()
+    return () => {
+      ac.abort()
+      if (loadAbortRef.current === ac) {
+        loadAbortRef.current = null
+      }
+    }
   }, [load])
 
   const reload = useCallback(() => {
+    loadAbortRef.current?.abort()
     const ac = new AbortController()
+    loadAbortRef.current = ac
     void load(ac.signal)
-    return () => ac.abort()
   }, [load])
 
   return { items, statusCounts, loading, error, reload }

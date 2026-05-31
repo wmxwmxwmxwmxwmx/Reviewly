@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   type ReactNode,
 } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -133,6 +134,14 @@ function buildQuery(
   return qs.toString()
 }
 
+function queriesMatch(a: string, b: string): boolean {
+  const pa = new URLSearchParams(a)
+  const pb = new URLSearchParams(b)
+  pa.sort()
+  pb.sort()
+  return pa.toString() === pb.toString()
+}
+
 export function NavigationProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -179,7 +188,10 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
       const qs = new URLSearchParams(searchParams.toString())
       qs.set("view", legacy.view)
       if (legacy.tab) qs.set("tab", legacy.tab)
-      router.replace(`/?${qs.toString()}`)
+      const target = qs.toString()
+      if (!queriesMatch(searchParams.toString(), target)) {
+        router.replace(`/?${target}`)
+      }
     }
   }, [legacy, router, searchParams])
 
@@ -196,17 +208,45 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
         view === "ai-review" && rawPrId && !isLegacyDemoPrId(rawPrId)
           ? { prId: rawPrId }
           : undefined
-      router.replace(`/?${buildQuery(view, params, lastReviewedPrId)}`)
+      const target = buildQuery(view, params, lastReviewedPrId)
+      if (!queriesMatch(searchParams.toString(), target)) {
+        router.replace(`/?${target}`)
+      }
     }
   }, [router, searchParams, activeView, viewParam, lastReviewedPrId])
 
+  const navigateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const navigatePendingRef = useRef<{ view: NavView; params?: NavParams } | null>(null)
+
   const navigate = useCallback(
     (view: NavView, params?: NavParams) => {
-      const query = buildQuery(view, params, lastReviewedPrId)
-      router.replace(`/?${query}`)
+      navigatePendingRef.current = { view, params }
+      if (navigateDebounceRef.current) {
+        clearTimeout(navigateDebounceRef.current)
+      }
+      navigateDebounceRef.current = setTimeout(() => {
+        navigateDebounceRef.current = null
+        const pending = navigatePendingRef.current
+        if (!pending) return
+        navigatePendingRef.current = null
+        const query = buildQuery(pending.view, pending.params, lastReviewedPrId)
+        const current =
+          typeof window !== "undefined" ? window.location.search.slice(1) : searchParams.toString()
+        if (!queriesMatch(current, query)) {
+          router.replace(`/?${query}`)
+        }
+      }, 50)
     },
-    [router, lastReviewedPrId],
+    [router, lastReviewedPrId, searchParams],
   )
+
+  useEffect(() => {
+    return () => {
+      if (navigateDebounceRef.current) {
+        clearTimeout(navigateDebounceRef.current)
+      }
+    }
+  }, [])
 
   const contextValue = useMemo(
     () => ({

@@ -4,7 +4,6 @@ import { useState } from "react"
 import { motion } from "framer-motion"
 import {
   Activity,
-  BarChart3,
   BrainCircuit,
   ChevronRight,
   ClipboardCheck,
@@ -311,15 +310,6 @@ export function DashboardView() {
           >
             <ClipboardCheck className="size-4" />
             待我评审
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => navigate("ai-review", { reviewTab: "done" })}
-            className="gap-2"
-          >
-            <BarChart3 className="size-4" />
-            质量分析
           </Button>
           <Button
             type="button"

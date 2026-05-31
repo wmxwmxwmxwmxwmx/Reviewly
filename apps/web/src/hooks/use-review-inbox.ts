@@ -66,12 +66,15 @@ export function useReviewInbox(options: UseReviewInboxOptions = {}) {
     [allItems, segment],
   )
 
-  const prefetchMetrics = useCallback(async (taskList: ReviewInboxItem[]) => {
+  const prefetchMetrics = useCallback(async (taskList: ReviewInboxItem[], signal?: AbortSignal) => {
     const needFetch = taskList
       .slice(0, 12)
       .filter((t) => t.branch === "—" || !t.hasRealFiles)
     if (needFetch.length === 0) return
-    const results = await Promise.allSettled(needFetch.map((t) => fetchPullRequest(t.prId)))
+    const results = await Promise.allSettled(
+      needFetch.map((t) => fetchPullRequest(t.prId, signal)),
+    )
+    if (signal?.aborted) return
     setMetricsCache((prev) => {
       const next = new Map(prev)
       results.forEach((result, i) => {
@@ -88,7 +91,10 @@ export function useReviewInbox(options: UseReviewInboxOptions = {}) {
   }, [])
 
   useEffect(() => {
-    if (tasks.length > 0) void prefetchMetrics(tasks)
+    if (tasks.length === 0) return
+    const ac = new AbortController()
+    void prefetchMetrics(tasks, ac.signal)
+    return () => ac.abort()
   }, [tasks, prefetchMetrics])
 
   return {

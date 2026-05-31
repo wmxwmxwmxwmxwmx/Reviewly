@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react"
 
 import type { GovernanceViolationItem } from "@/features/prism/views/governance/governance-shared"
-import type { ReviewTask } from "@/features/prism/types/review-task"
 import { fetchGovernanceViolations } from "@/lib/api/governance"
 import { fetchReviewStats } from "@/lib/api/review-center"
 import { isAbortError } from "@/lib/abort-utils"
@@ -15,9 +14,10 @@ export type GovernanceOverviewMetrics = {
   interceptedRisks: number
 }
 
-export function useGovernanceOverview(allTasks: ReviewTask[]) {
+export function useGovernanceOverview() {
   const [violations, setViolations] = useState<GovernanceViolationItem[]>([])
   const [weeklyReviews, setWeeklyReviews] = useState<number | null>(null)
+  const [highRiskCount, setHighRiskCount] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -31,6 +31,7 @@ export function useGovernanceOverview(allTasks: ReviewTask[]) {
         if (ac.signal.aborted) return
         setViolations(vList as GovernanceViolationItem[])
         setWeeklyReviews(stats?.weeklyAnalysisCount ?? null)
+        setHighRiskCount(stats?.highRiskCount ?? null)
       })
       .catch((err: unknown) => {
         if (isAbortError(err)) return
@@ -52,9 +53,6 @@ export function useGovernanceOverview(allTasks: ReviewTask[]) {
   }, [violations])
 
   const metrics = useMemo((): GovernanceOverviewMetrics => {
-    const highRiskPrs = allTasks.filter(
-      (t) => t.riskLevel === "严重" || t.riskLevel === "高",
-    ).length
     const interceptedPrs = new Set(
       violations.map((v) => v.pullRequestId).filter(Boolean),
     ).size
@@ -62,10 +60,10 @@ export function useGovernanceOverview(allTasks: ReviewTask[]) {
     return {
       ruleHits: violations.length,
       weeklyReviews: weeklyReviews ?? 0,
-      highRiskPrs,
+      highRiskPrs: highRiskCount ?? 0,
       interceptedRisks: interceptedPrs > 0 ? interceptedPrs : violations.length,
     }
-  }, [allTasks, violations, weeklyReviews])
+  }, [violations, weeklyReviews, highRiskCount])
 
   return { loading, hitCountByRule, metrics }
 }

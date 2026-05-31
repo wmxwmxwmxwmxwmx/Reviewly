@@ -73,9 +73,11 @@ export function useSidebarBadges() {
 
   useEffect(() => {
     if (!hasRunningTasks) return
-    const id = window.setInterval(() => {
+    const tick = () => {
+      if (document.hidden) return
       void refetch()
-    }, 3000)
+    }
+    const id = window.setInterval(tick, 10_000)
     return () => window.clearInterval(id)
   }, [hasRunningTasks, refetch])
 
