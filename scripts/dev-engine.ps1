@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Engine = Join-Path $Root "services\engine"
 $Build = Join-Path $Engine "build"

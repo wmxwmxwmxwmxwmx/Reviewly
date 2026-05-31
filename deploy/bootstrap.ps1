@@ -1,6 +1,10 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # 一键安装：自动安装/启动 Docker → 静默部署
 param([switch]$Help)
+
+# 强制 UTF-8 运行环境（防止 GBK 误读）
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$PSDefaultParameterValues['*:Encoding'] = 'utf8'
 
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -12,7 +16,12 @@ function Ensure-DockerForDeploy {
     }
     Write-ReviewlyLog "正在准备 Docker 环境（安装 / 启动 / 等待就绪）..."
     $installScript = Join-Path $PSScriptRoot "install-docker.ps1"
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installScript -Yes
+    $psExe = if (Test-Path "$env:ProgramFiles\PowerShell\7\pwsh.exe") {
+        "$env:ProgramFiles\PowerShell\7\pwsh.exe"
+    } else {
+        "powershell.exe"
+    }
+    & $psExe -NoProfile -ExecutionPolicy Bypass -File $installScript -Yes
     if ($LASTEXITCODE -ne 0) {
         return $LASTEXITCODE
     }
@@ -42,7 +51,12 @@ if (Test-DeployEnvReady -Root $Root) {
     $deployArgs += @("-QuickStart", "-SkipBuild")
 }
 
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $deployScript @deployArgs
+$psExe = if (Test-Path "$env:ProgramFiles\PowerShell\7\pwsh.exe") {
+    "$env:ProgramFiles\PowerShell\7\pwsh.exe"
+} else {
+    "powershell.exe"
+}
+& $psExe -NoProfile -ExecutionPolicy Bypass -File $deployScript @deployArgs
 $deployExit = $LASTEXITCODE
 
 if ($deployExit -ne 0) {

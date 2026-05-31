@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
 $AppUrl = 'http://localhost:3000'

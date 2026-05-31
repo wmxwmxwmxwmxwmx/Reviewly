@@ -6,19 +6,24 @@ chcp 65001 >nul 2>&1
 
 set "EXITCODE=1"
 
-where powershell >nul 2>&1
-if errorlevel 1 (
-    echo [Reviewly] 未找到 PowerShell。请安装 Windows PowerShell 5.1+ 或 PowerShell 7。
-    goto :finish
+if exist "%ProgramFiles%\PowerShell\7\pwsh.exe" (
+    set "PS=%ProgramFiles%\PowerShell\7\pwsh.exe"
+) else (
+    where powershell >nul 2>&1
+    if errorlevel 1 (
+        echo [Reviewly] 未找到 PowerShell。请安装 Windows PowerShell 5.1+ 或 PowerShell 7。
+        goto :finish
+    )
+    set "PS=powershell.exe"
 )
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0deploy\validate-scripts.ps1"
+"%PS%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0deploy\validate-scripts.ps1"
 if errorlevel 1 (
     set "EXITCODE=1"
     goto :finish
 )
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0deploy\bootstrap.ps1"
+"%PS%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0deploy\bootstrap.ps1"
 set "EXITCODE=%ERRORLEVEL%"
 
 :finish
@@ -28,6 +33,7 @@ if "%EXITCODE%"=="0" (
 ) else (
     echo [Reviewly] 部署失败，退出代码 %EXITCODE%
     echo 若需安装 Docker，可尝试右键 deploy.bat -^> 以管理员身份运行
+    echo 若出现乱码或 missing terminator，请运行: powershell -File scripts\ensure-ps1-bom.ps1
 )
 echo.
 pause

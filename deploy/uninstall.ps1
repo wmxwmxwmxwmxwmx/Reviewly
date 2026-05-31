@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+﻿#Requires -Version 7.0
 <#
 .SYNOPSIS
   Reviewly (PRism) 安全卸载：仅移除本项目创建的资源。

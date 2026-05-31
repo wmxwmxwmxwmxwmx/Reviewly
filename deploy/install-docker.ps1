@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Windows：安装 / 启动 Docker Desktop 并等待 daemon 就绪。

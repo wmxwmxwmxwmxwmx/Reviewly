@@ -1,4 +1,4 @@
-# Reviewly / PRism 卸载共享函数（仅操作白名单资源）
+﻿# Reviewly / PRism 卸载共享函数（仅操作白名单资源）
 
 $script:ReviewlyUtilsPath = Join-Path $PSScriptRoot "utils.ps1"
 if (Test-Path -LiteralPath $script:ReviewlyUtilsPath) {

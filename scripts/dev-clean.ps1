@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 
 Write-Host "Cleaning dev ports (3000 web, 3001 gateway)..."

@@ -1,1 +1,1 @@
-& "$PSScriptRoot/start.ps1"
+﻿& "$PSScriptRoot/start.ps1"

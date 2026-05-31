@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # Reviewly 部署共享工具（Windows）
 
 function Write-ReviewlyLog {
