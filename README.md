@@ -1,96 +1,75 @@
-# PRism
+# Reviewly
 
-**PRism** 是企业级 AI Pull Request 智能评审平台（Reviewly 仓库）。采用暗色 DevTools 风格 UI，覆盖 PR 评审、安全分析、性能评估、架构洞察与工程治理等维度。
+**Reviewly** is an AI Pull Request review platform (PRism UI). The stack uses a **Next.js BFF + FastAPI Gateway** architecture: the browser talks only to Next.js; all GitHub, AI, and sync logic runs on the Gateway.
 
-> 当前阶段：Monorepo 前后端分离；前端 Next.js + Python FastAPI 网关 + C++ 分析引擎（开发默认引擎 stub）。
+## Architecture
 
-## 功能模块
+```
+Browser
+  ↓
+Next.js (:3000) — BFF / UI only
+  ↓
+FastAPI Gateway (:3001)
+  ↓
+GitHub API + LLM APIs
+```
 
-| 模块 | 说明 | 数据状态 |
-|------|------|----------|
-| 总览面板 | 质量指标与趋势 | API（B0 mock） |
-| 合并请求 | PR 列表与筛选 | API + 部分 UI mock |
-| AI 评审 | Diff 展示 + AI 摘要/分析 | Mock diff + 真实 AI（需 API Key） |
-| 安全中心 | 漏洞与 CWE 分类 | API mock |
-| 性能 / 架构 / 治理 / 团队 | 各维度分析 | Mock / 占位 API |
-| 系统设置 | AI 模型配置 | localStorage + API settings |
+- **Next.js** proxies `/api/*` to the Gateway (rewrites + a few BFF routes for long timeouts and SSE).
+- **Gateway** owns repositories, PRs, analysis, governance, webhooks, and encrypted AI settings.
+- **Do not** call GitHub or LLM providers directly from the browser.
 
-## 技术栈
+For deeper docs see [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md).
 
-| 层级 | 技术 |
-|------|------|
-| Monorepo | npm workspaces（`apps/web`、`packages/*`） |
-| 前端 | Next.js 16、React 19、TypeScript、Tailwind CSS 4 |
-| 网关 | Python 3.11+、FastAPI（`services/gateway`，:3001） |
-| 引擎 | C++20、gRPC（`services/engine`，:50051，可选） |
-| 契约 | `packages/contracts`（OpenAPI + protobuf） |
-| 共享类型 | `@reviewly/shared` |
-
-## 环境要求
-
-- Node.js 18+（推荐 20+）
-- Python 3.11+
-- npm 9+
-- （可选）CMake 3.20+、C++ 编译器，用于构建 `services/engine`
-
-## 快速开始
+## Quick start
 
 ```bash
-# 安装前端依赖
 npm install
 
-# 同时启动 Web（:3000）与 Python Gateway（:3001）
+# Web (:3000) + Gateway (:3001)
 npm run dev
 
-# 一键启动（自动打开浏览器）
-npm run start:app
-```
-
-- **Web 前端**：http://localhost:3000
-- **API 网关**：http://localhost:3001
-
-### 仅启动 Gateway
-
-```bash
+# Gateway only
 npm run dev:gateway
-# 推荐：脚本会自动执行 alembic upgrade head
 ```
 
-若直接运行 uvicorn，Gateway 启动时也会尝试执行迁移；若失败请手动：
+| URL | Service |
+|-----|---------|
+| http://localhost:3000 | Web UI |
+| http://localhost:3001 | API Gateway |
+| http://localhost:3001/health | Health check |
 
-```bash
-cd services/gateway
-alembic upgrade head
-.venv\Scripts\python -m uvicorn app.main:app --port 3001 --reload --reload-dir app --reload-exclude "data/*"
-```
+Optional: `npm run dev:engine` (C++ gRPC engine, stub by default), `docker compose up -d` (PostgreSQL).
 
-拉取含数据库变更的代码后，若 Dashboard 或 PR URL 导入返回「服务器内部错误」，请先执行：
+## Environment variables
 
-```bash
-cd services/gateway
-python scripts/repair_migration_drift.py   # 修复 alembic 版本与 schema 漂移（可选）
-alembic upgrade head
-```
+### Gateway (`services/gateway/.env`)
 
-然后重启 Gateway，并确认 `GET http://localhost:3001/health` 中 `migrations` 为 `ok`。
+Copy from `services/gateway/.env.example`.
 
-### C++ 引擎（可选）
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_URL` | PostgreSQL or SQLite (`sqlite:///./prism.db`) |
+| `GITHUB_PAT` | GitHub API token (not `GITHUB_TOKEN`) — higher rate limits for import/sync |
+| `SETTINGS_ENCRYPTION_KEY` | Encrypts AI keys stored in DB (`openssl rand -hex 32`) |
+| `JWT_SECRET`, `GITHUB_OAUTH_*` | OAuth login (optional in dev with `PRISM_AUTH_BYPASS=1`) |
 
-```bash
-npm run dev:engine
-# 详见 services/engine/README.md
-```
+**AI provider keys** are stored **encrypted in the database** via **Settings → AI** in the UI. They are **not** set as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` environment variables.
 
-开发默认 `PRISM_STUB_ENGINE=1`，无需启动 C++ 进程。
+### Web (`apps/web/.env`)
 
+<<<<<<< HEAD
 ### PostgreSQL（B2+，仅数据库）
+=======
+Copy from `apps/web/.env.example`.
+>>>>>>> 6575adc591d7d38c215705deb2c9922aa5da87c1
 
-```bash
-docker compose up -d
-cd services/gateway
-alembic upgrade head
-```
+| Variable | Purpose |
+|----------|---------|
+| `API_URL` | BFF proxy target (default `http://127.0.0.1:3001`) |
+| `NEXT_PUBLIC_DEBUG_API` | `1` to log API traffic in dev |
+| `NEXT_PUBLIC_PRISM_AUTH_BYPASS` | `1` for local UI without OAuth |
 
+<<<<<<< HEAD
 ## 生产一键部署（Docker）
 
 `deploy/` 目录提供全栈生产部署：PostgreSQL + Gateway + Web + C++ 引擎，**一条命令**启动。
@@ -211,17 +190,28 @@ docker compose -f deploy/docker-compose.yml ps   # 四个服务均为 running
 开发与生产区别：根目录 `docker-compose.yml` **仅启动 PostgreSQL**；完整应用栈请使用 `deploy/docker-compose.yml`。
 
 ## AI 配置
+=======
+## FAQ
+>>>>>>> 6575adc591d7d38c215705deb2c9922aa5da87c1
 
-1. 打开 Web → **系统设置** → **AI 模型设置**
-2. 填写 Provider、Model、API Key
-3. 在 **AI 评审** 页发起分析
+| Issue | What to do |
+|-------|------------|
+| **Port 3001 fails to start** | Another uvicorn may be running: `npm run kill:gateway` or `npm run dev:clean`. Run migrations: `cd services/gateway && alembic upgrade head`. |
+| **GitHub rate limit** | Set `GITHUB_PAT` in gateway `.env` or sign in with GitHub OAuth (~5000/h vs ~60/h unauthenticated). |
+| **Streaming hangs** | Ensure a single Gateway instance on `:3001`. Use BFF routes (`/api/ai/chat`, architecture scan). Closing the tab aborts upstream via `AbortSignal` in `gateway-proxy.ts`. |
+| **CLOSE_WAIT (Windows)** | Leftover connections from uvicorn `--reload`. Mitigated by `scripts/kill-port.ps1` and `npm run dev:clean` before restart. |
 
-`POST /api/ai/chat` 由 Python 网关代理；API Key 仍由浏览器 localStorage 传入请求体（B10 将改为服务端加密存储）。
+## Architecture rules
 
-## 项目结构
+1. **Next.js** — UI + BFF only; `route.ts` handlers proxy to Gateway, no business logic.
+2. **Gateway** — All AI, GitHub, sync, and persistence.
+3. **No** direct browser → GitHub or browser → LLM.
+
+## Project layout
 
 ```
 Reviewly/
+<<<<<<< HEAD
 ├── apps/web/                 # Next.js 前端
 ├── services/
 │   ├── gateway/              # Python FastAPI REST
@@ -236,24 +226,30 @@ Reviewly/
     ├── start.ps1
     ├── dev-gateway.ps1
     └── dev-engine.ps1
+=======
+├── apps/web/              # Next.js frontend
+├── services/gateway/      # FastAPI API
+├── services/engine/       # C++ analysis (optional)
+├── packages/shared/       # Shared TypeScript types
+├── packages/contracts/    # OpenAPI + protobuf
+├── docs/                  # Developer guide, plan
+└── scripts/               # Dev scripts (PowerShell)
+>>>>>>> 6575adc591d7d38c215705deb2c9922aa5da87c1
 ```
 
-## 开发命令
+## Commands
 
-| 命令 | 说明 |
-|------|------|
+| Command | Description |
+|---------|-------------|
 | `npm run dev` | Web + Gateway |
-| `npm run dev:gateway` | 仅 Python API |
-| `npm run dev:engine` | 仅 C++ 引擎（stub 模式） |
-| `npm run build` | 构建 shared + web |
-| `npm run start:app` | 一键启动 |
+| `npm run dev:gateway` | Gateway only |
+| `npm run build` | Build shared + web |
+| `npm run lint` | ESLint + typecheck |
+| `npm run typecheck` | TypeScript check |
+| `npm run test` | Gateway pytest |
+| `npm run clean` | Remove build artifacts |
+| `npm run dev:clean` | Kill ports 3000/3001 and restart |
 
-Gateway 测试：`cd services/gateway && .venv\Scripts\pip install -r requirements.txt pytest && .venv\Scripts\pytest`
+## License
 
-## 开发者文档
-
-新同学请先阅读 **[docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)**（架构、目录、配置、API、数据流与排错）。
-
-## 路线图
-
-详见 [docs/plan.md](docs/plan.md)。
+Private / internal use unless otherwise noted.

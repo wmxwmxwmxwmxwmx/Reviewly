@@ -66,7 +66,7 @@ export function ReviewDecisionBar({
 }: ReviewDecisionBarProps) {
   const { toast } = useToast()
   const [status, setStatus] = useState<ReviewStatus>(reviewStatus)
-  const [comments, setComments] = useState<ReviewComment[]>([])
+  const [_comments, setComments] = useState<ReviewComment[]>([])
   const [approvalCheck, setApprovalCheck] = useState<ApprovalCheckResult | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogType, setDialogType] = useState<ReviewCommentType>("COMMENT")

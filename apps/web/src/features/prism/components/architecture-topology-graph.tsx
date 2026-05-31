@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react"
 import { Download, Maximize2, Minimize2, ZoomIn, ZoomOut } from "lucide-react"
 
-import type { ArchitectureEdge, ArchitectureGraph } from "@reviewly/shared"
+import type { ArchitectureGraph } from "@reviewly/shared"
 
 import {
   computeNodeDegrees,

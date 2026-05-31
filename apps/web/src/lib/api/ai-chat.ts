@@ -1,5 +1,6 @@
 import type { AiPersistedContent } from "@reviewly/shared"
 
+import { apiFetch, PrismApiError } from "./client"
 import { postSse } from "./sse-reader"
 
 export type ChatMessage = { role: string; content: string }
@@ -99,30 +100,17 @@ export function parseChatResponse(data: unknown): ChatResponse {
   }
 }
 
-export async function chatCompletion(
+/** Non-streaming chat via the unified JSON client. */
+export async function completeChat(
   request: ChatRequest,
   signal?: AbortSignal,
 ): Promise<ChatResponse> {
-  const response = await fetch("/api/ai/chat", {
+  const data = await apiFetch<unknown>("/api/ai/chat", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(buildChatBody({ ...request, stream: false })),
     signal,
+    noRetry: true,
   })
-
-  const data = await response.json().catch(() => null)
-  if (!response.ok) {
-    const errMsg =
-      data && typeof data === "object"
-        ? String(
-            (data as { error?: string; detail?: { error?: string } }).error ??
-              (data as { detail?: { error?: string } }).detail?.error ??
-              "AI 请求失败",
-          )
-        : "AI 请求失败"
-    throw new Error(errMsg)
-  }
-
   return parseChatResponse(data)
 }
 
@@ -152,25 +140,11 @@ export function patchPrAiSummary(
   body: AiPersistedContent,
   signal?: AbortSignal,
 ): Promise<AiPersistedContent> {
-  return fetch(`/api/pull-requests/${prId}/ai-summary`, {
+  return apiFetch<AiPersistedContent>(`/api/pull-requests/${prId}/ai-summary`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal,
-  }).then(async (res) => {
-    const data = await res.json().catch(() => null)
-    if (!res.ok) {
-      const msg =
-        data && typeof data === "object"
-          ? String(
-              (data as { error?: string; detail?: { error?: string } }).error ??
-                (data as { detail?: { error?: string } }).detail?.error ??
-                "保存 AI 摘要失败",
-            )
-          : "保存 AI 摘要失败"
-      throw new Error(msg)
-    }
-    return data as AiPersistedContent
+    noRetry: true,
   })
 }
 
@@ -178,19 +152,15 @@ export async function fetchPrAiSummary(
   prId: string,
   signal?: AbortSignal,
 ): Promise<AiPersistedContent | null> {
-  const res = await fetch(`/api/pull-requests/${prId}/ai-summary`, { signal })
-  if (res.status === 404) return null
-  if (!res.ok) {
-    const data = await res.json().catch(() => null)
-    throw new Error(
-      data && typeof data === "object"
-        ? String(
-            (data as { error?: string; detail?: { error?: string } }).error ??
-              (data as { detail?: { error?: string } }).detail?.error ??
-              "加载 AI 摘要失败",
-          )
-        : "加载 AI 摘要失败",
-    )
+  try {
+    return await apiFetch<AiPersistedContent>(`/api/pull-requests/${prId}/ai-summary`, {
+      signal,
+      noRetry: true,
+    })
+  } catch (err) {
+    if (err instanceof PrismApiError && err.status === 404) {
+      return null
+    }
+    throw err
   }
-  return (await res.json()) as AiPersistedContent
 }

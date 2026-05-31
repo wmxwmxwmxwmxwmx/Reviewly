@@ -45,7 +45,7 @@ export function ReviewQuickVerdict({
   prNumber,
   aiSummary,
   hasCompletedAnalysis,
-  fallbackScores,
+  fallbackScores: _fallbackScores,
 }: ReviewQuickVerdictProps) {
   const opinion = buildAiReviewerOpinion({
     findings,
