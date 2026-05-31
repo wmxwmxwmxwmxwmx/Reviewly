@@ -28,6 +28,7 @@ import {
   saveRepoAiAnalysis,
   syncMyRepositories,
 } from "@/lib/api/repos"
+import { syncManagedReposPullRequests } from "@/lib/repos/sync-managed-prs"
 
 interface ReposContextValue {
   repos: Repository[]
@@ -163,17 +164,23 @@ export function ReposProvider({ children }: { children: ReactNode }) {
   const sync = useCallback(async () => {
     setSyncError(null)
     try {
+      let result: SyncRepositoriesResponse
       if (isAuthenticated) {
-        const result = await syncMyRepositories()
-        await refresh()
-        return result
+        result = await syncMyRepositories()
+      } else {
+        result = await syncReposMutation()
       }
-      return await syncReposMutation()
+      const data = await fetchRepos({ type: "all" })
+      setRepos(data)
+      await syncManagedReposPullRequests(data)
+      const afterPrSync = await fetchRepos({ type: "all" })
+      setRepos(afterPrSync)
+      return result
     } catch (e: unknown) {
       setSyncError(e instanceof PrismApiError ? e.message : "同步失败")
       throw e
     }
-  }, [isAuthenticated, syncReposMutation, refresh])
+  }, [isAuthenticated, syncReposMutation])
 
   const importRepo = useCallback(
     async (url: string) => {

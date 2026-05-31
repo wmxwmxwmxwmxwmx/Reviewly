@@ -7,7 +7,7 @@ import type { PullRequest, Repository } from "@reviewly/shared"
 
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { useRepositoryJobs } from "@/hooks/use-repository-jobs"
-import { adoptRepository } from "@/lib/api/repos"
+import { adoptRepository, syncRepoPullRequests } from "@/lib/api/repos"
 import { zh } from "@/lib/i18n/zh"
 import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
 import { adoptDismissKey } from "@/lib/repository-onboarding"
@@ -71,6 +71,11 @@ export function AdoptRepoBanner({ pr, onAdopted }: AdoptRepoBannerProps) {
         sessionStorage.removeItem(adoptDismissKey(repoId))
       }
       setAdopted(true)
+      try {
+        await syncRepoPullRequests(repoId)
+      } catch {
+        /* onboarding job will retry PR sync */
+      }
       await refreshRepos()
       onAdopted?.(result.repository)
       void refresh()

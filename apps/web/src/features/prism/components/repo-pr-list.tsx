@@ -5,7 +5,10 @@ import type { PullRequestListItem } from "@reviewly/shared"
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react"
 
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
+import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { fetchPullRequests } from "@/lib/api/pull-requests"
+import { syncRepoPullRequests } from "@/lib/api/repos"
+import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
 import { formatPrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
@@ -17,6 +20,9 @@ type RepoPrListProps = {
 
 export function RepoPrList({ repoId, repoFullName }: RepoPrListProps) {
   const { navigate } = useNavigation()
+  const { repos } = useReposStore()
+  const repoRow = repos.find((r) => r.id === repoId)
+  const isManaged = isRepositoryManaged(repoRow)
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -26,6 +32,13 @@ export function RepoPrList({ repoId, repoFullName }: RepoPrListProps) {
     setLoading(true)
     setError(null)
     try {
+      if (isManaged) {
+        try {
+          await syncRepoPullRequests(repoId, signal)
+        } catch {
+          /* still list cached PRs if sync fails */
+        }
+      }
       const res = await fetchPullRequests(
         {
           repoId,
@@ -48,7 +61,7 @@ export function RepoPrList({ repoId, repoFullName }: RepoPrListProps) {
         setLoading(false)
       }
     }
-  }, [repoId, repoFullName])
+  }, [repoId, repoFullName, isManaged])
 
   useEffect(() => {
     setItems([])

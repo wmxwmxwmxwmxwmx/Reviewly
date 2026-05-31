@@ -27,7 +27,7 @@ export function normalizeMarkdownTables(markdown: string): string {
   return result.join("\n")
 }
 
-function formatInline(text: string): ReactNode[] {
+export function formatInlineMarkdown(text: string): ReactNode[] {
   const parts: ReactNode[] = []
   const pattern = /(\*\*[^*]+\*\*|`[^`]+`)/g
   let lastIndex = 0
@@ -64,6 +64,20 @@ function formatInline(text: string): ReactNode[] {
   return parts.length > 0 ? parts : [text]
 }
 
+function formatInline(text: string): ReactNode[] {
+  return formatInlineMarkdown(text)
+}
+
+function parseBulletLine(line: string): string | null {
+  const match = line.match(/^\s*[-*]\s+(.+)/)
+  return match?.[1]?.trim() ?? null
+}
+
+function parseNumberedLine(line: string): string | null {
+  const match = line.trim().match(/^\d+\.\s+(.+)/)
+  return match?.[1]?.trim() ?? null
+}
+
 function parseTableRow(line: string): string[] {
   return line
     .trim()
@@ -78,10 +92,16 @@ function isTableSeparator(line: string): boolean {
   return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell))
 }
 
+type OrderedListItem = {
+  text: string
+  subItems: string[]
+}
+
 type MarkdownBlock =
   | { type: "heading"; level: number; text: string }
   | { type: "table"; rows: string[][] }
   | { type: "ul"; items: string[] }
+  | { type: "ol"; items: OrderedListItem[] }
   | { type: "blockquote"; text: string }
   | { type: "paragraph"; text: string }
 
@@ -132,10 +152,37 @@ function parseBlocks(markdown: string): MarkdownBlock[] {
       continue
     }
 
-    if (trimmed.startsWith("- ")) {
+    const numberedText = parseNumberedLine(line)
+    if (numberedText) {
+      const items: OrderedListItem[] = []
+      while (index < lines.length) {
+        const current = lines[index]
+        const itemText = parseNumberedLine(current)
+        if (!itemText) break
+
+        index += 1
+        const subItems: string[] = []
+        while (index < lines.length) {
+          const subItem = parseBulletLine(lines[index])
+          if (subItem == null) break
+          subItems.push(subItem)
+          index += 1
+        }
+        items.push({ text: itemText, subItems })
+      }
+      if (items.length > 0) {
+        blocks.push({ type: "ol", items })
+      }
+      continue
+    }
+
+    const bulletText = parseBulletLine(line)
+    if (bulletText) {
       const items: string[] = []
-      while (index < lines.length && lines[index].trim().startsWith("- ")) {
-        items.push(lines[index].trim().slice(2))
+      while (index < lines.length) {
+        const item = parseBulletLine(lines[index])
+        if (item == null) break
+        items.push(item)
         index += 1
       }
       blocks.push({ type: "ul", items })
@@ -149,7 +196,8 @@ function parseBlocks(markdown: string): MarkdownBlock[] {
       lines[index].trim() !== "" &&
       !lines[index].trim().startsWith("#") &&
       !lines[index].trim().startsWith("|") &&
-      !lines[index].trim().startsWith("- ") &&
+      parseBulletLine(lines[index]) == null &&
+      parseNumberedLine(lines[index]) == null &&
       !lines[index].trim().startsWith("> ")
     ) {
       paragraphLines.push(lines[index].trim())
@@ -228,7 +276,7 @@ function renderBlock(block: MarkdownBlock, key: string) {
       return <MarkdownTable key={key} rows={block.rows} />
     case "ul":
       return (
-        <ul key={key} className="space-y-1 pl-1 my-1">
+        <ul key={key} className="space-y-1.5 pl-1 my-1">
           {block.items.map((item, i) => (
             <li key={i} className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
               <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground shrink-0" />
@@ -236,6 +284,29 @@ function renderBlock(block: MarkdownBlock, key: string) {
             </li>
           ))}
         </ul>
+      )
+    case "ol":
+      return (
+        <ol
+          key={key}
+          className="space-y-2 pl-4 my-1 list-decimal marker:text-muted-foreground marker:font-medium"
+        >
+          {block.items.map((item, i) => (
+            <li key={i} className="text-[11px] text-muted-foreground leading-relaxed pl-1">
+              <span>{formatInline(item.text)}</span>
+              {item.subItems.length > 0 ? (
+                <ul className="mt-1.5 space-y-1 pl-1">
+                  {item.subItems.map((subItem, subIndex) => (
+                    <li key={subIndex} className="flex items-start gap-1.5">
+                      <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground shrink-0" />
+                      <span className="leading-relaxed">{formatInline(subItem)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </li>
+          ))}
+        </ol>
       )
     case "blockquote":
       return (
@@ -263,13 +334,20 @@ interface SummaryMarkdownProps {
   className?: string
   /** preview: plain text during streaming; full: parse markdown */
   mode?: "preview" | "full"
+  /** compact: tighter spacing for AI copilot side panel */
+  variant?: "default" | "compact"
 }
 
 export function SummaryMarkdown({
   content,
   className,
   mode = "full",
+  variant = "default",
 }: SummaryMarkdownProps) {
+  if (!content.trim()) {
+    return null
+  }
+
   if (mode === "preview") {
     return (
       <pre
@@ -286,7 +364,12 @@ export function SummaryMarkdown({
   const blocks = parseBlocks(normalizeMarkdownTables(content))
 
   return (
-    <div className={cn("space-y-0.5", className)}>
+    <div
+      className={cn(
+        variant === "compact" ? "space-y-1.5 text-foreground/90" : "space-y-0.5",
+        className,
+      )}
+    >
       {blocks.map((block, i) => renderBlock(block, `md-${i}`))}
     </div>
   )

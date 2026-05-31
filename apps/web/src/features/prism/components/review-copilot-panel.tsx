@@ -5,6 +5,7 @@ import { ExternalLink, FileText, Settings2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { GovernanceRuleResults } from "@/features/prism/components/governance-rule-results"
+import { SummaryMarkdown } from "@/features/prism/components/summary-markdown"
 import { useNavigation } from "@/features/prism/contexts/navigation-context"
 import type { AnalysisPanelState } from "@/features/prism/lib/analysis-panel-state"
 import type { ReviewInboxItem } from "@/features/prism/types/review-task"
@@ -20,9 +21,6 @@ const SEVERITY_ORDER: Record<string, number> = {
 }
 
 const SECTION_FALLBACK = "未发现明显问题"
-
-const BODY_SECTION_MARKERS =
-  /问题[：:]|原因[：:]|影响[：:]|建议[：:]|Review Comment[：:]|风险传播链[：:]|Reviewer思考过程[：:]/i
 
 type ReviewCopilotPanelProps = {
   pr: PullRequest
@@ -49,71 +47,24 @@ function buildRiskPoints(findings: AnalysisFinding[]): string[] {
     .filter(Boolean)
 }
 
-function prefersBodyView(items: string[], forceBody = false): boolean {
-  if (forceBody) return true
-  if (items.length === 1 && BODY_SECTION_MARKERS.test(items[0] ?? "")) return true
-  return items.some((item) => BODY_SECTION_MARKERS.test(item))
-}
-
-function SectionList({
+function ReviewSection({
   title,
   items,
-  fallback = SECTION_FALLBACK,
 }: {
   title: string
   items: string[]
-  fallback?: string
 }) {
-  const list = items.length > 0 ? items : [fallback]
+  const list = items.length > 0 ? items : [SECTION_FALLBACK]
   return (
     <div>
       <p className="text-muted-foreground mb-1.5">{title}</p>
-      <ul className="space-y-1 list-disc list-inside text-foreground/90">
-        {list.map((p, i) => (
-          <li key={`${title}-${i}`}>{p}</li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-function SectionBody({
-  title,
-  items,
-  fallback = SECTION_FALLBACK,
-}: {
-  title: string
-  items: string[]
-  fallback?: string
-}) {
-  const list = items.length > 0 ? items : [fallback]
-  return (
-    <div>
-      <p className="text-muted-foreground mb-1.5">{title}</p>
-      <div className="space-y-2 text-foreground/90">
-        {list.map((p, i) => (
-          <p key={`${title}-body-${i}`} className="whitespace-pre-wrap text-[11px] leading-relaxed">
-            {p}
-          </p>
+      <div className="space-y-2.5">
+        {list.map((item, i) => (
+          <SummaryMarkdown key={`${title}-${i}`} content={item} variant="compact" />
         ))}
       </div>
     </div>
   )
-}
-
-function ReviewSection({
-  title,
-  items,
-  forceBody = false,
-}: {
-  title: string
-  items: string[]
-  forceBody?: boolean
-}) {
-  if (prefersBodyView(items, forceBody)) {
-    return <SectionBody title={title} items={items} />
-  }
-  return <SectionList title={title} items={items} />
 }
 
 function PanelSkeleton() {
@@ -215,9 +166,11 @@ export function ReviewCopilotPanel({
                 {opinion.verdictLabel}
               </p>
               {opinion.conclusionReason ? (
-                <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                  {opinion.conclusionReason}
-                </p>
+                <SummaryMarkdown
+                  content={opinion.conclusionReason}
+                  variant="compact"
+                  className="mt-1 text-muted-foreground"
+                />
               ) : null}
             </div>
 
@@ -236,9 +189,9 @@ export function ReviewCopilotPanel({
 
             <ReviewSection title="工程规范审查" items={styleReview} />
 
-            <ReviewSection title="风险传播分析" items={riskPropagation} forceBody />
+            <ReviewSection title="风险传播分析" items={riskPropagation} />
 
-            <ReviewSection title="建议 Review Comment" items={reviewComments} forceBody />
+            <ReviewSection title="建议 Review Comment" items={reviewComments} />
 
             <GovernanceRuleResults
               rules={governanceRules}

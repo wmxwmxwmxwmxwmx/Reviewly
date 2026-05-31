@@ -113,7 +113,7 @@ function extractBullets(section: string | undefined, max = 5): string[] {
     const trimmed = line.trim()
     const bullet = trimmed.match(/^[-*]\s+(.+)/)
     if (bullet?.[1]) {
-      const text = bullet[1].replace(/\*\*/g, "").trim()
+      const text = bullet[1].trim()
       if (text && !PLACEHOLDER_BULLET.test(text)) {
         bullets.push(text)
       }

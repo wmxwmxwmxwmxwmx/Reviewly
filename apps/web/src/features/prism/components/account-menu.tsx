@@ -31,7 +31,6 @@ import type { NavView } from "@/features/prism/components/sidebar"
 import { useAuth } from "@/features/prism/contexts/auth-context"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { useToast } from "@/hooks/use-toast"
-import { syncMyRepositories } from "@/lib/api/repos"
 import { PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { cn } from "@/lib/utils"
@@ -45,7 +44,7 @@ export function AccountMenu({ user, onNavigate }: AccountMenuProps) {
   const router = useRouter()
   const { toast } = useToast()
   const { logout, switchAccount } = useAuth()
-  const { refresh: refreshRepos } = useReposStore()
+  const { sync: syncReposAndPrs } = useReposStore()
   const [profileDialogOpen, setProfileDialogOpen] = useState(false)
   const [githubDialogOpen, setGithubDialogOpen] = useState(false)
   const [switchDialogOpen, setSwitchDialogOpen] = useState(false)
@@ -58,8 +57,7 @@ export function AccountMenu({ user, onNavigate }: AccountMenuProps) {
     if (syncing) return
     setSyncing(true)
     try {
-      const result = await syncMyRepositories()
-      await refreshRepos()
+      const result = await syncReposAndPrs()
       toast({
         title: zh.accountMenu.resyncSuccess,
         description: `${zh.accountMenu.resyncCreated} ${result.created} ${zh.accountMenu.reposUnit} · ${zh.accountMenu.resyncUpdated} ${result.updated} ${zh.accountMenu.reposUnit}`,

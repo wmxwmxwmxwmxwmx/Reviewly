@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import {
@@ -9,8 +9,8 @@ import {
 } from "@/features/prism/lib/review-attention-state"
 import { computeInboxItems } from "@/features/prism/ai/review-attention-score"
 import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
+import { syncManagedReposPullRequests } from "@/lib/repos/sync-managed-prs"
 import { repoManagementDisplayOrder } from "@/lib/repos-utils"
-import { syncRepoPullRequests } from "@/lib/api/repos"
 import { usePullRequests } from "@/hooks/use-pull-requests"
 
 const SYNC_INTERVAL_MS = 5 * 60 * 1000
@@ -73,8 +73,16 @@ export function useManagedRepoPrSyncLoop(options: {
 } = {}) {
   const { enabled = true, onSynced } = options
   const { repos } = useReposStore()
-  const managedRepos = repoManagementDisplayOrder(repos).filter(isRepositoryManaged)
+  const managedRepos = useMemo(
+    () => repoManagementDisplayOrder(repos).filter(isRepositoryManaged),
+    [repos],
+  )
+  const managedRepoIdsKey = useMemo(
+    () => managedRepos.map((r) => r.id).sort().join(","),
+    [managedRepos],
+  )
   const syncingRef = useRef(false)
+  const syncAllRef = useRef<() => Promise<void>>(async () => {})
   const lastFocusRef = useRef(0)
   const [syncBadges, setSyncBadges] = useState<SyncBadgeState>({
     newPrCount: 0,
@@ -108,13 +116,7 @@ export function useManagedRepoPrSyncLoop(options: {
     if (!enabled || syncingRef.current || managedRepos.length === 0) return
     syncingRef.current = true
     try {
-      for (const repo of managedRepos) {
-        try {
-          await syncRepoPullRequests(repo.id)
-        } catch {
-          /* skip failed repo */
-        }
-      }
+      await syncManagedReposPullRequests(managedRepos)
       reload()
       onSynced?.()
     } finally {
@@ -122,10 +124,12 @@ export function useManagedRepoPrSyncLoop(options: {
     }
   }, [enabled, managedRepos, onSynced, reload])
 
+  syncAllRef.current = syncAll
+
   useEffect(() => {
-    if (!enabled) return
-    void syncAll()
-  }, [enabled]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!enabled || !managedRepoIdsKey) return
+    void syncAllRef.current()
+  }, [enabled, managedRepoIdsKey])
 
   useEffect(() => {
     if (!enabled) return
