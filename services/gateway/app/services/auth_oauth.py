@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import httpx
 from sqlalchemy.orm import Session
@@ -16,6 +16,7 @@ from app.repositories import auth_users as auth_users_repo
 logger = logging.getLogger(__name__)
 
 _OAUTH_AUTHORIZE = "https://github.com/login/oauth/authorize"
+_GITHUB_LOGOUT = "https://github.com/logout"
 _OAUTH_TOKEN = "https://github.com/login/oauth/access_token"
 _GITHUB_USER = "https://api.github.com/user"
 _GITHUB_EMAILS = "https://api.github.com/user/emails"
@@ -52,7 +53,12 @@ def is_oauth_configured() -> bool:
     return _oauth_configured()
 
 
-def build_github_login_url(*, state: str | None = None) -> str:
+def build_github_login_url(
+    *,
+    state: str | None = None,
+    force_reauth: bool = False,
+    login: str | None = None,
+) -> str:
     if not _oauth_configured():
         raise api_error(
             "GitHub OAuth 未配置：请在 deploy/.env 或 services/gateway/.env 中设置有效的 "
@@ -67,7 +73,13 @@ def build_github_login_url(*, state: str | None = None) -> str:
         "scope": _SCOPES,
         "state": oauth_state,
     }
-    return f"{_OAUTH_AUTHORIZE}?{urlencode(params)}"
+    login_hint = (login or "").strip()
+    if login_hint:
+        params["login"] = login_hint
+    authorize_url = f"{_OAUTH_AUTHORIZE}?{urlencode(params)}"
+    if force_reauth:
+        return f"{_GITHUB_LOGOUT}?return_to={quote(authorize_url, safe='')}"
+    return authorize_url
 
 
 async def _exchange_code(code: str) -> dict:

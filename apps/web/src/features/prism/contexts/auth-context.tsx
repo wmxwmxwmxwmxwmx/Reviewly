@@ -28,6 +28,7 @@ interface AuthContextValue {
   loading: boolean
   isAuthenticated: boolean
   login: () => Promise<void>
+  loginWithOtherAccount: (loginHint?: string) => Promise<void>
   logout: () => Promise<void>
   switchAccount: () => Promise<void>
   setTokenFromCallback: (token: string) => Promise<void>
@@ -98,6 +99,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.location.href = url
   }, [])
 
+  const loginWithOtherAccount = useCallback(async (loginHint?: string) => {
+    clearAuthSession()
+    setToken(null)
+    setUser(null)
+    const { url } = await fetchGithubLoginUrl({
+      forceReauth: true,
+      login: loginHint,
+    })
+    window.location.href = url
+  }, [])
+
   const logout = useCallback(async () => {
     try {
       await logoutAuth()
@@ -110,11 +122,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const switchAccount = useCallback(async () => {
-    clearAuthSession()
-    setToken(null)
-    setUser(null)
-    await login()
-  }, [login])
+    await loginWithOtherAccount()
+  }, [loginWithOtherAccount])
 
   const setTokenFromCallback = useCallback(
     async (newToken: string) => {
@@ -134,12 +143,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       isAuthenticated,
       login,
+      loginWithOtherAccount,
       logout,
       switchAccount,
       setTokenFromCallback,
       refreshUser,
     }),
-    [user, token, loading, isAuthenticated, login, logout, switchAccount, setTokenFromCallback, refreshUser],
+    [user, token, loading, isAuthenticated, login, loginWithOtherAccount, logout, switchAccount, setTokenFromCallback, refreshUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

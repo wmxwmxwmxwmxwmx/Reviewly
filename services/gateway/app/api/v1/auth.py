@@ -27,8 +27,11 @@ def auth_status() -> dict:
 
 
 @router.get("/github/login")
-def github_login() -> dict:
-    url = auth_oauth.build_github_login_url()
+def github_login(
+    force_reauth: bool = Query(default=False),
+    login: str | None = Query(default=None),
+) -> dict:
+    url = auth_oauth.build_github_login_url(force_reauth=force_reauth, login=login)
     return {"url": url}
 
 

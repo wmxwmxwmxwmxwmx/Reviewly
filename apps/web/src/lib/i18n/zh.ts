@@ -26,6 +26,11 @@ export const zh = {
     settings: "配置 AI 模型与 API 密钥，查看本月 AI 用量（本地统计）",
     profile: "查看当前登录账号的基本信息与 GitHub 连接状态",
   },
+  login: {
+    otherAccount: "使用其他 GitHub 账号登录",
+    otherAccountHint: "将先退出 GitHub.com 当前会话，再进入授权页",
+    usernameHint: "GitHub 用户名（可选）",
+  },
   governance: {
     backToAiReview: "返回 AI 分析",
     backToReviewCenter: "返回代码评审中心",
@@ -444,7 +449,7 @@ export const zh = {
     resyncFailed: "同步失败",
     resyncing: "正在同步…",
     switchAccountTitle: "切换账号",
-    switchAccountDesc: "将退出当前账号并跳转 GitHub 重新授权，是否继续？",
+    switchAccountDesc: "将退出 PRism 与 GitHub.com 当前会话，再重新授权登录其他账号，是否继续？",
     logoutTitle: "退出登录",
     logoutDesc: "确认退出当前账号？",
     confirm: "确认",

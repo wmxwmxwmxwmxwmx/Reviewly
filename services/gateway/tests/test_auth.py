@@ -40,6 +40,24 @@ def test_github_login_url(client: TestClient) -> None:
     assert r.status_code in (200, 501)
     if r.status_code == 200:
         assert "github.com" in r.json()["url"]
+        assert "oauth/authorize" in r.json()["url"]
+
+
+def test_github_login_url_force_reauth(client: TestClient) -> None:
+    r = client.get("/api/auth/github/login", params={"force_reauth": True})
+    assert r.status_code in (200, 501)
+    if r.status_code == 200:
+        url = r.json()["url"]
+        assert "github.com/logout" in url
+        assert "return_to=" in url
+        assert "oauth%2Fauthorize" in url or "oauth/authorize" in url
+
+
+def test_github_login_url_login_hint(client: TestClient) -> None:
+    r = client.get("/api/auth/github/login", params={"login": "octocat"})
+    assert r.status_code in (200, 501)
+    if r.status_code == 200:
+        assert "login=octocat" in r.json()["url"]
 
 
 def test_sync_me_requires_real_token(client: TestClient) -> None:

@@ -8,6 +8,7 @@ import type { AuthStatusResponse } from "@reviewly/shared"
 import { useAuth } from "@/features/prism/contexts/auth-context"
 import { fetchAuthStatus } from "@/lib/api/auth"
 import { PrismApiError } from "@/lib/api/client"
+import { zh } from "@/lib/i18n/zh"
 
 function OAuthSetupGuide({ status }: { status: AuthStatusResponse }) {
   return (
@@ -48,8 +49,9 @@ function OAuthSetupGuide({ status }: { status: AuthStatusResponse }) {
 function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { isAuthenticated, loading, login, refreshUser } = useAuth()
+  const { isAuthenticated, loading, login, loginWithOtherAccount, refreshUser } = useAuth()
   const [submitting, setSubmitting] = useState(false)
+  const [otherAccountHint, setOtherAccountHint] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [authStatus, setAuthStatus] = useState<AuthStatusResponse | null>(null)
   const [statusLoading, setStatusLoading] = useState(true)
@@ -110,6 +112,21 @@ function LoginContent() {
     }
   }
 
+  const handleLoginOtherAccount = async () => {
+    if (authStatus && !authStatus.githubOAuthConfigured) {
+      setError("GitHub OAuth 尚未配置，请管理员按下方说明完成配置。")
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    try {
+      await loginWithOtherAccount(otherAccountHint.trim() || undefined)
+    } catch (e: unknown) {
+      setError(e instanceof PrismApiError ? e.message : "无法启动 GitHub 登录")
+      setSubmitting(false)
+    }
+  }
+
   const oauthReady = authStatus?.githubOAuthConfigured ?? false
   const bypassEnabled = authStatus?.authBypassEnabled ?? false
 
@@ -151,19 +168,48 @@ function LoginContent() {
           )}
 
           {oauthReady ? (
-            <button
-              type="button"
-              onClick={() => void handleLogin()}
-              disabled={submitting || loading}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Github className="h-4 w-4" />
-              )}
-              使用 GitHub 登录
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => void handleLogin()}
+                disabled={submitting || loading}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {submitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Github className="h-4 w-4" />
+                )}
+                使用 GitHub 登录
+              </button>
+              <div className="mt-3 space-y-2">
+                <input
+                  type="text"
+                  value={otherAccountHint}
+                  onChange={(e) => setOtherAccountHint(e.target.value)}
+                  placeholder={zh.login.usernameHint}
+                  disabled={submitting || loading}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ai-blue disabled:opacity-50"
+                  autoComplete="username"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleLoginOtherAccount()}
+                  disabled={submitting || loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2.5 text-sm font-medium text-foreground transition-opacity hover:bg-surface-3 disabled:opacity-50"
+                >
+                  {submitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Github className="h-4 w-4" />
+                  )}
+                  {zh.login.otherAccount}
+                </button>
+                <p className="text-center text-[11px] text-muted-foreground">
+                  {zh.login.otherAccountHint}
+                </p>
+              </div>
+            </>
           ) : (
             !bypassEnabled && authStatus && <OAuthSetupGuide status={authStatus} />
           )}
