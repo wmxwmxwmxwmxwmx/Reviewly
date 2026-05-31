@@ -29,10 +29,10 @@
 
 ```bash
 git clone <仓库地址> Reviewly && cd Reviewly
-# Windows: 双击 deploy.bat（全程无交互）
-# Linux:   bash install.sh
-# 或:      npm run deploy
+bash install.sh
 ```
+
+> **平台说明**：一键安装/部署仅支持 **Linux**。Windows 请使用 WSL，或参考 [本地开发](#本地开发) 中的 `dev:local` 模式。
 
 启动后打开 http://localhost:3000 → **使用 GitHub 登录**。
 
@@ -59,48 +59,32 @@ git clone <仓库地址> Reviewly && cd Reviewly
 
 ---
 
-## 新机从零部署
+## 新机从零部署（Linux）
 
-**前提**：新机只需 **Git**（拉代码）和 **Bash**（Linux 自带；Windows 用 Git Bash 或 WSL 亦可）。**不需要**预装 Node、Python、PostgreSQL——全部由 Docker 容器提供。
+**前提**：Linux 主机只需 **Git** 与 **Bash**。**不需要**预装 Node、Python、PostgreSQL——全部由 Docker 容器提供。
 
 ### 你需要准备什么
 
 | 必须 | 不必 |
 |------|------|
-| Git（克隆仓库） | Node.js / npm |
-| Docker（脚本可引导安装） | Python |
-| 约 4GB 磁盘 + 网络 | PostgreSQL / CMake |
+| Linux（含 WSL2） | Node.js / npm |
+| Git（克隆仓库） | Python |
+| Docker（脚本可引导安装） | PostgreSQL / CMake |
+| 约 4GB 磁盘 + 网络 | |
 
-### Linux 新机（推荐流程）
+### 一键安装
 
 ```bash
 # 1. 克隆项目
 git clone <仓库地址> Reviewly && cd Reviewly
 
-# 2. 一条命令：检查环境 → 自动安装 Docker（Linux）→ 静默部署
+# 2. 一条命令：检查环境 → 自动安装 Docker（若无）→ 静默部署
 bash install.sh
 ```
 
-- 若**没有 Docker**（仅 Linux）：自动安装 Docker（需 sudo），装完后尽量继续部署；若仍无权限则提示重新登录后再执行 `bash install.sh`。
+- 若**没有 Docker**：自动安装 Docker（需 sudo），装完后尽量继续部署；若仍无权限则提示重新登录后再执行 `bash install.sh`。
 - 若**已有 Docker**：直接构建并启动，**全程无交互**（使用仓库内 `deploy/.env`，无需手填 OAuth）。
-- **首次默认跳过 C++ 引擎**（`PRISM_STUB_ENGINE=1`），避免新机编译失败；功能完整可用，稳定后可在 `deploy/.env` 改 `PRISM_STUB_ENGINE=0` 重新部署。
-
-### Windows 新机
-
-1. 克隆仓库后，**双击 `deploy.bat`**（全程无交互；窗口结束时会 `pause`，不会闪退）。
-2. 脚本会自动：检测 Docker → 缺失时用 winget 安装 Docker Desktop（可能弹出 UAC）→ 启动 Desktop → 等待 `docker info` 就绪 → 部署。
-
-无需预装 Node / Python。若 winget 不可用或安装失败，可按提示手动安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/) 后重试；也可**右键 deploy.bat → 以管理员身份运行**。
-
-### macOS 新机
-
-1. 安装并启动 [Docker Desktop](https://www.docker.com/products/docker-desktop/)。
-2. 终端执行：
-
-```bash
-git clone <仓库地址> Reviewly && cd Reviewly
-bash install.sh
-```
+- **首次默认跳过 C++ 引擎**（`PRISM_STUB_ENGINE=1`），避免新机编译失败；功能完整可用，稳定后可在 `deploy/.env` 改 `PRISM_STUB_ENGINE=0` 后 `bash deploy/deploy.sh -y --with-engine` 重新部署。
 
 ### 部署成功后
 
@@ -110,14 +94,13 @@ bash install.sh
 
 ## 一键部署（已有 Docker）
 
-已安装并启动 Docker 时使用。**无需 Node/npm**（`npm run deploy` 仅为可选入口）。
+Linux 上已安装并启动 Docker 时使用。**无需 Node/npm**（`npm run deploy` 仅为可选入口，同样仅 Linux）。
 
-| 系统 | 命令 |
+| 场景 | 命令 |
 |------|------|
-| **Linux（新机推荐）** | `bash install.sh` |
-| **Linux / macOS** | `bash deploy/deploy.sh -y` |
-| **Windows** | 双击 `deploy.bat` |
-| 可选 | `npm run deploy`（需已装 Node） |
+| **新机（推荐）** | `bash install.sh` |
+| **已有 Docker** | `bash deploy/deploy.sh -y` |
+| 可选（需 Node） | `npm run deploy` |
 
 **脚本自动完成：**
 
@@ -136,11 +119,11 @@ bash deploy/deploy.sh -y --with-engine
 
 仅删除 **Reviewly / PRism** 创建的 Docker 容器、网络、命名卷与本地 `data/repo-cache`、`logs`、`tmp`。默认**保留** `deploy/.env` 以便重新部署。
 
-| 系统 | 标准卸载 | 彻底卸载（含配置与依赖） |
-|------|----------|--------------------------|
-| Linux / macOS | `bash deploy/uninstall.sh` | `bash deploy/uninstall.sh --purge` |
-| Windows (PS 7+) | `.\deploy\uninstall.ps1` | `.\deploy\uninstall.ps1 -Purge` |
-| 跨平台（需 Node） | `npm run uninstall` | `npm run uninstall:purge` |
+| 操作 | 命令 |
+|------|------|
+| 标准卸载 | `bash deploy/uninstall.sh` |
+| 彻底卸载（含配置与依赖） | `bash deploy/uninstall.sh --purge` |
+| 可选（需 Node，Linux） | `npm run uninstall` / `npm run uninstall:purge` |
 
 **安全约束：** 不执行 `docker system prune` / `docker volume prune`；不删除非白名单容器、卷或网络。
 
@@ -166,9 +149,8 @@ docker compose -f deploy/docker-compose.yml ps
 
 ```bash
 # 一键停止全部服务（Docker 栈 + 本地 3000/3001 进程）
-./stop.sh              # Linux/macOS
-stop.bat               # Windows 双击
-npm run stop           # 全平台
+bash stop.sh
+npm run stop           # Linux，需 Node
 ```
 
 ```bash
@@ -312,7 +294,7 @@ OAuth `state` 携带 `return_path`；Gateway 回调 302 至 `FRONTEND_URL/auth/c
 | 启用 C++ 引擎 | `deploy/.env` 设 `PRISM_STUB_ENGINE=0` 后 `bash deploy/deploy.sh -y --with-engine` |
 | 仅 Docker 不用脚本 | 见 [生产部署详解](#生产部署详解) |
 
-> **说明**：「一键」= 一条 Bash 命令或双击 bat，由 Docker 拉起服务栈；不是单个 `.exe` 安装包。
+> **说明**：「一键」= 在 Linux 上执行 `bash install.sh`，由 Docker 拉起服务栈。
 
 ---
 
@@ -320,10 +302,10 @@ OAuth `state` 携带 `return_path`；Gateway 回调 302 至 `FRONTEND_URL/auth/c
 
 | 场景 | 依赖 |
 |------|------|
-| 本地开发 | Node.js 20+、npm 9+、Python 3.11+ |
-| **新机 Docker 部署** | **仅 Git + Docker**（`bash install.sh` 可引导装 Docker） |
-| 生产部署（已有 Docker） | Docker Engine + Compose v2 |
-| C++ 引擎（可选） | `deploy/deploy.sh --with-engine` 或本地 CMake |
+| **Linux 一键部署** | **Git + Linux**（`bash install.sh` 可引导装 Docker） |
+| 生产部署（已有 Docker） | Linux + Docker Engine + Compose v2 |
+| 本地开发（任意 OS） | Node.js 20+、npm 9+、Python 3.11+ |
+| C++ 引擎（可选） | `bash deploy/deploy.sh --with-engine` 或本地 CMake |
 
 ---
 
@@ -347,14 +329,14 @@ npm run dev:clean     # 释放 3000/3001 → 确保 Postgres → 重启 dev:loca
 
 `dev:local` 下 Gateway 会**自动选择数据库**（Postgres 或 SQLite 回退），详见 `services/gateway/.env` 中 `PRISM_DATABASE_MODE`。
 
-### Docker 全栈（Web + Gateway + Postgres 均在容器）
+### Docker 全栈（Linux，Web + Gateway + Postgres 均在容器）
 
 ```bash
-npm run dev              # 已配置 .env 时快速启动（-QuickStart），跳过 OAuth 交互
+npm run dev              # Linux：已配置 .env 时快速启动
 npm run dev:clean:docker # 释放端口后重启 Docker 全栈
 npm run stop             # 停止 Docker 栈
-npm run dev -- --Rebuild # 强制重新构建镜像（Windows PowerShell）
-npm run deploy           # 完整一键部署（首次无 .env 时会初始化配置）
+npm run dev -- --Rebuild # 强制重新构建镜像
+bash install.sh          # 完整一键部署（首次无 .env 时会初始化配置）
 ```
 
 `npm run dev` 在环境已就绪时会复用 `deploy/.env` 与已运行的 `prism-postgres`，不再提示「GitHub OAuth 配置」或「按 Enter 开始构建」。
@@ -397,9 +379,9 @@ alembic upgrade head
 
 ## 生产部署详解
 
-`deploy/` 目录包含全栈 Compose 与 Dockerfile，与根目录 `deploy.bat` / `npm run deploy` 使用同一套配置。
+`deploy/` 目录包含全栈 Compose 与 Dockerfile，与根目录 `install.sh` / `npm run deploy` 使用同一套配置。
 
-### 脚本内部流程（`deploy/deploy.ps1` · `deploy/deploy.sh`）
+### 脚本内部流程（`deploy/deploy.sh`）
 
 | 步骤 | 动作 |
 |------|------|
@@ -463,7 +445,7 @@ deploy/
 ├── docker-compose.yml
 ├── Dockerfile.gateway / Dockerfile.web / Dockerfile.engine
 ├── entrypoint-gateway.sh
-├── deploy.sh / deploy.ps1
+├── deploy.sh
 └── Caddyfile              # 可选 HTTPS（默认注释）
 ```
 
@@ -508,16 +490,14 @@ Reviewly/
 ├── packages/
 │   ├── shared/               # 共享 TypeScript 类型
 │   └── contracts/            # OpenAPI + Protobuf
-├── deploy/                   # 生产 Docker 全栈
-│   ├── bootstrap.sh          # 新机引导（装 Docker + 部署）
-│   ├── deploy.sh / deploy.ps1
-│   ├── uninstall.sh / uninstall.ps1  # 安全卸载（仅 Reviewly 资源）
-│   ├── cleanup.sh / cleanup.ps1      # 卸载共享函数
-│   ├── install-docker.sh     # Linux Docker 安装助手
-│   ├── install-docker.ps1    # Windows Docker Desktop 安装/启动
-│   └── utils.ps1             # Windows 部署共享函数
-├── install.sh                # Linux/macOS 一键安装
-├── deploy.bat                # Windows 一键安装
+├── deploy/                   # 生产 Docker 全栈（Linux）
+│   ├── bootstrap.sh          # 一键引导（装 Docker + 部署）
+│   ├── deploy.sh
+│   ├── uninstall.sh          # 安全卸载（仅 Reviewly 资源）
+│   ├── cleanup.sh            # 卸载共享函数
+│   └── install-docker.sh     # Linux Docker 安装助手
+├── install.sh                # Linux 一键安装入口
+├── stop.sh                   # 停止服务入口
 ├── docker-compose.yml        # 开发：仅 PostgreSQL
 ├── docs/                     # 开发者指南、路线图
 └── scripts/                  # 开发/部署脚本
@@ -536,13 +516,12 @@ Reviewly/
 | `npm run dev:clean:docker` | 清端口 → **Docker 全栈** |
 | `npm run dev:gateway` | 仅 Gateway |
 | `npm run dev:engine` | 仅 C++ 引擎 |
-| `npm run deploy` | Docker 全栈（需 Node；等价于 deploy 脚本） |
-| `npm run stop` | 一键停止 Docker 栈与本地 3000/3001 |
-| `npm run uninstall` | 卸载 Reviewly 容器/卷/缓存（保留 `.env`） |
+| `npm run deploy` | Linux 一键部署（等价于 `bash install.sh`） |
+| `npm run stop` | 停止 Docker 栈与本地 3000/3001（Linux） |
+| `npm run uninstall` | 卸载 Reviewly 容器/卷/缓存（保留 `.env`，Linux） |
 | `npm run uninstall:purge` | 彻底卸载（含配置与 `node_modules`，需确认） |
-| `bash deploy/uninstall.sh` | Linux/macOS 卸载（同上） |
-| `.\deploy\uninstall.ps1` | Windows 卸载（PowerShell 7+） |
-| `bash install.sh` | **新机推荐**：引导装 Docker + 部署 |
+| `bash deploy/uninstall.sh` | Linux 卸载（同上） |
+| `bash install.sh` | **推荐**：引导装 Docker + 部署 |
 | `npm run build` | 构建 shared + web |
 | `npm run lint` | ESLint + TypeScript 检查 |
 | `npm run test` | Gateway pytest |
@@ -556,7 +535,7 @@ Reviewly/
 |------|------|
 | Gateway 3001 启动失败 | Docker：`docker compose -f deploy/docker-compose.yml logs gateway`；本地：`npm run dev:clean` |
 | 已配 `.env` 仍进 OAuth 向导 | 检查 `deploy/.env` / `services/gateway/.env` 是否含 `<your-` 占位符；日常开发用 `npm run dev:local` |
-| `dockerDesktopLinuxEngine` / Docker 未运行 | 打开 **Docker Desktop** 后 `npm run dev:db` 或 `npm run dev`；无 Docker 用 `npm run dev:local`（SQLite 回退） |
+| `dockerDesktopLinuxEngine` / Docker 未运行 | 确认 Docker 服务已启动：`sudo systemctl start docker`；开发可用 `npm run dev:local`（SQLite 回退） |
 | 本地 dev：`prism` 密码认证失败 / 5432 连不上 | 使用 `npm run dev`（Docker 模式）；或 `dev:local` 会自动回退 SQLite |
 | GitHub 登录 404 | `deploy/.env` 中 OAuth 仍是占位符；按 README「GitHub OAuth 登录配置」创建 OAuth App 并填写真实 Client ID/Secret |
 | GitHub OAuth 回调失败 | Callback URL 与 GitHub App 设置不一致；检查 IP/端口是否与 `OAUTH_CALLBACK_URL` 相同 |
@@ -567,10 +546,6 @@ Reviewly/
 | Gateway 容器 `Restarting`，日志 `exec /entrypoint.sh: no such file or directory` | `entrypoint-gateway.sh` 须为 **LF 换行**（Windows CRLF 会导致 Linux 容器无法启动）；拉最新代码后 `docker compose -f deploy/docker-compose.yml build gateway --no-cache && docker compose -f deploy/docker-compose.yml up -d` |
 | `gateway is unhealthy` / 连 `127.0.0.1:5432` 失败 | 确认 `deploy/.env` 中 `DATABASE_URL` 为 `@postgres:5432`；拉最新代码后 `docker compose -f deploy/docker-compose.yml build gateway --no-cache && docker compose -f deploy/docker-compose.yml up -d` |
 | Docker 部署失败 | 确认 Docker 已运行；`docker compose -f deploy/docker-compose.yml logs gateway` |
-| 双击 `deploy.bat` 闪退 | 已修复：失败会 `pause` 并显示退出码；若仍瞬间关闭，请从 CMD 运行 `deploy.bat` 查看输出 |
-| `bootstrap.ps1:35 Missing closing '}'` | 部署脚本语法损坏。在项目根 CMD 运行 `deploy.bat` 查看完整输出；执行 `powershell -NoProfile -File deploy\validate-scripts.ps1` 定位文件与行号；仍失败则 `git checkout -- deploy/*.ps1` 或重新 clone；需 **Windows PowerShell 5.1+**（非 PS 2.0） |
-| `[1/7]` 报 `Container Stopping` 后失败 | 已修复：`deploy.ps1` 通过 `Invoke-DockerCommand`（Start-Process）调用 docker，stderr 进度不会误判为 PowerShell 错误 |
-| Windows 无法自动装 Docker | 安装 [App Installer](https://aka.ms/getwinget) 或手动安装 Docker Desktop；右键 **以管理员身份运行** deploy.bat |
 | apt：`kali-rolling Release` 没有 Release 文件 | **Kali/Parrot** 等滚动版不能用 Docker 官方 apt 源。`sudo rm /etc/apt/sources.list.d/docker.list` 后执行 `bash install.sh`；`install-docker.sh` 会自动选 `apt_distro`（`docker.io`） |
 | Docker 安装方式 | `deploy/install-docker.sh` 按系统智能选择：Kali→系统源、Ubuntu/Debian 稳定版→官方脚本、Fedora/RHEL→dnf 通道、Arch→pacman、openSUSE→zypper |
 | Linux `Permission denied` | 执行 `bash deploy/deploy.sh -y` 或 `bash install.sh` |

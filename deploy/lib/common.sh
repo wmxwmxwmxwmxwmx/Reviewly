@@ -342,8 +342,8 @@ prism_check_docker() {
     if [ "$(uname -s)" = "Linux" ]; then
       prism_print_docker_install_linux
     else
-      prism_color red "未检测到 docker。请安装 Docker Desktop 并确保已启动。"
-      echo "  macOS/Windows: https://www.docker.com/products/docker-desktop/"
+      prism_color red "未检测到 docker。一键安装仅支持 Linux，请使用 bash install.sh。"
+      echo "  手动安装: https://docs.docker.com/engine/install/"
     fi
     return 1
   fi

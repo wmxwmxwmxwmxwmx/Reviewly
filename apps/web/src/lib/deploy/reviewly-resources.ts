@@ -35,13 +35,8 @@ export function defaultUninstallCommands(): Pick<
   LocalDeployResources,
   "uninstallCommand" | "purgeCommand"
 > {
-  const isWin = typeof process !== "undefined" && process.platform === "win32"
   return {
-    uninstallCommand: isWin
-      ? ".\\deploy\\uninstall.ps1"
-      : "bash deploy/uninstall.sh",
-    purgeCommand: isWin
-      ? ".\\deploy\\uninstall.ps1 -Purge"
-      : "bash deploy/uninstall.sh --purge",
+    uninstallCommand: "bash deploy/uninstall.sh",
+    purgeCommand: "bash deploy/uninstall.sh --purge",
   }
 }

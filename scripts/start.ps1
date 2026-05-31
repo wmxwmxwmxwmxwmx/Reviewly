@@ -18,6 +18,7 @@ function Test-CommandExists([string]$Name) {
 Set-Location $ProjectRoot
 
 Write-Info '正在通过 Docker 启动 PRism（Web + Gateway + Postgres）...'
+Write-Info '提示: 一键安装/部署仅支持 Linux；Windows 请使用 WSL 执行 bash install.sh，或 npm run dev:local。'
 
 if (-not (Test-CommandExists 'node')) {
   Write-Err '未检测到 Node.js，请先安装 Node.js 18+ 并加入 PATH。'

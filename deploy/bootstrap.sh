@@ -24,18 +24,19 @@ elif command -v sudo >/dev/null 2>&1 && sudo docker info >/dev/null 2>&1; then
   _docker_ok=1
 fi
 
+if [ "$(uname -s)" != "Linux" ]; then
+  prism_color red "install.sh 一键安装仅支持 Linux。"
+  prism_color yellow "已有 Docker 时可手动执行: bash deploy/deploy.sh -y"
+  exit 1
+fi
+
 if [ "$_docker_ok" = "0" ]; then
-  if [ "$(uname -s)" = "Linux" ]; then
-    PRISM_DEPLOY_YES=1 bash "$ROOT/deploy/install-docker.sh" -y
-    prism_ensure_docker_session || {
-      prism_color red "Docker 安装后当前会话仍无法访问 docker 命令。"
-      prism_color red "请注销重新登录后执行: bash deploy/bootstrap.sh"
-      exit 1
-    }
-  else
-    prism_check_docker
+  PRISM_DEPLOY_YES=1 bash "$ROOT/deploy/install-docker.sh" -y
+  prism_ensure_docker_session || {
+    prism_color red "Docker 安装后当前会话仍无法访问 docker 命令。"
+    prism_color red "请注销重新登录后执行: bash install.sh"
     exit 1
-  fi
+  }
 else
   prism_ensure_docker_session || true
 fi
