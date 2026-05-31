@@ -1,6 +1,8 @@
 # Reviewly (PRism)
 
-企业级 AI Pull Request 智能评审平台。采用 **Next.js BFF + FastAPI Gateway** 架构：浏览器只访问前端，GitHub、AI 与业务逻辑均由 Gateway 处理。
+> 企业级 AI Pull Request 智能评审平台
+
+采用 **Next.js BFF + FastAPI Gateway** 架构：浏览器只访问前端，GitHub、AI 与业务逻辑均由 Gateway 处理。
 
 | 层级 | 技术 | 默认端口 |
 |------|------|----------|
@@ -17,9 +19,13 @@
 
 详细说明见 [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)。
 
-## 评委 / 演示一键启动（无需手填 OAuth）
+## 项目展示
 
-仓库已内置 `deploy/.env` 与 GitHub OAuth，**克隆后无需再输入** `GITHUB_OAUTH_CLIENT_ID` / `SECRET`。
+公开展示视频（哔哩哔哩）：**[飞牛 AI PR Review 项目展示](https://www.bilibili.com/video/BV1ZoVD6VEMR/)**
+
+## 快速开始（评委 / 演示）
+
+仓库已内置 `deploy/.env` 与 GitHub OAuth，**克隆后无需手填** `GITHUB_OAUTH_CLIENT_ID` / `SECRET`。
 
 ```bash
 git clone <仓库地址> Reviewly && cd Reviewly
@@ -38,6 +44,8 @@ git clone <仓库地址> Reviewly && cd Reviewly
 
 ## 目录
 
+- [项目展示](#项目展示)
+- [快速开始（评委 / 演示）](#快速开始评委--演示)
 - [新机从零部署](#新机从零部署)
 - [一键部署（已有 Docker）](#一键部署已有-docker)
 - [多 GitHub 账号登录](#多-github-账号登录)
@@ -171,7 +179,7 @@ docker compose -f deploy/docker-compose.yml down -v # 清空数据库卷
 
 ### GitHub OAuth 登录配置
 
-> **评委 / 克隆即用**：`deploy/.env` 已提交仓库，内含演示用 OAuth，**无需手填**。见文首 [评委 / 演示一键启动](#评委--演示一键启动无需手填-oauth)。
+> **评委 / 克隆即用**：`deploy/.env` 已提交仓库，内含演示用 OAuth，**无需手填**。见文首 [快速开始（评委 / 演示）](#快速开始评委--演示)。
 
 > **自行部署**：若删除了仓库内 `deploy/.env`，可从 `deploy/.env.example` 复制，或运行 `bash deploy/setup-github-oauth.sh`。
 
@@ -363,6 +371,11 @@ curl http://127.0.0.1:3001/health
 
 本地 `dev:local` 模式：Gateway 会自动回退 SQLite；若仍失败，先确认健康检查：
 
+```bash
+curl http://127.0.0.1:3001/health
+npm run dev:clean
+```
+
 **C++ 引擎（可选）**
 
 ```bash
@@ -392,11 +405,11 @@ alembic upgrade head
 |------|------|
 | 1/7 | 检查 `docker`、`docker compose`、端口 3000/3001/5432 |
 | 2/7 | 初始化 `deploy/.env`（必要时合并 `services/gateway/.env`） |
-| 3/7 | `docker compose -f deploy/docker-compose.yml build` |
-| 4/7 | 启动 `postgres`，等待 `pg_isready` |
-| 5/7 | 等待 PostgreSQL 健康 |
-| 6/7 | 启动 `gateway`、`engine`；Gateway 入口执行 `alembic upgrade head` 后启动 Uvicorn |
-| 7/7 | 启动 `web`，等待 http://localhost:3000 可访问 |
+| 3/7 | 构建镜像（`postgres`、`gateway`、`web`；可选 `engine`） |
+| 4/7 | 启动 `postgres` |
+| 5/7 | 等待 PostgreSQL 健康（`pg_isready`） |
+| 6/7 | 启动 `gateway`（及可选 `engine`）；入口脚本执行 `alembic upgrade head` 后启动 Uvicorn |
+| 7/7 | 启动 `web`，轮询直至 http://localhost:3000 可访问 |
 
 ### 不用一键脚本、手动 Compose
 
@@ -551,6 +564,7 @@ Reviewly/
 | 只能登录浏览器当前 GitHub 账号 | [多 GitHub 账号登录](#多-github-账号登录)：`/login/switch` →「切换账号」；仍相同则用「强制重新登录」或等回调自动 Tier 2 |
 | 提示「仍登录为同一 GitHub 账号」 | Tier 1/2 均未换号：在 github.com 对当前账号 Sign out，或换浏览器/无痕后再登录；勿无限重试 |
 | 换号后停在 GitHub 首页 | logout 的 `return_to` 偶发失效；在 GitHub 首页 Sign out 目标账号后，回 PRism 点「继续 GitHub 授权」 |
+| Gateway 容器 `Restarting`，日志 `exec /entrypoint.sh: no such file or directory` | `entrypoint-gateway.sh` 须为 **LF 换行**（Windows CRLF 会导致 Linux 容器无法启动）；拉最新代码后 `docker compose -f deploy/docker-compose.yml build gateway --no-cache && docker compose -f deploy/docker-compose.yml up -d` |
 | `gateway is unhealthy` / 连 `127.0.0.1:5432` 失败 | 确认 `deploy/.env` 中 `DATABASE_URL` 为 `@postgres:5432`；拉最新代码后 `docker compose -f deploy/docker-compose.yml build gateway --no-cache && docker compose -f deploy/docker-compose.yml up -d` |
 | Docker 部署失败 | 确认 Docker 已运行；`docker compose -f deploy/docker-compose.yml logs gateway` |
 | 双击 `deploy.bat` 闪退 | 已修复：失败会 `pause` 并显示退出码；若仍瞬间关闭，请从 CMD 运行 `deploy.bat` 查看输出 |
