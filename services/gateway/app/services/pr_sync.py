@@ -6,12 +6,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.db.models import AuthUser, Repository
+from app.db.models import AuthUser, PullRequest, Repository
 from app.github.pull_requests import fetch_pull_request_diff, fetch_repo_pull_requests
 from app.github.sync import _map_pr, _persist_pull_request
 from app.repositories import pull_requests as pr_repo
 from app.repositories import auth_users as auth_users_repo
 from app.services.activity_log import record_activity
+from app.services.analysis_cache import extract_shas_from_github_pr
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +27,36 @@ async def _persist_pr_with_token(
     token: str,
     owner_user_id: str | None = None,
 ) -> tuple[str, bool]:
-    patch = await fetch_pull_request_diff(owner, name, gh_pr["number"], token)
     pr_id = f"pr-{gh_pr['id']}"
-    existing = pr_repo.get_pull_request(session, pr_id)
-    created = existing is None
+    existing_row = session.get(PullRequest, pr_id)
+    created = existing_row is None
+    head_sha, base_sha = extract_shas_from_github_pr(gh_pr)
+    full_name = gh_repo.get("full_name") or f"{owner}/{name}"
+    repo_id = existing_row.repository_id if existing_row else f"repo-{gh_repo['id']}"
+
+    if (
+        existing_row is not None
+        and head_sha
+        and existing_row.head_sha == head_sha
+    ):
+        _, pr_payload = _map_pr(gh_pr, repo_id, full_name)
+        pr_repo.upsert_pull_request(
+            session,
+            pr_id=pr_id,
+            repository_id=repo_id,
+            number=gh_pr["number"],
+            github_id=str(gh_pr["id"]),
+            state=gh_pr.get("state", "open"),
+            risk_score=pr_payload["riskScore"],
+            payload=pr_payload,
+            owner_user_id=owner_user_id,
+            head_sha=head_sha,
+            base_sha=base_sha,
+        )
+        session.commit()
+        return pr_id, False
+
+    patch = await fetch_pull_request_diff(owner, name, gh_pr["number"], token)
     await _persist_pull_request(
         session,
         gh_pr=gh_pr,

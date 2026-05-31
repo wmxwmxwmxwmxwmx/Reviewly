@@ -661,8 +661,8 @@ function RepoCard({
                 </button>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <div className="mt-2 text-xs max-h-64 overflow-y-auto">
-                  <SummaryMarkdown content={analysisContent} />
+                <div className="mt-2 max-h-80 overflow-y-auto rounded-md border border-border/60 bg-surface-3/20 px-2 py-2">
+                  <SummaryMarkdown content={analysisContent} variant="report" />
                 </div>
               </CollapsibleContent>
             </Collapsible>

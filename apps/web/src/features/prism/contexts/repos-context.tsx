@@ -29,6 +29,10 @@ import {
   syncMyRepositories,
 } from "@/lib/api/repos"
 import { syncManagedReposPullRequests } from "@/lib/repos/sync-managed-prs"
+import {
+  buildAnalyzePrompt,
+  REPO_ANALYSIS_SYSTEM_PROMPT,
+} from "@/lib/ai/repo-analysis-prompt"
 
 interface ReposContextValue {
   repos: Repository[]
@@ -49,73 +53,6 @@ interface ReposContextValue {
 }
 
 const ReposContext = createContext<ReposContextValue | null>(null)
-
-function buildAnalyzePrompt(
-  repo: Repository,
-  findings: { title: string; severity: string; file: string; line: number; description?: string }[],
-  ctx: {
-    readme: string
-    fileTree?: string
-    configSnippets?: Record<string, string>
-    contextWarnings?: string[]
-  },
-) {
-  const findingsBlock =
-    findings.length > 0
-      ? findings
-          .map(
-            (f) =>
-              `- [${f.severity}] ${f.file}:${f.line} ${f.title}\n  ${f.description ?? ""}`,
-          )
-          .join("\n")
-      : "（暂无 PR 分析 findings）"
-
-  const warningsBlock =
-    ctx.contextWarnings && ctx.contextWarnings.length > 0
-      ? ctx.contextWarnings.map((w) => `- ${w}`).join("\n")
-      : "（无）"
-
-  const configBlock =
-    ctx.configSnippets && Object.keys(ctx.configSnippets).length > 0
-      ? Object.entries(ctx.configSnippets)
-          .map(([path, body]) => `### ${path}\n\`\`\`\n${body}\n\`\`\``)
-          .join("\n\n")
-      : "（未获取到 package.json / pyproject.toml 等配置文件）"
-
-  return `请分析以下 GitHub 仓库，用中文 Markdown 输出，必须包含四个二级标题：
-
-## 项目复杂度分析
-## 技术栈分析
-## 风险模块推测
-## 可维护性分析
-
-要求：
-- 必须基于下方 README、目录树、配置文件与 findings 作答；禁止仅根据仓库名猜测。
-- 若某类数据缺失，在对应章节明确说明「数据不足」并给出有限结论。
-
-仓库：${repo.fullName}
-描述：${repo.description ?? "（无）"}
-语言（GitHub）：${repo.language ?? "（未知）"}
-默认分支：${repo.defaultBranch}
-开放 PR 数：${repo.openPrCount}
-健康度：${repo.healthScore}
-是否私有：${repo.isPrivate ? "是" : "否"}
-
-上下文告警：
-${warningsBlock}
-
-最近 PR Findings：
-${findingsBlock}
-
-仓库文件路径（节选）：
-${ctx.fileTree?.trim() || "（无法获取目录树）"}
-
-关键配置文件：
-${configBlock}
-
-README（节选）：
-${ctx.readme?.trim() || "（无法获取 README）"}`
-}
 
 export function ReposProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth()
@@ -284,8 +221,7 @@ export function ReposProvider({ children }: { children: ReactNode }) {
             messages: [
               {
                 role: "system",
-                content:
-                  "你是资深架构师与代码评审专家。仅基于用户提供的仓库元数据、目录树、配置文件、findings 与 README 分析；禁止编造未在上下文中出现的文件路径或依赖。",
+                content: REPO_ANALYSIS_SYSTEM_PROMPT,
               },
               { role: "user", content: prompt },
             ],

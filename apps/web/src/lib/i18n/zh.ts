@@ -203,6 +203,7 @@ export const zh = {
     prListEmpty: "暂无合并请求",
     prListEmptyHint: "若 GitHub 上有开放 PR，请先同步该仓库的合并请求。",
     prListLoadFailed: "PR 列表加载失败",
+    prListSyncing: "正在从 GitHub 同步最新 PR…",
     prListColTitle: "标题",
     prListColAuthor: "作者",
     prListColState: "状态",

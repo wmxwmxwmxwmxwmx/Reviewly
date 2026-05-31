@@ -74,8 +74,11 @@ function parseBulletLine(line: string): string | null {
 }
 
 function parseNumberedLine(line: string): string | null {
-  const match = line.trim().match(/^\d+\.\s+(.+)/)
-  return match?.[1]?.trim() ?? null
+  const trimmed = line.trim()
+  const dotMatch = trimmed.match(/^\d+[.)]\s+(.+)/)
+  if (dotMatch) return dotMatch[1].trim()
+  const spacedMatch = trimmed.match(/^\d+\s+(\*\*.+)/)
+  return spacedMatch?.[1]?.trim() ?? null
 }
 
 function parseTableRow(line: string): string[] {
@@ -156,6 +159,11 @@ function parseBlocks(markdown: string): MarkdownBlock[] {
     if (numberedText) {
       const items: OrderedListItem[] = []
       while (index < lines.length) {
+        while (index < lines.length && lines[index].trim() === "") {
+          index += 1
+        }
+        if (index >= lines.length) break
+
         const current = lines[index]
         const itemText = parseNumberedLine(current)
         if (!itemText) break
@@ -163,6 +171,12 @@ function parseBlocks(markdown: string): MarkdownBlock[] {
         index += 1
         const subItems: string[] = []
         while (index < lines.length) {
+          if (lines[index].trim() === "") {
+            const nextIndex = index + 1
+            if (nextIndex < lines.length && parseNumberedLine(lines[nextIndex])) {
+              break
+            }
+          }
           const subItem = parseBulletLine(lines[index])
           if (subItem == null) break
           subItems.push(subItem)
@@ -211,27 +225,55 @@ function parseBlocks(markdown: string): MarkdownBlock[] {
 
 const headingClass: Record<number, string> = {
   1: "text-sm font-semibold text-foreground mt-3 mb-1.5 first:mt-0",
-  2: "text-xs font-semibold text-foreground mt-3 mb-1 first:mt-0",
+  2: "text-xs font-semibold text-foreground mt-3 mb-1.5 first:mt-0 pb-1 border-b border-border/70",
   3: "text-xs font-semibold text-foreground mt-2.5 mb-1 first:mt-0",
   4: "text-[11px] font-semibold text-foreground mt-2 mb-0.5 first:mt-0",
   5: "text-[11px] font-medium text-foreground mt-2 mb-0.5",
   6: "text-[11px] font-medium text-muted-foreground mt-1.5 mb-0.5",
 }
 
-function MarkdownTable({ rows }: { rows: string[][] }) {
+const headingClassReport: Record<number, string> = {
+  ...headingClass,
+  2: "text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mt-3 mb-1 first:mt-0 pb-1 border-b border-border/60",
+}
+
+function severityCellClass(cell: string): string | undefined {
+  const value = cell.trim()
+  if (value === "高") return "text-risk-high font-medium"
+  if (value === "中") return "text-risk-medium font-medium"
+  if (value === "低") return "text-risk-low font-medium"
+  return undefined
+}
+
+function MarkdownTable({
+  rows,
+  variant = "default",
+}: {
+  rows: string[][]
+  variant?: "default" | "compact" | "report"
+}) {
   if (rows.length === 0) return null
 
   const [header, ...body] = rows
+  const dense = variant === "compact" || variant === "report"
 
   return (
-    <div className="overflow-x-auto rounded-md border border-border my-2">
+    <div
+      className={cn(
+        "overflow-x-auto rounded-md border border-border my-1.5",
+        variant === "report" && "my-2",
+      )}
+    >
       <table className="w-full border-collapse text-[10px]">
         <thead>
-          <tr className="bg-surface-2">
+          <tr className="bg-surface-2/80">
             {header.map((cell, i) => (
               <th
                 key={`h-${i}`}
-                className="px-2.5 py-1.5 text-left font-semibold text-foreground border-b border-border"
+                className={cn(
+                  "text-left font-semibold text-foreground border-b border-border",
+                  dense ? "px-2 py-1" : "px-2.5 py-1.5",
+                )}
               >
                 {formatInline(cell)}
               </th>
@@ -241,11 +283,18 @@ function MarkdownTable({ rows }: { rows: string[][] }) {
         {body.length > 0 && (
           <tbody>
             {body.map((row, rowIndex) => (
-              <tr key={`r-${rowIndex}`} className="border-b border-border last:border-b-0">
+              <tr
+                key={`r-${rowIndex}`}
+                className="border-b border-border/60 last:border-b-0 even:bg-surface-3/20"
+              >
                 {row.map((cell, cellIndex) => (
                   <td
                     key={`c-${rowIndex}-${cellIndex}`}
-                    className="px-2.5 py-1.5 text-muted-foreground align-top"
+                    className={cn(
+                      "text-muted-foreground align-top leading-snug",
+                      dense ? "px-2 py-1" : "px-2.5 py-1.5",
+                      severityCellClass(cell),
+                    )}
                   >
                     {formatInline(cell)}
                   </td>
@@ -259,11 +308,16 @@ function MarkdownTable({ rows }: { rows: string[][] }) {
   )
 }
 
-function renderBlock(block: MarkdownBlock, key: string) {
+function renderBlock(
+  block: MarkdownBlock,
+  key: string,
+  variant: "default" | "compact" | "report",
+) {
   switch (block.type) {
     case "heading": {
       const level = Math.min(block.level, 6)
-      const className = headingClass[level] ?? headingClass[3]
+      const styles = variant === "report" ? headingClassReport : headingClass
+      const className = styles[level] ?? styles[3]
       const content = formatInline(block.text)
       if (level === 1) return <h1 key={key} className={className}>{content}</h1>
       if (level === 2) return <h2 key={key} className={className}>{content}</h2>
@@ -273,7 +327,7 @@ function renderBlock(block: MarkdownBlock, key: string) {
       return <h6 key={key} className={className}>{content}</h6>
     }
     case "table":
-      return <MarkdownTable key={key} rows={block.rows} />
+      return <MarkdownTable key={key} rows={block.rows} variant={variant} />
     case "ul":
       return (
         <ul key={key} className="space-y-1.5 pl-1 my-1">
@@ -334,8 +388,8 @@ interface SummaryMarkdownProps {
   className?: string
   /** preview: plain text during streaming; full: parse markdown */
   mode?: "preview" | "full"
-  /** compact: tighter spacing for AI copilot side panel */
-  variant?: "default" | "compact"
+  /** compact: tighter spacing for AI copilot side panel; report: dense repo analysis */
+  variant?: "default" | "compact" | "report"
 }
 
 export function SummaryMarkdown({
@@ -366,11 +420,15 @@ export function SummaryMarkdown({
   return (
     <div
       className={cn(
-        variant === "compact" ? "space-y-1.5 text-foreground/90" : "space-y-0.5",
+        variant === "compact"
+          ? "space-y-1.5 text-foreground/90"
+          : variant === "report"
+            ? "space-y-1 text-foreground/90"
+            : "space-y-0.5",
         className,
       )}
     >
-      {blocks.map((block, i) => renderBlock(block, `md-${i}`))}
+      {blocks.map((block, i) => renderBlock(block, `md-${i}`, variant))}
     </div>
   )
 }

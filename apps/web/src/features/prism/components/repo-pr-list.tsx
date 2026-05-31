@@ -25,20 +25,12 @@ export function RepoPrList({ repoId, repoFullName }: RepoPrListProps) {
   const isManaged = isRepositoryManaged(repoRow)
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [items, setItems] = useState<PullRequestListItem[]>([])
 
-  const load = useCallback(async (signal: AbortSignal) => {
-    setLoading(true)
-    setError(null)
-    try {
-      if (isManaged) {
-        try {
-          await syncRepoPullRequests(repoId, signal)
-        } catch {
-          /* still list cached PRs if sync fails */
-        }
-      }
+  const fetchList = useCallback(
+    async (signal: AbortSignal) => {
       const res = await fetchPullRequests(
         {
           repoId,
@@ -48,9 +40,18 @@ export function RepoPrList({ repoId, repoFullName }: RepoPrListProps) {
         },
         signal,
       )
-      const sorted = [...res.items].sort(
+      return [...res.items].sort(
         (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
       )
+    },
+    [repoId, repoFullName],
+  )
+
+  const load = useCallback(async (signal: AbortSignal) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const sorted = await fetchList(signal)
       setItems(sorted)
     } catch (err) {
       if (signal.aborted) return
@@ -61,7 +62,24 @@ export function RepoPrList({ repoId, repoFullName }: RepoPrListProps) {
         setLoading(false)
       }
     }
-  }, [repoId, repoFullName, isManaged])
+  }, [fetchList])
+
+  const syncInBackground = useCallback(
+    async (signal: AbortSignal) => {
+      if (!isManaged) return
+      setSyncing(true)
+      try {
+        await syncRepoPullRequests(repoId, signal)
+        const sorted = await fetchList(signal)
+        if (!signal.aborted) setItems(sorted)
+      } catch {
+        /* keep cached list if background sync fails */
+      } finally {
+        if (!signal.aborted) setSyncing(false)
+      }
+    },
+    [fetchList, isManaged, repoId],
+  )
 
   useEffect(() => {
     setItems([])
@@ -72,8 +90,9 @@ export function RepoPrList({ repoId, repoFullName }: RepoPrListProps) {
     if (!open) return
     const ac = new AbortController()
     void load(ac.signal)
+    void syncInBackground(ac.signal)
     return () => ac.abort()
-  }, [open, load])
+  }, [open, load, syncInBackground])
 
   return (
     <div className="mt-3 pt-3 border-t border-border">
@@ -99,6 +118,12 @@ export function RepoPrList({ repoId, repoFullName }: RepoPrListProps) {
             <p className="text-xs text-muted-foreground flex items-center gap-1.5">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
               {zh.common.loading}
+            </p>
+          ) : null}
+          {!loading && syncing ? (
+            <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 mb-2">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              {zh.repos.prListSyncing}
             </p>
           ) : null}
           {error ? <p className="text-xs text-risk-high">{error}</p> : null}
