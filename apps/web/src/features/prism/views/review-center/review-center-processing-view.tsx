@@ -1,27 +1,21 @@
 "use client"
 
-import { Plus } from "lucide-react"
-
-import { Button } from "@/components/ui/button"
 import { ReviewTaskList } from "@/features/prism/components/review-task-list"
 import { useReviewTaskActions } from "@/hooks/use-review-task-actions"
 import { useReviewTasks } from "@/hooks/use-review-tasks"
-import { zh } from "@/lib/i18n/zh"
 import type { ReviewTask } from "@/features/prism/types/review-task"
 
-interface ReviewCenterInboxViewProps {
+interface ReviewCenterProcessingViewProps {
   onSelectPr: (prId: string) => void
   reloadToken?: number
-  onImportOpenChange: (open: boolean) => void
 }
 
-export function ReviewCenterInboxView({
+export function ReviewCenterProcessingView({
   onSelectPr,
   reloadToken = 0,
-  onImportOpenChange,
-}: ReviewCenterInboxViewProps) {
+}: ReviewCenterProcessingViewProps) {
   const { tasks, loading, error, reload, defer, getNextInbox } = useReviewTasks({
-    queue: "inbox",
+    queue: "processing",
     reloadToken,
   })
 
@@ -33,25 +27,12 @@ export function ReviewCenterInboxView({
       getNextInbox,
     })
 
-  const emptyAction = (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline"
-      className="shrink-0 h-7 text-xs"
-      onClick={() => onImportOpenChange(true)}
-    >
-      <Plus className="w-3.5 h-3.5" />
-      {zh.aiReview.importButton}
-    </Button>
-  )
-
   return (
     <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-3">
       <div className="flex items-baseline justify-between gap-2 mb-3">
-        <h2 className="text-sm font-semibold text-foreground">优先处理</h2>
+        <h2 className="text-sm font-semibold text-foreground">处理中</h2>
         <span className="text-xs text-muted-foreground font-mono">
-          {loading ? "…" : `${tasks.length} 条待处理`}
+          {loading ? "…" : `${tasks.length} 条`}
         </span>
       </div>
 
@@ -64,8 +45,7 @@ export function ReviewCenterInboxView({
         onReview={handleReview}
         onDefer={handleDefer}
         onRequestChanges={handleRequestChanges}
-        emptyMessage="优先队列为空 — 导入 PR 或等待新的评审任务。"
-        emptyAction={emptyAction}
+        emptyMessage="暂无处理中的 PR。"
       />
     </div>
   )

@@ -1,29 +1,8 @@
-import type { ReviewStatus } from "@reviewly/shared"
-
 import type { ReviewCenterTab } from "@/features/prism/components/review-center-nav"
 
-export type ReviewPrFilter = "high-risk" | "my-created"
+const VALID_TABS: ReviewCenterTab[] = ["inbox", "processing", "done"]
 
-export type WorkbenchNavigatePayload = {
-  tab: ReviewCenterTab
-  reviewStatus?: ReviewStatus
-  prFilter?: ReviewPrFilter
-}
-
-const REVIEW_STATUSES: ReviewStatus[] = [
-  "OPEN",
-  "IN_REVIEW",
-  "CHANGES_REQUESTED",
-  "APPROVED",
-  "MERGED",
-  "CLOSED",
-]
-
-const PR_FILTERS: ReviewPrFilter[] = ["high-risk", "my-created"]
-
-const VALID_TABS: ReviewCenterTab[] = ["inbox", "all", "insights"]
-
-/** Map legacy reviewTab query values to Linear 3-tab model. */
+/** Map legacy reviewTab query values to Copilot 3-tab model. */
 export function normalizeReviewTab(tab: string | null | undefined): ReviewCenterTab {
   if (!tab) return "inbox"
   if (VALID_TABS.includes(tab as ReviewCenterTab)) {
@@ -33,24 +12,16 @@ export function normalizeReviewTab(tab: string | null | undefined): ReviewCenter
     case "pending":
     case "dashboard":
       return "inbox"
+    case "all":
+      return "processing"
+    case "done":
     case "stats":
     case "rules":
     case "settings":
     case "governance":
-      return "insights"
-    case "all":
-      return "all"
+    case "insights":
+      return "done"
     default:
       return "inbox"
   }
-}
-
-export function parseReviewStatusParam(value: string | null): ReviewStatus | null {
-  if (!value || value === "ALL") return null
-  return REVIEW_STATUSES.includes(value as ReviewStatus) ? (value as ReviewStatus) : null
-}
-
-export function parsePrFilterParam(value: string | null): ReviewPrFilter | null {
-  if (!value) return null
-  return PR_FILTERS.includes(value as ReviewPrFilter) ? (value as ReviewPrFilter) : null
 }

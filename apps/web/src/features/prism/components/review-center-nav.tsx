@@ -1,14 +1,14 @@
 "use client"
 
-import { BarChart3, Inbox, List } from "lucide-react"
+import { CheckCircle2, Inbox, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export type ReviewCenterTab = "inbox" | "all" | "insights"
+export type ReviewCenterTab = "inbox" | "processing" | "done"
 
 const TABS: { key: ReviewCenterTab; label: string; icon: typeof Inbox }[] = [
-  { key: "inbox", label: "Inbox", icon: Inbox },
-  { key: "all", label: "All PRs", icon: List },
-  { key: "insights", label: "Insights", icon: BarChart3 },
+  { key: "inbox", label: "优先处理", icon: Inbox },
+  { key: "processing", label: "处理中", icon: Loader2 },
+  { key: "done", label: "已完成", icon: CheckCircle2 },
 ]
 
 interface ReviewCenterNavProps {

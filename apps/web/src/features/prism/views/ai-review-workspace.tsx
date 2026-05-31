@@ -14,11 +14,7 @@ import { useImportPrByUrl } from "@/hooks/use-import-pr-by-url"
 import { usePullRequest } from "@/hooks/use-pull-request"
 import { useRunningTask } from "@/features/prism/contexts/running-tasks-context"
 import { useToast } from "@/hooks/use-toast"
-import {
-  normalizeReviewTab,
-  parsePrFilterParam,
-  parseReviewStatusParam,
-} from "@/features/prism/lib/review-center-navigation"
+import { normalizeReviewTab } from "@/features/prism/lib/review-center-navigation"
 import { zh } from "@/lib/i18n/zh"
 
 interface AiReviewWorkspaceProps {
@@ -32,8 +28,7 @@ export function AiReviewWorkspace({
   reviewTab: reviewTabParam,
   onMenuClick,
 }: AiReviewWorkspaceProps) {
-  const { navigate, repoId: urlRepoId, reviewStatus: reviewStatusParam, prFilter: prFilterParam } =
-    useNavigation()
+  const { navigate, repoId: urlRepoId } = useNavigation()
   const { refresh: refreshRepos } = useReposStore()
   const { data: currentPr } = usePullRequest(prId)
   const { toast } = useToast()
@@ -42,7 +37,6 @@ export function AiReviewWorkspace({
   const [centerTab, setCenterTab] = useState<ReviewCenterTab>(
     normalizeReviewTab(reviewTabParam),
   )
-  const [filterRepoId, setFilterRepoId] = useState<string | null>(urlRepoId)
 
   useEffect(() => {
     setCenterTab(normalizeReviewTab(reviewTabParam))
@@ -76,48 +70,31 @@ export function AiReviewWorkspace({
 
   useRunningTask("aiReview", importing)
 
-  const overviewRepoId = currentPr?.repoId ?? filterRepoId ?? urlRepoId ?? undefined
-
-  const listReviewStatus = parseReviewStatusParam(reviewStatusParam)
-  const listPrFilter = parsePrFilterParam(prFilterParam)
-
   const handleSelectPr = useCallback(
     (id: string) => {
       navigate("ai-review", {
         prId: id,
-        repoId: overviewRepoId,
+        repoId: urlRepoId ?? undefined,
         reviewTab: centerTab,
-        reviewStatus: listReviewStatus ?? undefined,
-        prFilter: listPrFilter ?? undefined,
       })
     },
-    [navigate, overviewRepoId, centerTab, listReviewStatus, listPrFilter],
+    [navigate, urlRepoId, centerTab],
   )
 
   const handleBackToList = useCallback(() => {
     navigate("ai-review", {
       aiReviewList: true,
-      repoId: overviewRepoId,
+      repoId: urlRepoId ?? undefined,
       reviewTab: centerTab,
-      reviewStatus: listReviewStatus ?? undefined,
-      prFilter: listPrFilter ?? undefined,
     })
-  }, [navigate, overviewRepoId, centerTab, listReviewStatus, listPrFilter])
+  }, [navigate, urlRepoId, centerTab])
 
   const handleTabChange = useCallback(
     (tab: ReviewCenterTab) => {
       setCenterTab(tab)
-      navigate("ai-review", { aiReviewList: true, repoId: filterRepoId ?? undefined, reviewTab: tab })
+      navigate("ai-review", { aiReviewList: true, reviewTab: tab })
     },
-    [navigate, filterRepoId],
-  )
-
-  const handleRepoChange = useCallback(
-    (repoId: string | null) => {
-      setFilterRepoId(repoId)
-      navigate("ai-review", { aiReviewList: true, repoId: repoId ?? undefined, reviewTab: centerTab })
-    },
-    [navigate, centerTab],
+    [navigate],
   )
 
   const handleImport = useCallback(
@@ -143,15 +120,11 @@ export function AiReviewWorkspace({
           onTabChange={handleTabChange}
           onMenuClick={onMenuClick}
           onSelectPr={handleSelectPr}
-          listReviewStatus={listReviewStatus}
-          listPrFilter={listPrFilter}
           importOpen={importOpen}
           onImportOpenChange={setImportOpen}
           importing={importing}
           onImport={handleImport}
           reloadToken={historyReloadToken}
-          repoId={filterRepoId ?? urlRepoId}
-          onRepoChange={handleRepoChange}
         />
       </>
     )
@@ -170,7 +143,7 @@ export function AiReviewWorkspace({
       />
 
       <div className="flex items-center gap-2 px-4 sm:px-5 py-2.5 border-b border-border bg-panel/95 backdrop-blur-sm shrink-0">
-        {onMenuClick && (
+        {onMenuClick ? (
           <button
             type="button"
             onClick={onMenuClick}
@@ -179,7 +152,7 @@ export function AiReviewWorkspace({
           >
             <Menu className="w-5 h-5 text-foreground" />
           </button>
-        )}
+        ) : null}
         <Button
           type="button"
           variant="ghost"

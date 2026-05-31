@@ -53,7 +53,7 @@ const STAT_CARDS = [
     icon: PencilLine,
     color: "text-risk-medium",
     bg: "bg-risk-medium/10 border-risk-medium/20",
-    reviewTab: "all" as const,
+    reviewTab: "processing" as const,
   },
   {
     key: "highRisk" as const,
@@ -61,7 +61,7 @@ const STAT_CARDS = [
     icon: ShieldAlert,
     color: "text-risk-high",
     bg: "bg-risk-high/10 border-risk-high/20",
-    reviewTab: "all" as const,
+    reviewTab: "processing" as const,
   },
   {
     key: "approved" as const,
@@ -69,7 +69,7 @@ const STAT_CARDS = [
     icon: CheckCircle2,
     color: "text-risk-low",
     bg: "bg-risk-low/10 border-risk-low/20",
-    reviewTab: "all" as const,
+    reviewTab: "done" as const,
   },
   {
     key: "weeklyAnalysisCount" as const,
@@ -77,7 +77,7 @@ const STAT_CARDS = [
     icon: BrainCircuit,
     color: "text-ai-purple",
     bg: "bg-ai-purple/10 border-ai-purple/20",
-    reviewTab: "insights" as const,
+    reviewTab: "done" as const,
     suffix: "次",
   },
 ]
@@ -279,7 +279,7 @@ export function DashboardView() {
                           return
                         }
                         if (activity.type.includes("pr")) {
-                          navigate("ai-review", { reviewTab: "all" })
+                          navigate("ai-review", { reviewTab: "processing" })
                         }
                       }}
                       className="w-full px-4 py-2.5 text-left text-sm hover:bg-surface-3/50 transition-colors flex items-center gap-2"
@@ -315,7 +315,7 @@ export function DashboardView() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => navigate("ai-review", { reviewTab: "insights" })}
+            onClick={() => navigate("ai-review", { reviewTab: "done" })}
             className="gap-2"
           >
             <BarChart3 className="size-4" />

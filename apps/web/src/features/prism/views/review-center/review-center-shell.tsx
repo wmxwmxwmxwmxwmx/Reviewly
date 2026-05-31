@@ -1,8 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { Menu, Plus } from "lucide-react"
-import type { RepoReviewGroup, ReviewStatus } from "@reviewly/shared"
 
 import { Button } from "@/components/ui/button"
 import { ImportPRDialog } from "@/features/prism/components/import-pr-dialog"
@@ -10,12 +8,9 @@ import {
   ReviewCenterNav,
   type ReviewCenterTab,
 } from "@/features/prism/components/review-center-nav"
-import { ReviewCenterAllPrsView } from "@/features/prism/views/review-center/review-center-all-prs-view"
+import { ReviewCenterDoneView } from "@/features/prism/views/review-center/review-center-done-view"
 import { ReviewCenterInboxView } from "@/features/prism/views/review-center/review-center-inbox-view"
-import { ReviewCenterInsightsView } from "@/features/prism/views/review-center/review-center-insights-view"
-import type { ReviewPrFilter } from "@/features/prism/lib/review-center-navigation"
-import { fetchReviewRepoGroups } from "@/lib/api/review-center"
-import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
+import { ReviewCenterProcessingView } from "@/features/prism/views/review-center/review-center-processing-view"
 import { zh } from "@/lib/i18n/zh"
 
 interface ReviewCenterShellProps {
@@ -23,15 +18,11 @@ interface ReviewCenterShellProps {
   onTabChange: (tab: ReviewCenterTab) => void
   onMenuClick?: () => void
   onSelectPr: (prId: string) => void
-  listReviewStatus: ReviewStatus | null
-  listPrFilter: ReviewPrFilter | null
   importOpen: boolean
   onImportOpenChange: (open: boolean) => void
   importing: boolean
   onImport: (url: string) => Promise<void>
   reloadToken?: number
-  repoId?: string | null
-  onRepoChange: (repoId: string | null) => void
 }
 
 export function ReviewCenterShell({
@@ -39,37 +30,12 @@ export function ReviewCenterShell({
   onTabChange,
   onMenuClick,
   onSelectPr,
-  listReviewStatus,
-  listPrFilter,
   importOpen,
   onImportOpenChange,
   importing,
   onImport,
   reloadToken,
-  repoId,
-  onRepoChange,
 }: ReviewCenterShellProps) {
-  const [repoGroups, setRepoGroups] = useState<RepoReviewGroup[]>([])
-  const [groupsLoading, setGroupsLoading] = useState(true)
-
-  useEffect(() => {
-    const ac = new AbortController()
-    setGroupsLoading(true)
-    void fetchReviewRepoGroups(ac.signal)
-      .then((res) => {
-        if (!shouldApplyResult(ac.signal)) return
-        setRepoGroups(res.groups)
-      })
-      .catch((e) => {
-        if (isAbortError(e) || !shouldApplyResult(ac.signal)) return
-        setRepoGroups([])
-      })
-      .finally(() => {
-        if (shouldApplyResult(ac.signal)) setGroupsLoading(false)
-      })
-    return () => ac.abort()
-  }, [reloadToken])
-
   const content = (() => {
     switch (activeTab) {
       case "inbox":
@@ -80,22 +46,17 @@ export function ReviewCenterShell({
             onImportOpenChange={onImportOpenChange}
           />
         )
-      case "all":
+      case "processing":
         return (
-          <ReviewCenterAllPrsView
+          <ReviewCenterProcessingView
             onSelectPr={onSelectPr}
             reloadToken={reloadToken}
-            repoId={repoId ?? undefined}
-            repoGroups={repoGroups}
-            groupsLoading={groupsLoading}
-            onRepoChange={onRepoChange}
-            onImportOpenChange={onImportOpenChange}
-            initialStatus={listReviewStatus ?? "ALL"}
-            prFilter={listPrFilter ?? undefined}
           />
         )
-      case "insights":
-        return <ReviewCenterInsightsView />
+      case "done":
+        return (
+          <ReviewCenterDoneView onSelectPr={onSelectPr} reloadToken={reloadToken} />
+        )
       default:
         return (
           <ReviewCenterInboxView
@@ -118,7 +79,7 @@ export function ReviewCenterShell({
 
       <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-border bg-panel/95 backdrop-blur-sm shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          {onMenuClick && (
+          {onMenuClick ? (
             <button
               type="button"
               onClick={onMenuClick}
@@ -127,11 +88,11 @@ export function ReviewCenterShell({
             >
               <Menu className="w-5 h-5 text-foreground" />
             </button>
-          )}
+          ) : null}
           <div>
-            <h1 className="text-lg font-semibold text-foreground">代码评审中心</h1>
+            <h1 className="text-lg font-semibold text-foreground">AI PR Copilot</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {zh.pageSubtitle.aiReview}
+              PR 优先队列 · 一键处理 · 可治理
             </p>
           </div>
         </div>

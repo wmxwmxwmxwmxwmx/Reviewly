@@ -16,7 +16,7 @@ import { ReviewInsightDrawer } from "@/features/prism/components/review-insight-
 import { ReviewDecisionBar } from "@/features/prism/components/review-decision-bar"
 import { ReviewPageSkeleton } from "@/features/prism/components/review-page-skeleton"
 import { ReviewQuickVerdict } from "@/features/prism/components/review-quick-verdict"
-import { enrichDiffFilesWithFindings } from "@/features/prism/lib/map-findings-to-diff"
+import { enrichDiffFilesWithFindings, scrollTargetFromFinding } from "@/features/prism/lib/map-findings-to-diff"
 import { deriveAnalysisPhase, useReviewLayout } from "@/hooks/use-review-layout"
 import { estimateCostCnyFromUsage, useAISettings } from "@/features/prism/contexts/ai-settings-context"
 import { usePullRequest } from "@/hooks/use-pull-request"
@@ -37,6 +37,7 @@ import { isAbortError, shouldApplyResult } from "@/lib/abort-utils"
 import { formatPrismApiError, PrismApiError } from "@/lib/api/client"
 import { zh } from "@/lib/i18n/zh"
 import { AdoptRepoBanner } from "@/features/prism/components/adopt-repo-banner"
+import { ReviewCopilotPanel } from "@/features/prism/components/review-copilot-panel"
 import { useReposStore } from "@/features/prism/contexts/repos-context"
 import { isRepositoryManaged } from "@/lib/repos/is-repository-managed"
 
@@ -531,6 +532,16 @@ ${diffContext || "（无 diff 内容）"}`,
     onReviewStatusChanged?.()
   }, [patchLocal, reloadPr, refreshRepos, onReviewStatusChanged])
 
+  const handleCopilotStartReview = useCallback(() => {
+    const sorted = [...findings].sort(
+      (a, b) =>
+        ({ critical: 0, high: 1, medium: 2, low: 3 }[a.severity ?? "low"] ?? 9) -
+        ({ critical: 0, high: 1, medium: 2, low: 3 }[b.severity ?? "low"] ?? 9),
+    )
+    const top = sorted[0]
+    if (top) layout.jumpToFinding(scrollTargetFromFinding(top))
+  }, [findings, layout])
+
   if ((prError || !pr) && !sessionHasData && !prLoading) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-risk-high px-4 text-center">
@@ -591,7 +602,8 @@ ${diffContext || "（无 diff 内容）"}`,
         </div>
       )}
 
-      <div className="flex flex-1 min-w-0 flex-col min-h-0">
+      <div className="flex flex-1 min-w-0 min-h-0 flex-col md:flex-row overflow-hidden">
+        <div className="flex flex-1 min-w-0 flex-col min-h-0">
         {showAdoptBanner ? (
           <div className="shrink-0 px-3 pt-2">
             <AdoptRepoBanner pr={pr} onAdopted={handleRepoAdopted} />
@@ -673,6 +685,19 @@ ${diffContext || "（无 diff 内容）"}`,
               }}
             />
           </div>
+        ) : null}
+        </div>
+
+        {pr ? (
+          <ReviewCopilotPanel
+            pr={pr}
+            findings={findings}
+            aiSummary={generatedSummary}
+            onStartReview={handleCopilotStartReview}
+            onReviewStatusChanged={onReviewStatusChanged}
+            reloadPr={reloadPr}
+            className="hidden md:flex"
+          />
         ) : null}
       </div>
 
