@@ -211,6 +211,8 @@ def governance_rule_create(body: GovernanceRuleBody, db: Session = Depends(get_d
             db,
             body.model_dump(by_alias=True, exclude_none=True),
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         _map_governance_db_error(exc)
 
@@ -221,15 +223,14 @@ def governance_rule_update(
     body: GovernanceRulePatchBody,
     db: Session = Depends(get_db),
 ) -> dict:
-    patch = {
-        k: v
-        for k, v in body.model_dump(by_alias=True, exclude_none=True).items()
-        if v is not None
-    }
+    # exclude_unset：仅提交客户端显式字段；enabled=false 必须保留（不可用 if v 过滤）
+    patch = body.model_dump(by_alias=True, exclude_unset=True)
     if not patch:
         raise api_error("没有可更新的字段", 400)
     try:
         row = governance_repo.update_rule(db, rule_id, patch)
+    except HTTPException:
+        raise
     except Exception as exc:
         _map_governance_db_error(exc)
     if not row:

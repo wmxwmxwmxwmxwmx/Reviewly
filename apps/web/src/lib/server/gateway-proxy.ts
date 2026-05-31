@@ -8,7 +8,7 @@ import {
   truncateServerLog,
 } from "@/lib/server/debug-api-log"
 
-const GATEWAY_ORIGIN = process.env.API_URL ?? "http://localhost:3001"
+const GATEWAY_ORIGIN = process.env.API_URL ?? "http://127.0.0.1:3001"
 const DEFAULT_TIMEOUT_MS = 120_000
 /** SSE scan streams emit progress for a long time; do not abort while bytes still flow. */
 export const SCAN_STREAM_TIMEOUT_MS = null as number | null
@@ -26,7 +26,7 @@ function gatewayUnreachableMessage(cause: unknown): string {
   }
   const detail = cause instanceof Error ? cause.message : String(cause)
   if (/ECONNREFUSED|fetch failed|socket hang up|ECONNRESET/i.test(detail)) {
-    return "无法连接后端 Gateway（请确认已在 localhost:3001 运行，且仅启动一个实例）。"
+    return "无法连接后端 Gateway（请确认已在 127.0.0.1:3001 运行，且仅启动一个实例）。"
   }
   if (/aborted|timeout|ETIMEDOUT/i.test(detail)) {
     return "架构扫描超时：首次克隆大仓库可能较慢。请稍后再次点击「重新扫描」，或刷新页面查看是否已在后台完成。"

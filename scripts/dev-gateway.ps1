@@ -36,26 +36,23 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $env:PRISM_STUB_ENGINE = "1"
+if (-not $env:DEBUG) {
+    $env:DEBUG = "1"
+}
 if (-not $env:GITHUB_PAT -and -not $env:GITHUB_APP_ID) {
     Write-Warning "GITHUB_PAT not set; set it in services/gateway/.env for higher GitHub API limits."
 }
 function Stop-ListenersOnPort([int]$Port) {
-    $pids = @(
-        Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
-            Select-Object -ExpandProperty OwningProcess -Unique
-    )
-    foreach ($procId in $pids) {
-        if ($procId -and $procId -ne $PID) {
-            Write-Warning "Port $Port is in use by PID $procId; stopping stale process."
-            Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Milliseconds 400
-        }
+    $killScript = Join-Path $Root "scripts\kill-port.ps1"
+    if (Test-Path $killScript) {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $killScript -Port $Port
     }
 }
 
 Stop-ListenersOnPort 3001
 
-Write-Host "Starting gateway at http://localhost:3001"
-& $python -m uvicorn app.main:app --host 0.0.0.0 --port 3001 --reload `
+Write-Host "Starting gateway at http://127.0.0.1:3001"
+& $python -m uvicorn app.main:app --host 127.0.0.1 --port 3001 --reload `
   --reload-dir app `
+  --reload-delay 2 `
   --reload-exclude "data/*"

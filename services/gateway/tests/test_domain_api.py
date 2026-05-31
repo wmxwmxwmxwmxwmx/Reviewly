@@ -52,7 +52,17 @@ def test_governance_rules_crud(client: TestClient) -> None:
     assert created.status_code == 200
     rid = created.json()["id"]
 
-    client.patch(f"/api/governance/rules/{rid}", json={"severity": "high"})
+    patched = client.patch(f"/api/governance/rules/{rid}", json={"severity": "high"})
+    assert patched.status_code == 200
+
+    disabled = client.patch(f"/api/governance/rules/{rid}", json={"enabled": False})
+    assert disabled.status_code == 200
+    assert disabled.json()["enabled"] is False
+
+    reenabled = client.patch(f"/api/governance/rules/{rid}", json={"enabled": True})
+    assert reenabled.status_code == 200
+    assert reenabled.json()["enabled"] is True
+
     assert client.delete(f"/api/governance/rules/{rid}").status_code == 200
 
 

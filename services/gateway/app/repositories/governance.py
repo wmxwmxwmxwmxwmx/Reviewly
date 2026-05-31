@@ -140,8 +140,12 @@ def create_rule(session: Session, body: dict[str, Any]) -> dict:
         payload=payload,
     )
     session.add(row)
-    session.commit()
-    session.refresh(row)
+    try:
+        session.commit()
+        session.refresh(row)
+    except Exception:
+        session.rollback()
+        raise
     return _row_to_definition(row)
 
 
@@ -215,8 +219,12 @@ def update_rule(session: Session, rule_id: str, body: dict[str, Any]) -> dict | 
     row.severity = payload["severity"]
     row.enabled = payload["enabled"]
     row.payload = payload
-    session.commit()
-    session.refresh(row)
+    try:
+        session.commit()
+        session.refresh(row)
+    except Exception:
+        session.rollback()
+        raise
     return _row_to_definition(row)
 
 

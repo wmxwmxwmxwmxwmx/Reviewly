@@ -115,7 +115,15 @@ export function extractApiErrorMessage(
 ): string {
   const payload = _errorPayload(data)
   if (payload && typeof payload.error === "string") {
-    return payload.error
+    const base = payload.error
+    if (
+      process.env.NODE_ENV === "development" &&
+      typeof payload.exception === "string" &&
+      payload.exception.length > 0
+    ) {
+      return `${base}（${payload.exception}）`
+    }
+    return base
   }
   if (!data || typeof data !== "object") {
     return fallback
@@ -154,15 +162,31 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function isRetryableApiError(error: unknown): boolean {
+function isRetryableApiError(
+  error: unknown,
+  path: string,
+  method: string,
+): boolean {
   if (error instanceof PrismApiError) {
     if (error.code === "GATEWAY_STARTING") return true
     if (error.status === 502 || error.status === 503 || error.status === 504) return true
+    // Gateway --reload 或双实例竞态时可能短暂返回 500
+    if (
+      error.status === 500 &&
+      (method === "POST" || method === "PATCH" || method === "DELETE") &&
+      path.includes("/governance/")
+    ) {
+      return true
+    }
   }
   return error instanceof TypeError
 }
 
-async function apiFetchOnce<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function apiFetchOnce<T>(
+  path: string,
+  options: RequestOptions = {},
+  logErrors = true,
+): Promise<T> {
   const { silentStatuses, ...fetchOptions } = options
   const token = getAuthToken()
   const method = fetchOptions.method ?? "GET"
@@ -214,12 +238,12 @@ async function apiFetchOnce<T>(path: string, options: RequestOptions = {}): Prom
         res.status,
         extractApiErrorCode(body),
       )
-      if (debug && !silentStatuses?.includes(apiErr.status)) {
+      if (logErrors && debug && !silentStatuses?.includes(apiErr.status)) {
         debugApiError("apiFetch", apiErr)
       }
       throw apiErr
     } catch (err) {
-      if (debug && !(err instanceof PrismApiError)) {
+      if (logErrors && debug && !(err instanceof PrismApiError)) {
         debugApiError("apiFetch", err)
       }
       throw err
@@ -241,13 +265,15 @@ async function apiFetchOnce<T>(path: string, options: RequestOptions = {}): Prom
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = options.method ?? "GET"
   let lastError: unknown
   for (let attempt = 1; attempt <= API_FETCH_MAX_ATTEMPTS; attempt++) {
+    const logErrors = attempt >= API_FETCH_MAX_ATTEMPTS
     try {
-      return await apiFetchOnce<T>(path, options)
+      return await apiFetchOnce<T>(path, options, logErrors)
     } catch (err) {
       lastError = err
-      if (!isRetryableApiError(err) || attempt >= API_FETCH_MAX_ATTEMPTS) {
+      if (!isRetryableApiError(err, path, method) || attempt >= API_FETCH_MAX_ATTEMPTS) {
         throw err
       }
       await sleep(API_FETCH_RETRY_BASE_MS * attempt)
