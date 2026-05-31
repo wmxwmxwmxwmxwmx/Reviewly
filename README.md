@@ -30,6 +30,8 @@ git clone <仓库地址> Reviewly && cd Reviewly
 
 启动后打开 http://localhost:3000 → **使用 GitHub 登录**。
 
+需换号时：登录页选「使用其他 GitHub 账号登录」，或登录后右上角「切换账号」。详见 [多 GitHub 账号登录](#多-github-账号登录)。
+
 > GitHub OAuth App 的 Callback 须为 `http://localhost:3001/api/auth/github/callback`（已在演示配置中）。**勿将本仓库公开到公网**（含 Client Secret）；正式环境请更换密钥。
 
 ---
@@ -38,6 +40,7 @@ git clone <仓库地址> Reviewly && cd Reviewly
 
 - [新机从零部署](#新机从零部署)
 - [一键部署（已有 Docker）](#一键部署已有-docker)
+- [多 GitHub 账号登录](#多-github-账号登录)
 - [环境要求](#环境要求)
 - [本地开发](#本地开发)
 - [生产部署详解](#生产部署详解)
@@ -238,6 +241,24 @@ docker compose -f deploy/docker-compose.yml restart gateway
    ```bash
    docker compose -f deploy/docker-compose.yml restart gateway
    ```
+
+### 多 GitHub 账号登录
+
+浏览器若已登录 GitHub，OAuth 会默认复用当前 session。PRism 提供两种登录方式：
+
+| 方式 | 入口 | 行为 |
+|------|------|------|
+| 快速登录 | 登录页主按钮「使用 GitHub 登录」 | 复用浏览器已登录 GitHub，一键授权 |
+| 其他账号 | 登录页「使用其他 GitHub 账号登录」（可选填用户名） | 先退出 GitHub.com，再进入 OAuth 授权页选号 |
+| 切换账号 | 右上角账户菜单 → 切换账号 | 同上 |
+| 重新授权 | GitHub 账号对话框 → 重新授权 GitHub | 同上 |
+
+换号时 Gateway 调用 `GET /api/auth/github/login?force_reauth=1`，返回 `https://github.com/logout?return_to=<oauth_authorize_url>`；OAuth callback 与 JWT 逻辑不变。
+
+**限制与排错：**
+
+- OAuth App 为 **Development** 模式时，目标用户须在 GitHub OAuth App 的 allowlist 中（与会话无关）
+- 若 logout 跳转后仍无法换号，可手动打开 https://github.com/logout 后回到登录页重试
 
 **内网试用、暂不想配 OAuth**：在 `deploy/.env` 设 `PRISM_AUTH_BYPASS=1` 后重启 gateway（**禁止用于公网生产**）。
 
@@ -471,7 +492,7 @@ Reviewly/
 | Gateway 3001 启动失败 | `npm run kill:gateway` 或 `npm run dev:clean`；执行 `alembic upgrade head` |
 | GitHub 登录 404 | `deploy/.env` 中 OAuth 仍是占位符；按 README「GitHub OAuth 登录配置」创建 OAuth App 并填写真实 Client ID/Secret |
 | GitHub OAuth 回调失败 | Callback URL 与 GitHub App 设置不一致；检查 IP/端口是否与 `OAUTH_CALLBACK_URL` 相同 |
-| 只能登录浏览器当前 GitHub 账号 | 登录页点「使用其他 GitHub 账号登录」，或右上角「切换账号」；会先退出 GitHub.com 再授权。OAuth App 若为 Development 模式，需在 GitHub 把目标用户加入 allowlist |
+| 只能登录浏览器当前 GitHub 账号 | 见上文 [多 GitHub 账号登录](#多-github-账号登录)：登录页「使用其他 GitHub 账号登录」或右上角「切换账号」 |
 | `gateway is unhealthy` / 连 `127.0.0.1:5432` 失败 | 确认 `deploy/.env` 中 `DATABASE_URL` 为 `@postgres:5432`；拉最新代码后 `docker compose -f deploy/docker-compose.yml build gateway --no-cache && docker compose -f deploy/docker-compose.yml up -d` |
 | Docker 部署失败 | 确认 Docker 已运行；`docker compose -f deploy/docker-compose.yml logs gateway` |
 | apt：`kali-rolling Release` 没有 Release 文件 | **Kali/Parrot** 等滚动版不能用 Docker 官方 apt 源。`sudo rm /etc/apt/sources.list.d/docker.list` 后执行 `bash install.sh`；`install-docker.sh` 会自动选 `apt_distro`（`docker.io`） |
